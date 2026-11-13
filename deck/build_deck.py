@@ -131,7 +131,7 @@ def main():
         rep = {"Track No": "Track 3  |  Path Finder",
                "XR Hackathon": "XR Hackathon",
                "Team Name": "Team California Burrito",
-               "College Name": "SRM Institute of Science and Technology, Kattankulathur"}
+               "College Name": "SRM IST, Kattankulathur"}
         if t in rep:
             sh.text_frame.paragraphs[0].runs[0].text = rep[t]
         elif "Team Name" in t and "College" in t:
@@ -141,7 +141,7 @@ def main():
         elif t == "Members Details":
             sh.text_frame.paragraphs[0].runs[0].text = "Members"
             sh.top = Emu(sh.top)
-    text(s, Inches(5.6), Inches(2.72), Inches(3.0), Inches(1.4),
+    text(s, Inches(5.6), Inches(2.86), Inches(3.0), Inches(1.4),
          ["Rehaan Ajani (lead)", "Nikhil Solanki", "Debadrita Haldar", "Mayank Yadav"],
          size=12, color=INK, name="Members list")
     text(s, Inches(0.55), Inches(3.55), Inches(5.0), Inches(1.0),
@@ -171,7 +171,7 @@ def main():
          size=48, bold=True, color=RED)
     text(s, Inches(6.15), TOP + Inches(1.35), Inches(2.2), Inches(1.0),
          "drift in 10 s when a real headset trusts its IMU alone (TLIO test sequence)", size=12, color=MUTED)
-    text(s, Inches(6.15), TOP + Inches(2.35), Inches(2.2), Inches(0.8), "5 IMUs, 6 cameras", size=22, bold=True, color=CYAN)
+    text(s, Inches(6.15), TOP + Inches(2.35), Inches(2.2), Inches(0.5), "5 IMUs, 6 cameras", size=17, bold=True, color=CYAN)
     text(s, Inches(6.15), TOP + Inches(2.95), Inches(2.2), Inches(0.9),
          "on Galaxy XR: redundancy that can outvote a failing sensor", size=12, color=MUTED)
     s.notes_slide.notes_text_frame.text = (
@@ -181,7 +181,7 @@ def main():
     # ---------- 3. Solution
     s = sl[2]
     text(s, Inches(0.5), TOP, Inches(8.0), Inches(0.6),
-         "Find the sensor that is lying, stop trusting it, keep tracking on the rest", size=20, bold=True)
+         "Find the sensor that is lying, stop trusting it, keep tracking on the rest", size=17, bold=True)
     steps = [("1", "Camera health", "Each frame scored for light, sharpness and trackable corners before fusion", ORANGE),
              ("2", "IMU voting", "IMUs share one rigid frame, so they must agree; a stuck, biased or spiking IMU is outvoted", RED),
              ("3", "Fault-aware motion model", "Tiny network reads 1 s of IMU, predicts movement and how sure it is", GREEN),
@@ -263,8 +263,10 @@ def main():
     text(s, Inches(0.4), Inches(4.5), Inches(5.0), Inches(0.7),
          f"{len(S['sequences'])} held-out headset sequences x {S['clip_s']:.0f} s, camera off from 20 s. "
          "Every number from python evaluate.py.", size=10, color=MUTED)
-    picks = [("camera_blackout", "Camera off 10 s"), ("blackout_plus_one_imu_bias", "Camera off + biased IMU"),
-             ("blackout_plus_vibration_all", "Camera off + vibration on all IMUs"), ("dark_plus_imu_drift", "Dark room + drifting IMUs")]
+    picks = [("blackout_plus_saturation_all", "Camera off + every IMU saturates"),
+             ("blackout_plus_one_imu_bias", "Camera off + one IMU biased"),
+             ("blackout_plus_spikes_all", "Camera off + spikes on every IMU"),
+             ("camera_blackout", "Camera off 10 s")]
     for i, (k, lbl) in enumerate(picks):
         y = TOP + Inches(i * 0.9)
         card(s, Inches(5.6), y, Inches(2.95), Inches(0.78), name=lbl)
@@ -282,8 +284,8 @@ def main():
     rws = [["Uses multiple IMUs", "No (one IMU)", "No", "Yes, votes out a faulty one"],
            ["Checks the camera before trusting it", "No camera", "Learned inside dense BA", "Yes, per frame, before fusion"],
            ["Trained on broken IMU data", "Bias + tilt only", "n/a", "Noise, drift, dropout, spikes, saturation, dead"],
-           ["Resists a camera tracking the wrong thing", "n/a", "Partly", "Soft gate + learned motion"],
-           ["Phone-class compute", "Yes", "Dense, heavy (their next step)", f"{S['model'].get('size_mb', 0):.1f} MB, ~{S['model'].get('ms_per_prediction_cpu', 0):.0f} ms"],
+           ["Handles a camera that jumps to the wrong place", "n/a", "Partly", "Soft gate + 10 s hold-out"],
+           ["Phone-class compute", "Yes", "Dense, heavy (their next step)", f"{S['model'].get('size_mb', 0):.1f} MB, {S['model'].get('ms_per_prediction_cpu', 0):.1f} ms per step"],
            ["Outputs a tracking-quality signal", "No", "No", "Per-sensor trust + uncertainty"]]
     tbl = s.shapes.add_table(len(rws) + 1, 4, Inches(0.5), Inches(1.6), Inches(8.0), Inches(3.4)).table
     widths = [2.4, 1.7, 1.7, 2.2]
@@ -310,7 +312,7 @@ def main():
     s = sl[6]
     card(s, Inches(0.5), TOP, Inches(4.3), Inches(3.9), name="Setup card")
     text(s, Inches(0.65), TOP + Inches(0.1), Inches(4.0), Inches(0.4), "Run it", size=16, bold=True)
-    code = ["git clone github.com/rehaanajani/pathfinder-xr", "cd pathfinder-xr", "bash reproduce.sh",
+    code = ["git clone https://github.com/", "    rehaanajani/pathfinder-xr", "cd pathfinder-xr", "bash reproduce.sh",
             "", "# no download, ~3 min:", "bash reproduce.sh --synthetic"]
     tb = text(s, Inches(0.65), TOP + Inches(0.55), Inches(4.0), Inches(2.0), code, size=12, color=CYAN)
     for p in tb.text_frame.paragraphs:
@@ -351,13 +353,14 @@ def main():
     ch.category_axis.tick_labels.font.color.rgb = MUTED
     ch.value_axis.format.line.fill.background()
     text(s, Inches(0.5), Inches(4.65), Inches(4.3), Inches(0.6),
-         "% of faulty moments where the bad IMU is dropped and every good one kept. More IMUs, better isolation.",
+         "% of faulty moments where the bad IMU is dropped and every good one kept. With 2 IMUs a smooth bias "
+         "can't be pinned on one of them (0%); with 3+ it can.",
          size=10, color=MUTED)
     text(s, Inches(5.1), TOP, Inches(3.4), Inches(0.5), "Also built", size=18, bold=True)
-    extra = [("Soft robust gate", "No lock-out after long outages; caps a camera that jumps to the wrong place"),
-             ("Fault-aware training", "Beta-NLL loss keeps predictions sharp while learning honest doubt"),
-             ("Common-mode faults", "Vibration, spikes, saturation on every IMU at once, where voting cannot help"),
-             ("Next on device", "TFLite / ExecuTorch on Galaxy; real multi-IMU logs; Aria images")]
+    extra = [("Model self-check", "While the camera is healthy, the filter grades the network and distrusts it on motion it never learned"),
+             ("Soft robust gate", "Re-anchors 1 s after an outage; holds out a camera that suddenly jumps"),
+             ("Honest scoreboard", "10 better, 5 level, 1 worse out of 16 scenarios, all in the README"),
+             ("Next on device", "TFLite / ExecuTorch on Galaxy, real multi-IMU logs, real camera frames")]
     for i, (h, d) in enumerate(extra):
         y = TOP + Inches(0.55 + i * 0.95)
         card(s, Inches(5.1), y, Inches(3.4), Inches(0.82), name=h)
