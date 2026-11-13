@@ -10,7 +10,9 @@ Writes results/summary.json, results/report.html and results/*.png.
 import argparse
 import base64
 import json
+import os
 import time
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import matplotlib
@@ -58,6 +60,30 @@ def sequences(n, clip, synthetic, k_imus=3):
 
 
 
+_W = {}
+
+
+def _init(seqs, methods):
+    import torch
+    torch.set_num_threads(1)
+    _W["seqs"], _W["methods"] = seqs, methods
+    _W["ours"], _W["tl"] = load_models()
+
+
+def _job(job):
+    kind, key, i = job
+    s = _W["seqs"][i]
+    faults = scenarios(10.0)[key] if kind == "scenario" else [Fault("camera_blackout", 20.0, key)]
+    r = run_methods(s, faults, seed=i, ours_model=_W["ours"], tlio_model=_W["tl"], methods=_W["methods"])
+    out = {}
+    for m in _W["methods"]:
+        out[m] = {k: r[m][k] for k in ("ate_m", "rte_1s_m", "rte_10s_m", "drift_pct", "final_err_m")}
+        if kind == "sweep":
+            b = min(int((20 + key) * 200), len(s.p) - 1)
+            out[m]["end_err_m"] = float(np.linalg.norm(r[m]["p"][b] - s.p[b]))
+    return out
+
+
 def fig_to_b64(fig, name):
     path = OUT / f"{name}.png"
     fig.savefig(path, dpi=130, bbox_inches="tight")
@@ -70,6 +96,7 @@ def main():
     ap.add_argument("--seqs", type=int, default=10)
     ap.add_argument("--clip", type=float, default=60.0)
     ap.add_argument("--synthetic", action="store_true")
+    ap.add_argument("--workers", type=int, default=8)
     args = ap.parse_args()
     OUT.mkdir(exist_ok=True)
     t0 = time.time()
@@ -78,37 +105,28 @@ def main():
     methods = [m for m in ALL if (m != "ours" or ours) and (m not in ("tlio_style", "ours_tlio_model") or tl)]
     print(f"{len(seqs)} sequences x {args.clip:.0f}s, methods: {methods}", flush=True)
 
-    # 1) every named scenario
+    # 1) every named scenario and 2) the blackout-length sweep, all sequences in parallel
+    scen = scenarios(10.0)
+    lengths = [1, 2, 5, 10, 20]
+    jobs = [("scenario", name, i) for name in scen for i in range(len(seqs))]
+    jobs += [("sweep", L, i) for L in lengths for i in range(len(seqs))]
+    workers = max(1, min(args.workers, os.cpu_count() or 1))
+    print(f"{len(jobs)} runs on {workers} processes", flush=True)
+    with ProcessPoolExecutor(workers, initializer=_init, initargs=(seqs, methods)) as ex:
+        out = list(ex.map(_job, jobs, chunksize=1))
+    res = dict(zip(jobs, out))
     table = {}
-    example = None
-    for name, faults in scenarios(10.0).items():
-        rows = {m: [] for m in methods}
-        for i, s in enumerate(seqs):
-            r = run_methods(s, faults, seed=i, ours_model=ours, tlio_model=tl, methods=methods)
-            for m in methods:
-                rows[m].append({k: r[m][k] for k in ("ate_m", "rte_1s_m", "rte_10s_m", "drift_pct", "final_err_m")})
-            if name == "camera_blackout" and i == 0:
-                example = (s, r)
+    for name in scen:
+        rows = {m: [res[("scenario", name, i)][m] for i in range(len(seqs))] for m in methods}
         table[name] = {m: {**{k: float(np.mean([x[k] for x in v])) for k in v[0]},
                            "ate_median_m": float(np.median([x["ate_m"] for x in v])),
                            "ate_per_seq_m": [round(x["ate_m"], 3) for x in v]} for m, v in rows.items()}
         print(f"{name:28s} " + "  ".join(f"{m}={table[name][m]['ate_m']:.2f}" for m in methods), flush=True)
-
-    # 2) blackout length sweep
-    lengths = [1, 2, 5, 10, 20]
-    sweep = {m: [] for m in methods}
-    for L in lengths:
-        acc = {m: [] for m in methods}
-        for i, s in enumerate(seqs):
-            r = run_methods(s, [Fault("camera_blackout", 20.0, L)], seed=i, ours_model=ours,
-                            tlio_model=tl, methods=methods)
-            for m in methods:
-                p, g = r[m]["p"], s.p
-                a, b = int(20 * 200), min(int((20 + L) * 200), len(g) - 1)
-                acc[m].append(float(np.linalg.norm(p[b] - g[b])))   # error at the end of the blackout
-        for m in methods:
-            sweep[m].append(float(np.mean(acc[m])))
+    sweep = {m: [float(np.mean([res[("sweep", L, i)][m]["end_err_m"] for i in range(len(seqs))]))
+                 for L in lengths] for m in methods}
     print("blackout sweep (error at end of blackout, m):", json.dumps(sweep), flush=True)
+    example = (seqs[0], run_methods(seqs[0], scen["camera_blackout"], seed=0, ours_model=ours,
+                                    tlio_model=tl, methods=methods))
 
     # 3) faulty-IMU isolation vs number of IMUs
     iso = {}
