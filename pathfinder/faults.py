@@ -126,4 +126,18 @@ def scenarios(blackout_s: float = 10.0) -> dict[str, list[Fault]]:
                                        Fault("imu_bias", mid - 5, 1e9, 0)],
         "dark_plus_imu_drift": [Fault("camera_dark", mid, blackout_s),
                                 Fault("imu_bias_drift", 0, 1e9, None)],
+        # Common-mode faults hit every IMU on the board at once (shared vibration, heat, a fast
+        # head turn past the sensor range), so voting cannot remove them. This is where the
+        # fault-aware network has to carry the load.
+        "blackout_plus_vibration_all": [Fault("camera_blackout", mid, blackout_s),
+                                        Fault("imu_noise", mid, blackout_s, None,
+                                              {"gyro_std": 0.08, "acc_std": 0.8})],
+        "blackout_plus_spikes_all": [Fault("camera_blackout", mid, blackout_s),
+                                     Fault("imu_spikes", mid, blackout_s, None, {"rate": 0.02})],
+        "blackout_plus_saturation_all": [Fault("camera_blackout", mid, blackout_s),
+                                         Fault("imu_saturation", mid, blackout_s, None,
+                                               {"gyro_max": 0.5, "acc_max": 10.3})],
+        "blackout_plus_dropout_all": [Fault("camera_blackout", mid, blackout_s),
+                                      Fault("imu_dropout", mid + 3, 0.3, None),
+                                      Fault("imu_dropout", mid + 6, 0.3, None)],
     }
