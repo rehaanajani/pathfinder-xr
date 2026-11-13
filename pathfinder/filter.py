@@ -39,9 +39,13 @@ class FilterConfig:
     min_health: float = 0.005     # only frames with essentially nothing visible are ignored
     recover_health: float = 0.6   # frames this healthy can re-anchor a drifted estimate
     recover_after: int = 5        # ... after this many consecutive rejections (0.5 s)
+    recover_after_confident: int = 30   # ... or 3 s while our own position std is small
+    recover_std: float = 0.25     # metres
     use_health: bool = True       # off = naive fusion that trusts every frame equally
     use_gate: bool = True
     gate: float = CHI2_3DOF_999
+    gate_mode: str = "soft"       # "soft" = robust down-weighting, "hard" = reject + re-anchor
+    soft_power: float = 2.0
     fix_std: float = 0.03
     low_conf_inflate: float = 25.0   # process-noise multiplier when IMU confidence is 0
 
@@ -101,8 +105,15 @@ class ESKF:
         y = z - self.p
         S = H @ self.P @ H.T + Rmeas
         nis = float(y @ np.linalg.solve(S, y))
+        accepted = True
         if self.cfg.use_gate and nis > self.cfg.gate:
-            return False
+            if self.cfg.gate_mode == "hard":
+                return False
+            # Soft gate (robust Kalman): inflate the measurement noise so its pull is capped,
+            # growing with how surprising it is. Far-off measurements barely move the state.
+            Rmeas = Rmeas * (nis / self.cfg.gate) ** self.cfg.soft_power
+            S = H @ self.P @ H.T + Rmeas
+            accepted = False
         K = self.P @ H.T @ np.linalg.inv(S)
         dx = K @ y
         I_KH = np.eye(15) - K @ H
@@ -112,7 +123,7 @@ class ESKF:
         self.p += dx[6:9]
         self.bg += dx[9:12]
         self.ba += dx[12:15]
-        return True
+        return accepted
 
     def camera_update(self, fix, health, log: FilterLog):
         c = self.cfg
@@ -132,8 +143,12 @@ class ESKF:
         log.cam_rejected += 1
         self.cam_fail_streak = getattr(self, "cam_fail_streak", 0) + 1
         # Gate lock-out guard: if *healthy* frames keep disagreeing for a while, our own
-        # estimate is the thing that drifted. Re-anchor to the camera, cautiously.
-        if health >= c.recover_health and self.cam_fail_streak >= c.recover_after:
+        # estimate may be the thing that drifted. If the filter is unsure of itself, re-anchor
+        # quickly; if it is still confident (the learned model is holding it), wait much longer,
+        # because a healthy-looking camera can still be tracking the wrong thing.
+        pos_std = float(np.sqrt(np.trace(self.P[6:9, 6:9])))
+        needed = c.recover_after if pos_std > c.recover_std else c.recover_after_confident
+        if c.gate_mode == "hard" and health >= c.recover_health and self.cam_fail_streak >= needed:
             gate, self.cfg.use_gate = self.cfg.use_gate, False
             self._update_position(fix, Rm * 4)
             self.cfg.use_gate = gate
