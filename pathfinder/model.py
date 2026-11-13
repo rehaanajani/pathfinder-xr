@@ -50,3 +50,10 @@ def nll(pred, logstd, target):
 
 def n_params(m: nn.Module) -> int:
     return sum(p.numel() for p in m.parameters())
+
+
+def beta_nll(pred, logstd, target, beta: float = 0.5):
+    """Gaussian NLL weighted by var^beta (stop-gradient), Seitzer et al., ICLR 2022."""
+    var = torch.exp(2 * logstd)
+    loss = ((pred - target) ** 2) / (2 * var) + logstd
+    return (loss * var.detach() ** beta).mean()

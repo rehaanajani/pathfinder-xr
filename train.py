@@ -24,7 +24,7 @@ import numpy as np
 import torch
 
 from pathfinder import data_tlio as D
-from pathfinder.model import WINDOW, DispNet, n_params, nll
+from pathfinder.model import WINDOW, DispNet, beta_nll, n_params
 
 
 def load_split(name, limit=None, stride=10):
@@ -133,9 +133,9 @@ def main():
     tr_imu, tr_pos, tr_st = tr_imu.to(dev), tr_pos.to(dev), tr_st.to(dev)
     va_imu, va_pos, va_st = va_imu.to(dev), va_pos.to(dev), va_st.to(dev)
     net = DispNet(args.width).to(dev)
-    opt = torch.optim.AdamW(net.parameters(), 1e-3, weight_decay=1e-4)
+    opt = torch.optim.AdamW(net.parameters(), 5e-4, weight_decay=1e-4)
     steps = args.epochs * math.ceil(len(tr_st) / args.batch)
-    sched = torch.optim.lr_scheduler.OneCycleLR(opt, 2e-3, total_steps=steps)
+    sched = torch.optim.lr_scheduler.OneCycleLR(opt, 8e-4, total_steps=steps)
     print(f"device={dev} params={n_params(net)} train_windows={len(tr_st)} val_windows={len(va_st)}",
           flush=True)
     best, hist = 1e9, []
@@ -147,7 +147,9 @@ def main():
         for i in range(0, len(perm), args.batch):
             x, y = batch(tr_imu, tr_pos, tr_st, perm[i:i + args.batch], args.aug, dev)
             d, ls = net(x)
-            loss = ((d - y) ** 2).mean() if ep < 2 else nll(d, ls.clamp_min(math.log(1e-3)), y)
+            # MSE keeps the mean honest; beta-NLL (Seitzer et al. 2022) learns the uncertainty
+            # without letting confident samples blow up the gradient.
+            loss = ((d - y) ** 2).mean() + beta_nll(d, ls.clamp_min(math.log(1e-3)), y)
             opt.zero_grad()
             loss.backward()
             opt.step()
