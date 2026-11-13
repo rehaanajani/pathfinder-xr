@@ -6,6 +6,7 @@ Methods
                     (no health check, no gate, no IMU voting, no learned model)
   tlio_style      : learned displacement (TLIO-style training) + filter, IMU only, no camera
   ours_no_model   : ours without the learned model (ablation)
+  ours_tlio_model : ours with the TLIO-style-trained network swapped in (isolates the training)
   ours            : IMU voting + camera health weighting + chi-square gate + learned
                     displacement from the fault-aware network
 """
@@ -18,7 +19,7 @@ from .filter import FilterConfig, run
 from .imu_vote import vote
 from .integrator import strapdown
 
-ALL = ("imu_only", "naive_fusion", "tlio_style", "ours_no_model", "ours")
+ALL = ("imu_only", "naive_fusion", "tlio_style", "ours_no_model", "ours_tlio_model", "ours")
 
 
 def prepare(seq, faults: list[Fault], seed: int = 0):
@@ -58,6 +59,9 @@ def run_methods(seq, faults, seed=0, ours_model=None, tlio_model=None, methods=A
     if "ours_no_model" in methods:
         est, log = run(seq, fg, fa, conf, cam, None, FilterConfig())
         res["ours_no_model"] = _pack(est, seq, log)
+    if "ours_tlio_model" in methods and tlio_model is not None:
+        est, log = run(seq, fg, fa, conf, cam, tlio_model, FilterConfig())
+        res["ours_tlio_model"] = _pack(est, seq, log)
     if "ours" in methods and ours_model is not None:
         est, log = run(seq, fg, fa, conf, cam, ours_model, FilterConfig())
         res["ours"] = _pack(est, seq, log, imu_weights=info["weights"], imu_reasons=info["reasons"])

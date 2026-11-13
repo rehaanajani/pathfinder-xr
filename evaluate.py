@@ -29,9 +29,10 @@ from pathfinder.synthetic import head_walk
 OUT = Path("results")
 LABEL = {"imu_only": "IMU only", "naive_fusion": "Naive camera+IMU fusion",
          "tlio_style": "Learned IMU only (TLIO-style)", "ours_no_model": "Ours without learned model",
+         "ours_tlio_model": "Ours with TLIO-trained model",
          "ours": "Ours"}
 COLOR = {"imu_only": "#9aa0a6", "naive_fusion": "#e8710a", "tlio_style": "#1a73e8",
-         "ours_no_model": "#a142f4", "ours": "#188038"}
+         "ours_no_model": "#a142f4", "ours_tlio_model": "#80868b", "ours": "#188038"}
 
 
 def load_models():
@@ -74,7 +75,7 @@ def main():
     t0 = time.time()
     ours, tl = load_models()
     seqs = sequences(args.seqs, args.clip, args.synthetic)
-    methods = [m for m in ALL if (m != "ours" or ours) and (m != "tlio_style" or tl)]
+    methods = [m for m in ALL if (m != "ours" or ours) and (m not in ("tlio_style", "ours_tlio_model") or tl)]
     print(f"{len(seqs)} sequences x {args.clip:.0f}s, methods: {methods}", flush=True)
 
     # 1) every named scenario
