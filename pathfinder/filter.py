@@ -38,9 +38,11 @@ class FilterConfig:
     sigma_ba: float = 1e-3
     min_health: float = 0.005     # only frames with essentially nothing visible are ignored
     recover_health: float = 0.6   # frames this healthy can re-anchor a drifted estimate
-    recover_after: int = 5        # ... after this many consecutive rejections (0.5 s)
-    recover_after_confident: int = 30   # ... or 3 s while our own position std is small
-    recover_std: float = 0.25     # metres
+    recover_after: int = 10       # after an outage: re-anchor after 1 s of healthy disagreement
+    recover_after_jump: int = 100 # after a sudden camera jump: hold out for 10 s
+    outage_gap: int = 100         # samples (0.5 s) without a good frame counts as an outage
+    model_check_up: float = 0.1     # learned-model self-check: how fast trust drops (per update)
+    model_check_down: float = 0.003 # ... and how slowly it comes back
     use_health: bool = True       # off = naive fusion that trusts every frame equally
     use_gate: bool = True
     gate: float = CHI2_3DOF_999
@@ -61,6 +63,7 @@ class FilterLog:
     disp_used: int = 0
     disp_rejected: int = 0
     disp_std: list = field(default_factory=list)
+    model_scale: list = field(default_factory=list)
 
 
 class ESKF:
@@ -125,7 +128,7 @@ class ESKF:
         self.ba += dx[12:15]
         return accepted
 
-    def camera_update(self, fix, health, log: FilterLog):
+    def camera_update(self, fix, health, log: FilterLog, k: int = 0):
         c = self.cfg
         if c.use_health:
             if health < c.min_health:
@@ -136,27 +139,53 @@ class ESKF:
         else:
             std = c.fix_std
         Rm = np.eye(3) * std ** 2
+        healthy = health >= c.recover_health
         if self._update_position(fix, Rm):
             log.cam_used += 1
             self.cam_fail_streak = 0
+            if healthy:
+                self.last_good_cam_k = k
             return
         log.cam_rejected += 1
-        self.cam_fail_streak = getattr(self, "cam_fail_streak", 0) + 1
-        # Gate lock-out guard: if *healthy* frames keep disagreeing for a while, our own
-        # estimate may be the thing that drifted. If the filter is unsure of itself, re-anchor
-        # quickly; if it is still confident (the learned model is holding it), wait much longer,
-        # because a healthy-looking camera can still be tracking the wrong thing.
-        pos_std = float(np.sqrt(np.trace(self.P[6:9, 6:9])))
-        needed = c.recover_after if pos_std > c.recover_std else c.recover_after_confident
-        if c.gate_mode == "hard" and health >= c.recover_health and self.cam_fail_streak >= needed:
+        if not healthy:
+            return
+        streak = getattr(self, "cam_fail_streak", 0)
+        if streak == 0:
+            # Why does a healthy camera disagree with us? If we just came back from an outage,
+            # we are the one that drifted. If the camera was agreeing a moment ago and suddenly
+            # jumped, it has probably locked onto the wrong thing.
+            gap = k - getattr(self, "last_good_cam_k", -10 ** 9)
+            self.streak_origin = "outage" if gap > c.outage_gap else "jump"
+        self.cam_fail_streak = streak + 1
+        needed = c.recover_after if self.streak_origin == "outage" else c.recover_after_jump
+        if self.cam_fail_streak >= needed:
+            # Re-anchor: open our position uncertainty to the size of the disagreement, then
+            # take the camera fix with the gate off.
+            y = fix - self.p
+            self.P[6:9, 6:9] += np.eye(3) * float(y @ y)
             gate, self.cfg.use_gate = self.cfg.use_gate, False
-            self._update_position(fix, Rm * 4)
+            self._update_position(fix, Rm)
             self.cfg.use_gate = gate
             self.cam_fail_streak = 0
+            self.last_good_cam_k = k
             log.cam_recovered += 1
 
-    def displacement_update(self, d, cov, p_past, P_past_pos, log: FilterLog):
+    def displacement_update(self, d, cov, p_past, P_past_pos, log: FilterLog, k: int = 0):
         z = p_past + d
+        # Self-check of the learned model: while the camera is healthy our state is anchored,
+        # so a large innovation here means the *model* is wrong on this kind of motion. Track
+        # how far off it is relative to its own claimed uncertainty and scale its covariance.
+        anchored = k - getattr(self, "last_good_cam_k", -10 ** 9) <= self.cfg.outage_gap
+        if anchored:
+            y = z - self.p
+            S = self.P[6:9, 6:9] + cov + P_past_pos
+            ratio = float(y @ np.linalg.solve(S, y)) / 3.0
+            cur = getattr(self, "model_scale", 1.0)
+            target = max(ratio, 1.0)
+            # Lose trust fast, regain it slowly: one bad stretch should be remembered.
+            a = self.cfg.model_check_up if target > cur else self.cfg.model_check_down
+            self.model_scale = (1 - a) * cur + a * target
+        cov = cov * getattr(self, "model_scale", 1.0)
         if self._update_position(z, cov + P_past_pos):
             log.disp_used += 1
         else:
@@ -193,7 +222,7 @@ def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = 
         if k in cam_at:
             j = cam_at[k]
             if not np.any(np.isnan(cam["fix"][j])):
-                f.camera_update(cam["fix"][j], cam["health"][j], log)
+                f.camera_update(cam["fix"][j], cam["health"][j], log, k)
         if k in disp_at:
             j = disp_at[k]
             k0 = k - disp["window"]
@@ -207,7 +236,8 @@ def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = 
             aw = np.einsum("nij,nj->ni", Rs, acc[k0:k])
             d, cov = predictor(np.concatenate([gw, aw], 1))
             log.disp_std.append(float(np.sqrt(np.trace(cov))))
-            f.displacement_update(d, cov, hist_p[k0], hist_Pp[k0], log)
+            f.displacement_update(d, cov, hist_p[k0], hist_Pp[k0], log, k)
+            log.model_scale.append(getattr(f, "model_scale", 1.0))
         if k < N - 1:
             c = 1.0 if imu_conf is None else float(imu_conf[k])
             f.propagate(gyro[k], acc[k], dt, c)

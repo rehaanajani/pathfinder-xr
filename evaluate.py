@@ -89,7 +89,9 @@ def main():
                 rows[m].append({k: r[m][k] for k in ("ate_m", "rte_1s_m", "rte_10s_m", "drift_pct", "final_err_m")})
             if name == "camera_blackout" and i == 0:
                 example = (s, r)
-        table[name] = {m: {k: float(np.mean([x[k] for x in v])) for k in v[0]} for m, v in rows.items()}
+        table[name] = {m: {**{k: float(np.mean([x[k] for x in v])) for k in v[0]},
+                           "ate_median_m": float(np.median([x["ate_m"] for x in v])),
+                           "ate_per_seq_m": [round(x["ate_m"], 3) for x in v]} for m, v in rows.items()}
         print(f"{name:28s} " + "  ".join(f"{m}={table[name][m]['ate_m']:.2f}" for m in methods), flush=True)
 
     # 2) blackout length sweep
