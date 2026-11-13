@@ -29,6 +29,18 @@ This system **finds which sensor is lying, stops trusting it, and keeps tracking
 6. **A health signal out.** Per-sensor trust and the filter's own position uncertainty, the tracking-quality
    signal that apps can use and that today's Android XR pose API does not expose.
 
+## Submission package
+
+| Item | Where |
+|---|---|
+| Source code | this repository |
+| Presentation | [`deck/PathFinder_SRMIST_CaliforniaBurrito.pptx`](deck/PathFinder_SRMIST_CaliforniaBurrito.pptx) (Samsung template, built by `deck/build_deck.py`) |
+| Video | [`results/demo.mp4`](results/demo.mp4) (84 s, rendered from real runs by `make_video.py`) |
+| Interactive demo | [`demo/index.html`](demo/index.html), open in any browser |
+| Results | [`results/report.html`](results/report.html), [`results/summary.json`](results/summary.json) |
+| Trained models | [release `models-v1`](https://github.com/rehaanajani/pathfinder-xr/releases/tag/models-v1) |
+| AI disclosure | [`AI_DISCLOSURE.md`](AI_DISCLOSURE.md) |
+
 ## Results
 
 All numbers come from `python evaluate.py` on __NSEQ__ held-out test sequences of Meta's TLIO headset dataset
@@ -67,7 +79,8 @@ Outputs: `results/report.html` (all numbers and plots), `results/summary.json`, 
 | `pathfinder/filter.py` | Error-state Kalman filter with health weighting, chi-square gate and lock-out guard |
 | `pathfinder/model.py`, `train.py` | Displacement network and fault-aware training |
 | `pathfinder/pipeline.py` | Runs every method on a sequence and scenario |
-| `evaluate.py`, `make_demo.py` | Benchmark, report and demo |
+| `evaluate.py`, `make_demo.py`, `make_video.py` | Benchmark and report, interactive demo, video |
+| `make_readme.py`, `deck/build_deck.py` | README results and the slide deck, generated from `results/summary.json` |
 | `tests/` | Unit tests (`pytest`) |
 
 ## Honest limits

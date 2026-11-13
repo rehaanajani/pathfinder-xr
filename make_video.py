@@ -53,11 +53,12 @@ def main():
     seq = D.redundant_imus(base.slice(30 * 200, 90 * 200 + 1), 3, seed=0)
     cases = [
         ("Camera off for 10 s, and IMU 1 develops a bias",
-         [Fault("camera_blackout", 20, 10), Fault("imu_bias", 15, 1e9, 0)]),
+         [Fault("camera_blackout", 20, 10), Fault("imu_bias", 15, 1e9, 0, {"gyro": [0.08, -0.05, 0.04], "acc": [0.8, -0.5, 0.4]})]),
         ("Camera locks onto the wrong thing for 10 s",
          [Fault("camera_wrong_fix", 20, 10)]),
-        ("IMU 1 dies, then the camera goes dark for 15 s",
-         [Fault("imu_stuck", 12, 1e9, 0), Fault("camera_dark", 20, 15)]),
+        ("Camera off 10 s while fast head turns saturate every IMU",
+         [Fault("camera_blackout", 20, 10),
+          Fault("imu_saturation", 20, 10, None, {"gyro_max": 0.5, "acc_max": 10.3})]),
     ]
     runs = [(title, run_case(seq, f, model, i)) for i, (title, f) in enumerate(cases)]
     S = json.loads(Path("results/summary.json").read_text())
@@ -134,10 +135,10 @@ def main():
             ax.plot(*r[k][i], "o", color=c, ms=8)
         ax.legend(loc="lower left", frameon=False, labelcolor=INK, fontsize=11)
         fig.text(0.64, 0.80, f"t = {r['t'][i]:4.1f} s", color=MUTED, fontsize=16)
-        fig.text(0.64, 0.70, f"{r['en'][i]:.2f} m", color=ORANGE, fontsize=34, weight="bold")
+        fig.text(0.62, 0.70, f"{r['en'][i]:.2f} m", color=ORANGE, fontsize=30, weight="bold")
         fig.text(0.64, 0.66, "standard fusion error", color=MUTED, fontsize=12)
-        fig.text(0.82, 0.70, f"{r['eo'][i]:.2f} m", color=GREEN, fontsize=34, weight="bold")
-        fig.text(0.82, 0.66, "our error", color=MUTED, fontsize=12)
+        fig.text(0.84, 0.70, f"{r['eo'][i]:.2f} m", color=GREEN, fontsize=30, weight="bold")
+        fig.text(0.84, 0.66, "our error", color=MUTED, fontsize=12)
         fig.text(0.64, 0.56, "How much we trust each sensor", color=INK, fontsize=15, weight="bold")
         bars = [("Camera", float(r["cam"][min(i, len(r["cam"]) - 1)]))] + \
                [(f"IMU {k + 1}", float(r["imu"][k, min(i, r["imu"].shape[1] - 1)])) for k in range(r["imu"].shape[0])]

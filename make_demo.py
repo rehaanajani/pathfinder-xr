@@ -35,7 +35,7 @@ def main():
         "Dark room 15 s": [Fault("camera_dark", 20, 15)],
         "Camera tracks the wrong thing 10 s": [Fault("camera_wrong_fix", 20, 10)],
         "One IMU dies + camera off 10 s": [Fault("imu_stuck", 15, 1e9, 0), Fault("camera_blackout", 20, 10)],
-        "One IMU biased + camera off 10 s": [Fault("imu_bias", 15, 1e9, 0), Fault("camera_blackout", 20, 10)],
+        "One IMU biased + camera off 10 s": [Fault("imu_bias", 15, 1e9, 0, {"gyro": [0.08, -0.05, 0.04], "acc": [0.8, -0.5, 0.4]}), Fault("camera_blackout", 20, 10)],
     }
     for label, faults in menu.items():
         r = run_methods(seq, faults, seed=1, ours_model=ours, methods=("naive_fusion", "ours"))
