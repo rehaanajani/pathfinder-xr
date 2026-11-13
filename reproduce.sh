@@ -35,7 +35,12 @@ if [ ! -f local_data/tlio_golden/test_list.txt ]; then
   unzip -q local_data/tlio_golden.zip -d local_data && rm local_data/tlio_golden.zip
 fi
 
+REL=https://github.com/rehaanajani/pathfinder-xr/releases/download/models-v1
 for aug in faults tlio; do
+  if [ "$TRAIN" = 0 ] && [ ! -f models/dispnet_$aug/best.pt ]; then
+    mkdir -p models/dispnet_$aug
+    curl -fsSL "$REL/dispnet_$aug.pt" -o models/dispnet_$aug/best.pt || rm -f models/dispnet_$aug/best.pt
+  fi
   if [ "$TRAIN" = 1 ] || [ ! -f models/dispnet_$aug/best.pt ]; then
     echo "== training dispnet_$aug"
     $PY train.py --aug $aug --epochs 10
