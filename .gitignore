@@ -7,3 +7,6 @@ models/
 results/runs/
 *.zip
 .DS_Store
+deck/unpacked/
+deck/*.jpg
+deck/*.pdf
