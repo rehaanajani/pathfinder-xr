@@ -26,8 +26,20 @@ def x(a, b):
 lines = []
 key = ["camera_blackout", "blackout_plus_one_imu_bias", "blackout_plus_vibration_all", "dark_plus_imu_drift"]
 best = max(key, key=lambda k: SC[k]["naive_fusion"]["ate_m"] / max(SC[k]["ours"]["ate_m"], 1e-9))
-lines.append(f"**Headline:** {NAMES[best].lower()}: naive fusion drifts **{SC[best]['naive_fusion']['ate_m']:.2f} m**, "
-             f"ours **{SC[best]['ours']['ate_m']:.2f} m** ({x(SC[best]['naive_fusion']['ate_m'], SC[best]['ours']['ate_m'])} lower).\n")
+sw0 = S["blackout_sweep"]
+def verdict(v):
+    o, n = v["ours"]["ate_m"], v["naive_fusion"]["ate_m"]
+    tol = 0.05 * n + 0.005                      # 5 % or 5 mm counts as level
+    return "win" if o < n - tol else "loss" if o > n + tol else "tie"
+
+
+vs = [verdict(v) for v in SC.values()]
+wins, ties = vs.count("win"), vs.count("tie")
+lines.append(f"**Headline.** {NAMES[best]}: naive fusion drifts **{SC[best]['naive_fusion']['ate_m']:.2f} m**, ours "
+             f"**{SC[best]['ours']['ate_m']:.2f} m** ({x(SC[best]['naive_fusion']['ate_m'], SC[best]['ours']['ate_m'])} lower). "
+             f"After a {sw0['lengths_s'][-1]} s blackout: **{sw0['naive_fusion'][-1]:.2f} m vs {sw0['ours'][-1]:.2f} m**. "
+             f"Ours is clearly better in {wins} of {len(SC)} scenarios, level in {ties}, worse in "
+             f"{len(SC) - wins - ties} (see Honest limits).\n")
 lines.append("| Scenario | IMU only | Naive fusion | Ours w/o model | Ours w/ TLIO-trained model | **Ours** | Ours median | Gain vs naive |")
 lines.append("|---|---:|---:|---:|---:|---:|---:|---:|")
 for k, v in SC.items():
