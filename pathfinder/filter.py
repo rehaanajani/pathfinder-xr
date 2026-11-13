@@ -56,6 +56,7 @@ class FilterLog:
     cam_recovered: int = 0
     disp_used: int = 0
     disp_rejected: int = 0
+    disp_std: list = field(default_factory=list)
 
 
 class ESKF:
@@ -160,14 +161,19 @@ def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = 
     f = ESKF(cfg, seq.p[start], seq.v[start], seq.q[start])
     log = FilterLog()
     cam_at = {} if cam is None else {int(i): j for j, i in enumerate(cam["idx"])}
-    disp_at = {} if disp is None else {int(i): j for j, i in enumerate(disp["idx"])}
+    disp_at = {} if disp is None or callable(disp) else {int(i): j for j, i in enumerate(disp["idx"])}
+    predictor = disp if callable(disp) else None
     hist_p = np.zeros((N, 3))
     hist_Pp = np.zeros((N, 3, 3))
+    hist_R = np.zeros((N, 3, 3))
     out = np.zeros((N, 3))
+    W = getattr(predictor, "window", 200)
+    every = getattr(predictor, "every", 20)
     for k in range(start, N):
         out[k] = f.p
         hist_p[k] = f.p
         hist_Pp[k] = f.P[6:9, 6:9]
+        hist_R[k] = f.R.as_matrix()
         log.p_std.append(float(np.sqrt(np.trace(f.P[6:9, 6:9]))))
         if k in cam_at:
             j = cam_at[k]
@@ -178,6 +184,15 @@ def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = 
             k0 = k - disp["window"]
             if k0 >= start:
                 f.displacement_update(disp["d"][j], disp["cov"][j], hist_p[k0], hist_Pp[k0], log)
+        if predictor is not None and k - start >= W and (k - start) % every == 0:
+            k0 = k - W
+            # Gravity-align the last second with the filter's OWN orientation history.
+            Rs = hist_R[k0:k]
+            gw = np.einsum("nij,nj->ni", Rs, gyro[k0:k])
+            aw = np.einsum("nij,nj->ni", Rs, acc[k0:k])
+            d, cov = predictor(np.concatenate([gw, aw], 1))
+            log.disp_std.append(float(np.sqrt(np.trace(cov))))
+            f.displacement_update(d, cov, hist_p[k0], hist_Pp[k0], log)
         if k < N - 1:
             c = 1.0 if imu_conf is None else float(imu_conf[k])
             f.propagate(gyro[k], acc[k], dt, c)
