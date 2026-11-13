@@ -68,15 +68,21 @@ def visual_fixes(t: np.ndarray, p_true: np.ndarray, sched: dict, seed: int = 0) 
         raise ValueError("camera schedule length must match frame count")
     fix = np.full((n, 3), np.nan)
     health = np.zeros(n)
+    drift = np.zeros(3)
     for j, i in enumerate(idx):
         if not keys["available"][j]:
             continue
         b, blur = keys["brightness"][j], keys["blur"][j]
         frame = degrade(textured_frame(rng), b, blur, rng)
         health[j] = image_health(frame)["score"]
-        # A real tracker gets worse in the dark and with blur: its fix error grows.
-        std = FIX_STD * (1 + 8 * (1 - b) ** 2 + blur / 3)
-        fix[j] = p_true[i] + rng.normal(0, std, 3) + keys["wrong_fix"][j]
+        # How a real visual tracker degrades: with fewer, noisier features its fix gets
+        # noisier AND it drifts (correlated error), with occasional jumps from mismatches.
+        # Clean frames pull the drift back (relocalisation). Identical for every method.
+        bad = float(np.clip((1 - b) ** 2 + blur / 20, 0, 1.5))
+        std = FIX_STD * (1 + 4 * bad)
+        drift = drift * (0.5 if bad < 0.05 else 0.995) + rng.normal(0, 0.06 * bad, 3)
+        jump = rng.normal(0, 0.8, 3) if rng.random() < 0.08 * bad else 0.0
+        fix[j] = p_true[i] + rng.normal(0, std, 3) + drift + jump + keys["wrong_fix"][j]
     return {"idx": idx, "fix": fix, "health": health}
 
 
