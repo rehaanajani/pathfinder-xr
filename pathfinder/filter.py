@@ -28,6 +28,7 @@ from . import GRAVITY
 
 G = np.array([0.0, 0.0, -GRAVITY])
 CHI2_3DOF_999 = 16.27
+CHI2_6DOF_999 = 22.46
 
 
 def skew(v):
@@ -76,6 +77,7 @@ class FilterConfig:
 class FilterLog:
     p: list = field(default_factory=list)
     p_std: list = field(default_factory=list)
+    p_cov: list = field(default_factory=list)      # full 3x3 position covariance per sample
     cam_used: int = 0
     cam_rejected: int = 0
     cam_skipped: int = 0
@@ -83,6 +85,8 @@ class FilterLog:
     disp_used: int = 0
     disp_rejected: int = 0
     disp_std: list = field(default_factory=list)
+    vo_used: int = 0
+    vo_rejected: int = 0
     model_scale: list = field(default_factory=list)
 
 
@@ -132,18 +136,19 @@ class ESKF:
             P[:15, 15:] = F @ P[:15, 15:]
             P[15:, :15] = P[:15, 15:].T
 
-    def _update(self, y, H, Rmeas):
+    def _update(self, y, H, Rmeas, gate=None):
         n = self.P.shape[0]
+        gate = self.cfg.gate if gate is None else gate
         S = H @ self.P @ H.T + Rmeas
         nis = float(y @ np.linalg.solve(S, y))
         self.last_nis = nis
         accepted = True
-        if self.cfg.use_gate and nis > self.cfg.gate:
+        if self.cfg.use_gate and nis > gate:
             if self.cfg.gate_mode == "hard":
                 return False
             # Soft gate (robust Kalman): inflate the measurement noise so its pull is capped,
             # growing with how surprising it is. Far-off measurements barely move the state.
-            Rmeas = Rmeas * (nis / self.cfg.gate) ** self.cfg.soft_power
+            Rmeas = Rmeas * (nis / gate) ** self.cfg.soft_power
             S = H @ self.P @ H.T + Rmeas
             accepted = False
         K = self.P @ H.T @ np.linalg.inv(S)
@@ -178,12 +183,50 @@ class ESKF:
         self.clone_k.append(k)
         self.clone_p.append(self.p.copy())
         self.clone_R.append(self.R)
-        while len(self.clone_k) > max_clones:
-            keep = np.r_[0:15, 21:self.P.shape[0]]
-            self.P = self.P[np.ix_(keep, keep)]
-            self.clone_k.pop(0)
-            self.clone_p.pop(0)
-            self.clone_R.pop(0)
+        # Keep at most max_clones of this kind (int key: learned-displacement clone; ("vo", k): visual).
+        kind = type(k)
+        while sum(type(c) is kind for c in self.clone_k) > max_clones:
+            self.drop_clone(next(i for i, c in enumerate(self.clone_k) if type(c) is kind))
+
+    def drop_clone(self, i: int):
+        o = 15 + 6 * i
+        keep = np.r_[0:o, o + 6:self.P.shape[0]]
+        self.P = self.P[np.ix_(keep, keep)]
+        self.clone_k.pop(i)
+        self.clone_p.pop(i)
+        self.clone_R.pop(i)
+
+    def vo_update(self, key_prev, t_rel, R_rel, cov_t, cov_r, log, k: int = 0):
+        """Visual odometry between the clone taken at the previous frame and now (issue #2 B).
+
+        Measured: pose of the IMU now relative to the IMU at the previous frame, in that frame:
+          translation  h_t = R_i^T (p - p_i)       H: p -> R_i^T, p_i -> -R_i^T, dtheta_i -> [h_t]x
+          rotation     h_R = R_i^T R               residual Log(h_R^T R_meas) ~ dtheta - h_R^T dtheta_i
+        Six degrees of freedom, so the visual rotation also corrects heading and gyro bias."""
+        if key_prev not in self.clone_k:
+            return False
+        i = self.clone_k.index(key_prev)
+        n = self.P.shape[0]
+        o = 15 + 6 * i
+        Ri = self.clone_R[i].as_matrix()
+        Rc = self.R.as_matrix()
+        h_t = Ri.T @ (self.p - self.clone_p[i])
+        M = Ri.T @ Rc
+        y = np.r_[t_rel - h_t, Rot.from_matrix(M.T @ R_rel).as_rotvec()]
+        H = np.zeros((6, n))
+        H[0:3, 6:9] = Ri.T
+        H[0:3, o + 3:o + 6] = -Ri.T
+        H[0:3, o:o + 3] = skew(h_t)
+        H[3:6, 0:3] = np.eye(3)
+        H[3:6, o:o + 3] = -M.T
+        Rm = np.zeros((6, 6))
+        Rm[:3, :3], Rm[3:, 3:] = cov_t, cov_r
+        ok = self._update(y, H, Rm, gate=CHI2_6DOF_999)
+        if ok:
+            log.vo_used += 1
+        else:
+            log.vo_rejected += 1
+        return ok
 
     def clone_yaw(self, k0):
         """Yaw-only rotation (world <- local gravity-aligned frame) of the clone taken at sample k0."""
@@ -348,12 +391,14 @@ class ESKF:
 
 
 def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = FilterConfig(),
-        start: int = 0):
+        start: int = 0, vo=None):
     """Run the filter over a sequence.
 
     gyro, acc: (N,3) fused IMU stream. imu_conf: (N,) or None.
     cam: dict from camera.visual_fixes (idx, fix, health) or None.
     disp: dict with idx (end sample), window (samples), d (M,3), cov (M,3,3) or None.
+    vo: dict from stereo visual odometry or None: frame_idx (sample of every processed frame),
+        and per frame t (3), R (3,3), cov_t, cov_r (NaN t = no solve for that frame pair).
     """
     N = len(seq.t)
     dt = seq.dt
@@ -363,6 +408,7 @@ def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = 
     cam_at = {} if cam is None else {int(i): j for j, i in enumerate(cam["idx"])}
     disp_at = {} if disp is None or callable(disp) else {int(i): j for j, i in enumerate(disp["idx"])}
     predictor = disp if callable(disp) else None
+    vo_at = {} if vo is None else {int(i): j for j, i in enumerate(vo["frame_idx"])}
     hist_p = np.zeros((N, 3))
     hist_Pp = np.zeros((N, 3, 3))
     hist_R = np.zeros((N, 3, 3))
@@ -375,6 +421,7 @@ def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = 
         hist_Pp[k] = f.P[6:9, 6:9]
         hist_R[k] = f.R.as_matrix()
         log.p_std.append(float(np.sqrt(np.trace(f.P[6:9, 6:9]))))
+        log.p_cov.append(f.P[6:9, 6:9].copy())
         if k in cam_at:
             j = cam_at[k]
             if not np.any(np.isnan(cam["fix"][j])):
@@ -403,6 +450,12 @@ def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = 
             log.model_scale.append(getattr(f, "model_scale", 1.0))
         if predictor is not None and cfg.cloning and (k - start) % every == 0:
             f.add_clone(k, W // every + 1)
+        if k in vo_at:
+            j = vo_at[k]
+            if j > 0 and np.isfinite(vo["t"][j]).all():
+                f.vo_update(("vo", int(vo["frame_idx"][j - 1])), vo["t"][j], vo["R"][j], vo["cov_t"][j],
+                            vo["cov_r"][j], log, k)
+            f.add_clone(("vo", k), 2)
         if k < N - 1:
             c = 1.0 if imu_conf is None else float(imu_conf[k])
             f.propagate(gyro[k], acc[k], dt, c)
