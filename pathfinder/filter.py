@@ -50,6 +50,7 @@ class FilterConfig:
     use_health: bool = True       # off = naive fusion that trusts every frame equally
     trust: tuple | None = None    # (health, std_m) table from camera.calibrate_trust
     cloning: bool = False         # TLIO-style stochastic cloning of past (rotation, position)
+    disp_cov_scale: float = 1.0   # calibration of the network's claimed variance (>1: it is overconfident)
     yaw_frame: bool = False       # with cloning: measure displacement in the clone's yaw frame,
                                   # with the rotation Jacobian (TLIO, Liu et al. 2020, eq. 9-10)
     adaptive_q: bool = False      # inflate IMU process noise when healthy camera disagrees
@@ -348,6 +349,7 @@ def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = 
                 Rz = f.clone_yaw(k0)              # into the clone's yaw frame (row vectors: v @ Rz)
                 gw, aw = gw @ Rz, aw @ Rz
             d, cov = predictor(np.concatenate([gw, aw], 1))
+            cov = cov * cfg.disp_cov_scale
             log.disp_std.append(float(np.sqrt(np.trace(cov))))
             if cfg.cloning:
                 f.displacement_update_clone(d, cov, k0, log, k)
