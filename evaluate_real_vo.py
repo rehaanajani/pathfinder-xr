@@ -162,12 +162,13 @@ def vo_only(seq, vo):
 _W = {}
 
 
-def _init(clips, noise):
+def _init(clips, noise, overrides=None):
     import torch
     from pathfinder.predictor import Predictor
     cv2.setNumThreads(1)
     torch.set_num_threads(1)
     _W["clips"], _W["noise"] = clips, noise
+    _W["overrides"] = overrides or {}
     _W["net"] = Predictor("models/dispnet_faults/best.pt")
 
 
@@ -184,7 +185,8 @@ def _job(job):
     bad3 = apply_imu_faults(seq3, faults, seed=int(st))
     fg, fa, info = fuse_imus(bad3)
     conf = np.repeat(info["confidence"], 20)[: len(seq1.t)]
-    ours_cfg = FilterConfig()                            # robust soft gate on; VO noise from calibration
+    from dataclasses import replace
+    ours_cfg = replace(FilterConfig(), **_W["overrides"])  # robust soft gate on; VO noise from calibration
     rows, end = {}, int(30 * seq1.rate)
     ests = {
         "vo_only": vo_only(seq1, vo),
@@ -204,10 +206,21 @@ def _job(job):
             "vo_seconds": vo_s, "frames": len(ft), **rows}
 
 
+def _parse_set(items):
+    out = {}
+    for it in items:
+        k, v = it.split("=", 1)
+        t = type(getattr(FilterConfig(), k))
+        out[k] = (v.lower() in ("1", "true", "yes")) if t is bool else t(v)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--workers", type=int, default=9)
     ap.add_argument("--out", default="results")
+    ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
+                    help="override a FilterConfig field for the 'ours' methods (not the conventional baseline)")
     args = ap.parse_args()
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
@@ -233,7 +246,7 @@ def main():
             m = (ft_all >= st) & (ft_all <= st + CLIP)
             clips[(r, st)] = (s, ft_all[m] - st, [p for p, k in zip(fp_all, m) if k])
     jobs = [(r, st, n) for r in rooms for st in STARTS for n in scenarios()]
-    with ProcessPoolExecutor(args.workers, initializer=_init, initargs=(clips, noise)) as ex:
+    with ProcessPoolExecutor(args.workers, initializer=_init, initargs=(clips, noise, _parse_set(args.set))) as ex:
         rows = list(ex.map(_job, jobs))
     methods = ["vo_only", "conventional", "ours_1imu", "ours_3imu", "ours_1imu_net"]
     summary = {}
