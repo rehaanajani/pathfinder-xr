@@ -107,6 +107,16 @@ def sc(name, m):
     return S["scenarios"][name][m]["ate_m"]
 
 
+def score_line():
+    out = {"win": 0, "tie": 0, "loss": 0}
+    for v in S["scenarios"].values():
+        o, n = v["ours"]["ate_m"], v["naive_fusion"]["ate_m"]
+        tol = 0.05 * n + 0.005
+        out["win" if o < n - tol else "loss" if o > n + tol else "tie"] += 1
+    return (f"{out['win']} better, {out['tie']} level, {out['loss']} worse out of {len(S['scenarios'])} "
+            f"scenarios on {len(S['sequences'])} recordings, all in the README")
+
+
 def style_chart(chart, colors):
     chart.font.name = FONT
     chart.font.size = Pt(10)
@@ -359,7 +369,7 @@ def main():
     text(s, Inches(5.1), TOP, Inches(3.4), Inches(0.5), "Also built", size=18, bold=True)
     extra = [("Model self-check", "While the camera is healthy, the filter grades the network and distrusts it on motion it never learned"),
              ("Soft robust gate", "Re-anchors 1 s after an outage; holds out a camera that suddenly jumps"),
-             ("Honest scoreboard", "10 better, 5 level, 1 worse out of 16 scenarios, all in the README"),
+             ("Honest scoreboard", score_line()),
              ("Next on device", "TFLite / ExecuTorch on Galaxy, real multi-IMU logs, real camera frames")]
     for i, (h, d) in enumerate(extra):
         y = TOP + Inches(0.55 + i * 0.95)
