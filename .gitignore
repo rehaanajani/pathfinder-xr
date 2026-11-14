@@ -13,4 +13,3 @@ deck/unpacked/
 deck/*.jpg
 deck/*.pdf
 .claude/
-runs/

@@ -25,12 +25,8 @@ from .camera import load_trust
 TRUST = load_trust()      # measured health -> fix-error table; None until calibrated
 
 
-OURS_OVERRIDES: dict = {}          # set by evaluate.py --set, for validation sweeps
-
-
 def ours_cfg():
-    from dataclasses import replace
-    return replace(FilterConfig(trust=TRUST, adaptive_q=True, bias_q_gain=10.0), **OURS_OVERRIDES)
+    return FilterConfig(trust=TRUST, adaptive_q=True, bias_q_gain=10.0)
 
 
 ALL = ("imu_only", "naive_fusion", "tlio_style", "ours_no_model", "ours_tlio_model", "ours")
@@ -57,13 +53,10 @@ def fuse_imus(bad):
     """3+ IMUs: parity-space GLRT detection and isolation. 2 IMUs: parity can only detect,
     so per-IMU signal checks (stuck, saturated, spiky, noisy) decide who is wrong."""
     if bad.n_imus >= 3:
-        w, D, pinfo = ParityFDI(bad.n_imus).run(bad.gyro, bad.acc, bad.rate,
-                                                lever_arms=bad.meta.get("lever_arms"))
+        w, D, pinfo = ParityFDI(bad.n_imus).run(bad.gyro, bad.acc, bad.rate)
         fg, fa = fuse(bad.gyro, bad.acc, w, 20)
-        # Confidence = can the fused stream be trusted (agreement, or one fault cleanly removed),
-        # not "was any IMU kept". See parity.CONF_* for the levels.
-        return fg, fa, {"weights": w, "reasons": pinfo["isolated"], "confidence": pinfo["confidence"],
-                        "state": pinfo["state"], "parity_D": D, "method": "parity"}
+        return fg, fa, {"weights": w, "reasons": pinfo["isolated"], "confidence": w.max(0),
+                        "parity_D": D, "method": "parity"}
     fg, fa, info = vote(bad.gyro, bad.acc)
     return fg, fa, {**info, "method": "vote"}
 

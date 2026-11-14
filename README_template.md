@@ -121,11 +121,7 @@ Outputs: `results/report.html` (all numbers and plots), `results/summary.json`, 
   the measured fraction of correctly tracked features. The position fix itself is motion-capture truth plus that
   noise, not a full visual odometry front end.
 - **Extra IMUs are simulated.** TLIO and TUM-VI have one IMU each. Multi-IMU tests copy the real IMU with its own
-  noise and bias per copy, all at the same point. The parity detector compensates lever arms when the IMU
-  positions are given (`lever_arms`, tested on a simulated rigid head: false alarms 99 % without it, 1-2.6 %
-  with it), assumes the IMUs are already rotated into one body frame and time-aligned, and has not been
-  validated on real multi-IMU hardware. A fault shared by every IMU (common vibration, same-model temperature
-  drift) cancels in the parity test and is not detected there.
+  noise and bias per copy. The parity-space detector models lever arms but is not tuned on real multi-IMU hardware.
 - **Two IMUs detect, three isolate.** With two IMUs a smooth bias is detected but cannot always be attributed; the
   parity test isolates it with three or more, which is why Galaxy XR's five matter.
 - **IMU-only accuracy is close to, not yet at, published TLIO.** Full TLIO test split, IMU only, no
