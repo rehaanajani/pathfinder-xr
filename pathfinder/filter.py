@@ -243,7 +243,7 @@ class ESKF:
         healthy = health >= c.recover_health
         if c.adaptive_q and healthy:
             # Use the innovation of healthy frames to check whether the IMU model is too optimistic.
-            H = np.zeros((3, 15)); H[:, 6:9] = np.eye(3)
+            H = np.zeros((3, self.P.shape[0])); H[:, 6:9] = np.eye(3)
             y = fix - self.p
             S = H @ self.P @ H.T + Rm
             ratio = float(y @ np.linalg.solve(S, y)) / 3.0
