@@ -30,7 +30,10 @@ OURS_OVERRIDES: dict = {}          # set by evaluate.py --set, for validation sw
 
 def ours_cfg():
     from dataclasses import replace
-    return replace(FilterConfig(trust=TRUST, adaptive_q=True, bias_q_gain=10.0), **OURS_OVERRIDES)
+    # Outage speed limit + weak zero-velocity prior (2 m/s): chosen on the validation split for runs
+    # without the learned model; it switches itself off when the model runs (results/diagnostics).
+    return replace(FilterConfig(trust=TRUST, adaptive_q=True, bias_q_gain=10.0, speed_limit=True,
+                                outage_v_std=2.0), **OURS_OVERRIDES)
 
 
 ALL = ("imu_only", "naive_fusion", "tlio_style", "ours_no_model", "ours_tlio_model", "ours")

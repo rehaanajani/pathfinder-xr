@@ -58,6 +58,17 @@ class FilterConfig:
     trust: tuple | None = None    # (health, std_m) table from camera.calibrate_trust
     cloning: bool = False         # TLIO-style stochastic cloning of past (rotation, position)
     disp_cov_scale: float = 1.0   # calibration of the network's claimed variance (>1: it is overconfident)
+    # Outage speed limit (issue #2 follow-up): while no camera/VO update has been accepted for
+    # ``vis_gap_s``, a person's head cannot move faster than ``v_max``; with a broken IMU the
+    # integrated velocity otherwise runs away (saturation, drift). Optionally also a weak
+    # zero-velocity prior that tightens as IMU confidence falls.
+    speed_limit: bool = False
+    v_max: float = 2.0            # m/s: TLIO train split head speed 99.9th pct 1.62, max 2.13
+    v_limit_std: float = 0.3      # m/s, how firmly the limit is applied
+    outage_v_std: float = 0.0     # m/s; 0 = off. Zero-velocity prior std at IMU confidence 1
+    vis_gap_s: float = 0.5
+    speed_limit_with_model: bool = False  # validation: with the learned model running the limit did not
+                                          # help (it already bounds velocity), so it switches itself off
     yaw_frame: bool = False       # with cloning: measure displacement in the clone's yaw frame,
                                   # with the rotation Jacobian (TLIO, Liu et al. 2020, eq. 9-10)
     adaptive_q: bool = False      # inflate IMU process noise when healthy camera disagrees
@@ -86,6 +97,8 @@ class FilterLog:
     disp_used: int = 0
     disp_rejected: int = 0
     disp_std: list = field(default_factory=list)
+    v_limited: int = 0
+    v_prior: int = 0
     vo_used: int = 0
     vo_rejected: int = 0
     model_scale: list = field(default_factory=list)
@@ -225,6 +238,7 @@ class ESKF:
         ok = self._update(y, H, Rm, gate=CHI2_6DOF_999)
         if ok:
             log.vo_used += 1
+            self.last_vo_t = self._t(k)
         else:
             log.vo_rejected += 1
         return ok
@@ -275,6 +289,28 @@ class ESKF:
             log.disp_used += 1
         else:
             log.disp_rejected += 1
+
+    def speed_check(self, k, imu_conf, log):
+        """Velocity pseudo-measurements during a visual outage (see FilterConfig.speed_limit)."""
+        c = self.cfg
+        t = self._t(k)
+        last = max(getattr(self, "last_good_cam_t", -1e9), getattr(self, "last_vo_t", -1e9))
+        if t - last <= c.vis_gap_s:
+            return
+        n = self.P.shape[0]
+        H = np.zeros((3, n)); H[:, 3:6] = np.eye(3)
+        gate, self.cfg.use_gate = self.cfg.use_gate, False      # a physical bound, not a sensor reading
+        try:
+            sp = float(np.linalg.norm(self.v))
+            if sp > c.v_max:
+                self._update(self.v * (c.v_max / sp) - self.v, H, np.eye(3) * c.v_limit_std ** 2)
+                log.v_limited += 1
+            if c.outage_v_std > 0:
+                std = c.outage_v_std * (0.25 + 0.75 * float(np.clip(imu_conf, 0, 1)))
+                self._update(-self.v, H, np.eye(3) * std ** 2)
+                log.v_prior += 1
+        finally:
+            self.cfg.use_gate = gate
 
     def _t(self, k):
         return k * getattr(self, "dt", 1.0 / 200.0)
@@ -457,6 +493,8 @@ def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = 
                 f.vo_update(("vo", int(vo["frame_idx"][j - 1])), vo["t"][j], vo["R"][j], vo["cov_t"][j],
                             vo["cov_r"][j], log, k)
             f.add_clone(("vo", k), 2)
+        if cfg.speed_limit and (predictor is None or cfg.speed_limit_with_model) and (k - start) % 20 == 0:
+            f.speed_check(k, 1.0 if imu_conf is None else float(imu_conf[k]), log)
         if k < N - 1:
             c = 1.0 if imu_conf is None else float(imu_conf[k])
             f.propagate(gyro[k], acc[k], dt, c)
