@@ -199,8 +199,12 @@ def main():
                "blackout_sweep": {"lengths_s": lengths, **sweep}, "imu_isolation": iso,
                "model": perf, "runtime_s": time.time() - t0, "synthetic": args.synthetic}
     (OUT / "summary.json").write_text(json.dumps(summary, indent=1))
+    from pathfinder.manifest import write as write_manifest
+    write_manifest(OUT / "manifest.json", args=args, models=["models/dispnet_faults/best.pt",
+                   "models/dispnet_tlio/best.pt", "models/camera_trust.json"],
+                   extra={"filter_overrides": _parse_set(args.set), "split": args.split})
     write_report(summary, example, methods)
-    print(f"done in {time.time() - t0:.0f}s -> results/report.html")
+    print(f"done in {time.time() - t0:.0f}s -> {OUT}/report.html")
 
 
 def write_report(S, example, methods):
