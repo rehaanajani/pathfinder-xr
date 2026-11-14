@@ -12,17 +12,20 @@ or die. When that happens the virtual world slides away from the real one.
 
 This system **finds which sensor is lying, stops trusting it, and keeps tracking on what is left**:
 
-1. **Camera health, measured before fusion.** Every frame is scored for light, sharpness and trackable
-   corners. A dark or blurred frame is down-weighted before it can pull the path off.
-2. **IMU voting.** All IMUs on a headset sit on one rigid frame, so they must agree. A faulty IMU (stuck,
-   biased, spiking, saturated, noisy) is outvoted and dropped. Galaxy XR has five IMUs; we show isolation
-   improves from 2 to 3 to 5 IMUs.
+1. **Camera health, measured before fusion and learned from real frames.** Each frame's brightness, sharpness
+   and corners predict how many real feature tracks survive (fitted on real TUM-VI frames, tested on a room it
+   never saw). How much each health level is trusted is **calibrated from measured fix errors**, not hand-set.
+2. **Parity-space IMU fault detection.** All IMUs on a headset sit on one rigid frame, so their readings must
+   agree. The aerospace parity test (Sturza 1988) projects out the true motion, flags a fault with a chi-square
+   test and isolates the faulty IMU. With 3+ IMUs it catches small biases and slow drift that simple voting
+   misses. Galaxy XR has five IMUs.
 3. **A fault-aware learned motion model.** A small network (__PARAMS__ parameters, __SIZE__ MB) reads one second of
    IMU data and predicts how far the head moved **and how sure it is**. It is trained on broken IMU data too,
    so it reports more doubt when its input is bad.
-4. **An error-state Kalman filter** blends everything by trust. A soft chi-square gate caps any reading that
-   disagrees, a camera that suddenly jumps is held out for up to 10 s, and after an outage the filter re-anchors
-   within 1 s instead of locking itself out.
+4. **An adaptive error-state Kalman filter** blends everything by trust. A soft chi-square gate caps any reading
+   that disagrees, a camera that suddenly jumps is held out for up to 10 s, and after an outage the filter
+   re-anchors within 1 s. When healthy camera frames keep disagreeing with the IMU, the IMU's process noise is
+   raised (adaptive Kalman filtering), so drifting IMUs are corrected faster.
 5. **A self-check on the learned model.** While the camera is healthy, the filter compares the network's predictions
    with what the camera sees. If the network keeps being wrong on this kind of motion, its uncertainty is inflated
    so it is trusted less once the camera drops out.
@@ -58,6 +61,7 @@ poses. Shipping it means a C++ port of the filter and voting, and the network ex
 | AI disclosure | [`AI_DISCLOSURE.md`](AI_DISCLOSURE.md) |
 
 ## Results
+__EXTRA__
 
 All numbers come from `python evaluate.py` on __NSEQ__ held-out test sequences of Meta's TLIO headset dataset
 (never seen in training), __CLIP__ s each, faults starting at 20 s. ATE = absolute trajectory error after
@@ -110,19 +114,27 @@ Outputs: `results/report.html` (all numbers and plots), `results/summary.json`, 
   on every IMU. Most of the gain comes from voting, camera health, the robust gate and the model self-check.
 - **60 s clips.** Each of the 36 test sequences is scored on one 60 s clip; longer runs are a next step.
 
-- **The camera is simulated on TLIO.** The TLIO dataset has IMU and ground truth but no images. Visual fixes are
-  ground truth plus noise, drift and jumps that grow with darkness and blur; the health score is measured from
-  degraded synthetic frames with the same function that runs on real images. The same model is applied to every
-  method. The next step is real images (Aria, EuRoC, TUM-VI).
-- **Extra IMUs are simulated.** TLIO has one IMU per sequence. For the multi-IMU tests we copy the real IMU and
-  give each copy its own noise and bias. Real IMUs at different positions also differ by lever-arm effects;
-  our tolerance covers typical head motion but is not tuned on real multi-IMU hardware.
-- **With two IMUs, a smooth bias on one is detected but not always attributed** to the right IMU (see the
-  isolation table). Three or more IMUs fix this, which is why Galaxy XR's five matter.
-- **The learned displacement update is simplified.** TLIO keeps past states in the filter (stochastic cloning);
-  we hold the past position at its estimate and add its covariance.
-- **Python, not on-device yet.** The network is __SIZE__ MB and takes __MS__ ms per prediction on one laptop CPU core
-  at 10 predictions per second; porting to Android (TFLite / ExecuTorch) is the next step.
+- **Clean tracking costs about 1 cm.** With a healthy camera and healthy IMUs our filter is slightly behind naive
+  fusion (real TUM-VI: 4.9 vs 4.3 cm), the price of the extra caution that wins every failure case.
+- **Real camera, but fixes still come from motion capture.** On TUM-VI we use the real IMU and the real fisheye
+  frames: degradations are applied to the real images, the health score is computed from them, and fix noise follows
+  the measured fraction of correctly tracked features. The position fix itself is motion-capture truth plus that
+  noise, not a full visual odometry front end.
+- **Extra IMUs are simulated.** TLIO and TUM-VI have one IMU each. Multi-IMU tests copy the real IMU with its own
+  noise and bias per copy. The parity-space detector models lever arms but is not tuned on real multi-IMU hardware.
+- **Two IMUs detect, three isolate.** With two IMUs a smooth bias is detected but cannot always be attributed; the
+  parity test isolates it with three or more, which is why Galaxy XR's five matter.
+- **IMU-only accuracy is close to, not yet at, published TLIO.** Full TLIO test split, IMU only, no
+  alignment: published TLIO 1.72 m, EqNIO 1.43 m. Ours went from 6.27 m to **2.00 m (median 1.44 m)** by
+  keeping past poses in the filter (stochastic cloning) and calibrating the network's claimed uncertainty
+  on the validation split (it overlaps 10 one-second windows per second and its errors are correlated).
+  The headset benchmark above still uses the earlier filter setting; switching it over is being tested.
+  TLIO's yaw-frame measurement was also implemented and did not help IMU-only tracking (a common heading
+  error cancels in it); it stays as an option. See `results/diagnostics/`.
+- **A wider network is training.** 1.46M parameters, 0.120 m per-window error after 17 of 30 epochs vs 0.136 m
+  for the current network; not yet scored end to end.
+- **Not on a headset yet.** The network runs in ONNX Runtime at __MS__ ms on one CPU core (INT8: 0.4 MB); the
+  next step is ONNX Runtime Mobile or Qualcomm QNN on Snapdragon XR2+ Gen 2.
 
 ## Prior work we build on
 

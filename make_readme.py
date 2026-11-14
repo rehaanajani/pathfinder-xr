@@ -1,6 +1,8 @@
 """Writes README.md from README_template.md and results/summary.json (no hand-typed numbers)."""
 
 import json
+
+import numpy as np
 from pathlib import Path
 
 S = json.loads(Path("results/summary.json").read_text())
@@ -63,8 +65,57 @@ lines.append("|---|---:|---:|---:|")
 for k, v in iso.items():
     lines.append(f"| {k} | " + " | ".join(f"{100 * v[c]:.0f}%" for c in ("2", "3", "5")) + " |")
 
+extra = []
+P = Path("results")
+if (P / "real_summary.json").exists():
+    R = json.loads((P / "real_summary.json").read_text())["summary"]
+    extra.append("### On real sensor data (TUM-VI)\n")
+    extra.append("Real Bosch BMI160 IMU, real fisheye camera frames, OptiTrack truth. Degradations are applied to the real "
+                 "frames; camera health and trust are fitted on one room and tested on the other. Visual fixes come "
+                 "from motion capture plus error driven by how many real KLT feature tracks survive. The motion network "
+                 "was trained on Meta's headset data, so this is also a cross-device test. 60 s clips, ATE in metres.\n")
+    extra.append("| Scenario | Naive fusion | **Ours** | Ours w/o model | Gain |")
+    extra.append("|---|---:|---:|---:|---:|")
+    for k, v in R.items():
+        extra.append(f"| {NAMES.get(k, k)} | {v['naive_fusion']:.3f} | **{v['ours']:.3f}** | {v['ours_no_model']:.3f} | "
+                     f"{x(v['naive_fusion'], v['ours'])} |")
+    extra.append("")
+if (P / "learned_health_eval.json").exists():
+    L = json.loads((P / "learned_health_eval.json").read_text())
+    V = json.loads((P / "real_camera_validation.json").read_text()) if (P / "real_camera_validation.json").exists() else None
+    line = (f"**Camera health on real frames:** the learned score predicts the share of correct real KLT tracks with "
+            f"correlation **{L['test_corr']:.2f}** on a room it never saw ({L['n_test']} frame pairs)")
+    if V:
+        line += f", up from {np.mean([v['corr'] for v in V.values()]):.2f} for the hand-tuned score"
+    extra.append(line + ".\n")
+if (P / "tlio_full_split.json").exists():
+    F = json.loads((P / "tlio_full_split.json").read_text())
+    o, t = F["summary"]["ours"], F["summary"]["tlio"]
+    extra.append("### IMU only, full TLIO test split, next to published results\n")
+    extra.append(f"All {F['n_sequences']} test sequences start to end (mean {F['mean_seconds']:.0f} s), one real IMU, no camera. "
+                 "Published numbers use their own filter and alignment, so this is indicative, not like-for-like.\n")
+    extra.append("| Method | ATE (m) |")
+    extra.append("|---|---:|")
+    for k, v in F["published"].items():
+        extra.append(f"| {k} (published) | {v:.3f} |")
+    extra.append(f"| Our network + our filter, TLIO-style training | {t['ate_raw_m']:.3f} |")
+    extra.append(f"| Our network + our filter, fault-aware training (first filter) | {o['ate_raw_m']:.3f} |")
+    lg = Path("results/logs/covscale_test.log")
+    if lg.exists():
+        import re
+        m = re.search(r"cloning_x(\S+)\s+ATE raw mean ([\d.]+) m\s+median ([\d.]+)", lg.read_text())
+        if m:
+            extra.append(f"| **Same network, cloned poses + uncertainty x{m.group(1)} (chosen on validation)** | "
+                         f"**{float(m.group(2)):.3f}** (median {float(m.group(3)):.2f}) |")
+    extra.append("")
+if (P / "onnx_benchmark.json").exists():
+    O = json.loads((P / "onnx_benchmark.json").read_text())
+    extra.append(f"**On-device readiness:** exported to ONNX ({O['fp32_mb']:.1f} MB, {O['fp32_ms_1core']:.2f} ms) and INT8 "
+                 f"({O['int8_mb']:.2f} MB, {O['int8_ms_1core']:.2f} ms) per prediction on one CPU core; INT8 window error "
+                 f"{O['rmse_int8_m']:.3f} m vs {O['rmse_fp32_m']:.3f} m. Both files are in the `models-v1` release.\n")
+
 m = S["model"]
-out = (T.replace("__RESULTS__", "\n".join(lines))
+out = (T.replace("__RESULTS__", "\n".join(lines)).replace("__EXTRA__", "\n".join(extra))
         .replace("__NSEQ__", str(len(S["sequences"])))
         .replace("__CLIP__", f"{S['clip_s']:.0f}")
         .replace("__PARAMS__", f"{m['params']:,}")
