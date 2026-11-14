@@ -53,10 +53,13 @@ def fuse_imus(bad):
     """3+ IMUs: parity-space GLRT detection and isolation. 2 IMUs: parity can only detect,
     so per-IMU signal checks (stuck, saturated, spiky, noisy) decide who is wrong."""
     if bad.n_imus >= 3:
-        w, D, pinfo = ParityFDI(bad.n_imus).run(bad.gyro, bad.acc, bad.rate)
+        w, D, pinfo = ParityFDI(bad.n_imus).run(bad.gyro, bad.acc, bad.rate,
+                                                lever_arms=bad.meta.get("lever_arms"))
         fg, fa = fuse(bad.gyro, bad.acc, w, 20)
-        return fg, fa, {"weights": w, "reasons": pinfo["isolated"], "confidence": w.max(0),
-                        "parity_D": D, "method": "parity"}
+        # Confidence = can the fused stream be trusted (agreement, or one fault cleanly removed),
+        # not "was any IMU kept". See parity.CONF_* for the levels.
+        return fg, fa, {"weights": w, "reasons": pinfo["isolated"], "confidence": pinfo["confidence"],
+                        "state": pinfo["state"], "parity_D": D, "method": "parity"}
     fg, fa, info = vote(bad.gyro, bad.acc)
     return fg, fa, {**info, "method": "vote"}
 
