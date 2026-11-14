@@ -97,7 +97,12 @@ def main():
     ap.add_argument("--clip", type=float, default=60.0)
     ap.add_argument("--synthetic", action="store_true")
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--out", default="results", help="output folder (use a run folder for checks, so "
+                    "committed results are only replaced on purpose)")
     args = ap.parse_args()
+    global OUT
+    OUT = Path(args.out)
+    OUT.mkdir(parents=True, exist_ok=True)
     OUT.mkdir(exist_ok=True)
     t0 = time.time()
     ours, tl = load_models()
