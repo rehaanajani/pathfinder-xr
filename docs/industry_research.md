@@ -75,3 +75,31 @@ There is **no single public index for headset tracking**. The closest equivalent
 2. Qualcomm's older guidance was to fade to black on lost tracking. We keep a usable pose for 20 s.
 3. Nobody public reports per-sensor fault isolation. Galaxy XR has 5 IMUs, so this is a Samsung-specific advantage.
 4. To be taken seriously next to these players we need **real camera frames** (EuRoC / TUM-VI), and ideally a number on a phone.
+
+## 6. Books, surveys and theses to read
+Ordered by how directly they explain what we built.
+
+**Exactly our maths**
+- J. Solà, *Quaternion kinematics for the error-state Kalman filter* (2017). The error-state filter we use, step by step. [arXiv 1711.02508](https://arxiv.org/abs/1711.02508)
+- J. Solà, J. Deray, D. Atchuthan, *A micro Lie theory for state estimation in robotics* (2018). The `Exp` / `Log` maps used in our filter and in DVI-SLAM's IMU factor. [arXiv 1812.01537](https://arxiv.org/abs/1812.01537)
+- C. Forster et al., *On-Manifold Preintegration for Real-Time Visual-Inertial Odometry*, IEEE T-RO 2017. The IMU pre-integration DVI-SLAM uses. [arXiv 1512.02363](https://arxiv.org/abs/1512.02363)
+- A. Mourikis, S. Roumeliotis, *A Multi-State Constraint Kalman Filter for Vision-aided Inertial Navigation*, ICRA 2007. The filter family behind TLIO's stochastic cloning and most headset VIO.
+
+**Textbooks**
+- T. Barfoot, *State Estimation for Robotics*, 2nd ed., Cambridge University Press, 2024 (adds inertial navigation and variational inference).
+- S. Thrun, W. Burgard, D. Fox, *Probabilistic Robotics*, MIT Press, 2005. Kalman filters and SLAM from first principles.
+- Y. Bar-Shalom, X. R. Li, T. Kirubarajan, *Estimation with Applications to Tracking and Navigation*, Wiley, 2001. NIS and chi-square gating, which our soft gate is built on.
+- P. Groves, *Principles of GNSS, Inertial, and Multisensor Integrated Navigation Systems*, 2nd ed., Artech House, 2013. IMU error models, fault detection and integrity monitoring.
+- D. Titterton, J. Weston, *Strapdown Inertial Navigation Technology*, 2nd ed., IET, 2004. Why IMU drift grows the way it does.
+- R. Hartley, A. Zisserman, *Multiple View Geometry in Computer Vision*, 2nd ed., Cambridge, 2004. Projection `Π`, epipolar geometry, bundle adjustment.
+- R. Szeliski, *Computer Vision: Algorithms and Applications*, 2nd ed., 2022 (free online at szeliski.org/Book). Features, optical flow, SLAM chapters.
+
+**Surveys**
+- C. Cadena et al., *Past, Present, and Future of Simultaneous Localization and Mapping*, IEEE T-RO 2016. [arXiv 1606.05830](https://arxiv.org/abs/1606.05830)
+- D. Scaramuzza, F. Fraundorfer, *Visual Odometry* (Parts I and II), IEEE Robotics & Automation Magazine, 2011-2012.
+
+**PhD theses**
+- V. Usenko, *Visual-Inertial Navigation for Autonomous Vehicles*, TU Munich (Basalt's author). [mediaTUM](https://mediatum.ub.tum.de/doc/1454207/555225.pdf)
+- Z. Zhang, PhD thesis on evaluating visual(-inertial) odometry, University of Zurich RPG (source of the trajectory-evaluation methods everyone uses). [PDF](https://rpg.ifi.uzh.ch/docs/PhD20_Zhang.pdf)
+- J. Gui, *Direct Visual and Inertial Odometry for Monocular Mobile Platforms*, University of Essex. [repository](https://repository.essex.ac.uk/21726/)
+- M. Li, *Visual-Inertial Odometry on Resource-Constrained Systems*, UC Riverside (Mourikis group; the phone-class problem). [eScholarship](https://www.escholarship.org/uc/item/4nn0j264)
