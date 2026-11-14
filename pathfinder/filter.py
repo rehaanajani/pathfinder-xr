@@ -10,9 +10,13 @@ Sources of trust:
   * Every update passes a chi-square gate (Mahalanobis distance), so a confident but wrong
     measurement (camera locked on the wrong thing) is rejected instead of pulling the path.
 
-Simplification: the learned displacement d = p(t) - p(t - w) is applied as a measurement on
-the current position with the past position held at its estimate (TLIO uses stochastic
-cloning for this; we inflate the noise by the past position covariance instead).
+Learned displacement d = p(t) - p(t - w), two forms:
+  * default: a measurement on the current position with the past position held at its
+    estimate (noise inflated by the past position covariance);
+  * ``cloning=True, yaw_frame=True``: TLIO's form. Past poses are cloned into the state, the
+    network sees the window in the clone's yaw frame, and the measurement
+    h = Rz(yaw_i)^T (p - p_i) carries a Jacobian on the clone's yaw, so the network corrects
+    heading drift instead of only position.
 """
 
 from dataclasses import dataclass, field
@@ -45,7 +49,9 @@ class FilterConfig:
     model_check_down: float = 0.003 # ... and how slowly it comes back
     use_health: bool = True       # off = naive fusion that trusts every frame equally
     trust: tuple | None = None    # (health, std_m) table from camera.calibrate_trust
-    cloning: bool = False         # TLIO-style stochastic cloning (mixed results, see README)
+    cloning: bool = False         # TLIO-style stochastic cloning of past (rotation, position)
+    yaw_frame: bool = False       # with cloning: measure displacement in the clone's yaw frame,
+                                  # with the rotation Jacobian (TLIO, Liu et al. 2020, eq. 9-10)
     adaptive_q: bool = False      # inflate IMU process noise when healthy camera disagrees
     q_up: float = 0.2
     q_down: float = 0.01
@@ -84,8 +90,9 @@ class ESKF:
         self.P = np.eye(15) * P0_scale
         self.P[9:12, 9:12] = np.eye(3) * 1e-4
         self.P[12:15, 12:15] = np.eye(3) * 1e-2
-        self.clone_k: list[int] = []      # stochastic cloning: past positions kept in the state
+        self.clone_k: list[int] = []      # stochastic cloning: past poses kept in the state
         self.clone_p: list[np.ndarray] = []
+        self.clone_R: list = []           # error state per clone: [dtheta (3), dp (3)]
 
     def propagate(self, gyro, acc, dt, imu_conf: float = 1.0):
         w = gyro - self.bg
@@ -136,13 +143,16 @@ class ESKF:
         dx = K @ y
         I_KH = np.eye(n) - K @ H
         self.P = I_KH @ self.P @ I_KH.T + K @ Rmeas @ K.T
+        self.P = 0.5 * (self.P + self.P.T)          # keep it symmetric (long cloned runs drift)
         self.R = self.R * Rot.from_rotvec(dx[0:3])
         self.v += dx[3:6]
         self.p += dx[6:9]
         self.bg += dx[9:12]
         self.ba += dx[12:15]
         for i in range(len(self.clone_p)):
-            self.clone_p[i] = self.clone_p[i] + dx[15 + 3 * i:18 + 3 * i]
+            o = 15 + 6 * i
+            self.clone_R[i] = self.clone_R[i] * Rot.from_rotvec(dx[o:o + 3])
+            self.clone_p[i] = self.clone_p[i] + dx[o + 3:o + 6]
         return accepted
 
     def _update_position(self, z, Rmeas):
@@ -151,19 +161,29 @@ class ESKF:
         return self._update(z - self.p, H, Rmeas)
 
     def add_clone(self, k: int, max_clones: int):
-        """Stochastic cloning (Roumeliotis & Burdick 2002): copy the current position into the state."""
+        """Stochastic cloning (Roumeliotis & Burdick 2002): copy the current pose into the state."""
         n = self.P.shape[0]
-        J = np.zeros((n + 3, n))
+        J = np.zeros((n + 6, n))
         J[:n, :n] = np.eye(n)
-        J[n:, 6:9] = np.eye(3)
+        J[n:n + 3, 0:3] = np.eye(3)
+        J[n + 3:, 6:9] = np.eye(3)
         self.P = J @ self.P @ J.T
         self.clone_k.append(k)
         self.clone_p.append(self.p.copy())
+        self.clone_R.append(self.R)
         while len(self.clone_k) > max_clones:
-            keep = np.r_[0:15, 18:self.P.shape[0]]
+            keep = np.r_[0:15, 21:self.P.shape[0]]
             self.P = self.P[np.ix_(keep, keep)]
             self.clone_k.pop(0)
             self.clone_p.pop(0)
+            self.clone_R.pop(0)
+
+    def clone_yaw(self, k0):
+        """Yaw-only rotation (world <- local gravity-aligned frame) of the clone taken at sample k0."""
+        Rm = self.clone_R[self.clone_k.index(k0)].as_matrix()
+        g = np.arctan2(Rm[1, 0], Rm[0, 0])
+        c, s_ = np.cos(g), np.sin(g)
+        return np.array([[c, -s_, 0.0], [s_, c, 0.0], [0.0, 0.0, 1.0]])
 
     def displacement_update_clone(self, d, cov, k0, log, k: int = 0):
         """Learned displacement d = p(k) - p(k0), with p(k0) a clone in the state (as in TLIO)."""
@@ -171,10 +191,26 @@ class ESKF:
             return
         i = self.clone_k.index(k0)
         n = self.P.shape[0]
+        o = 15 + 6 * i
         H = np.zeros((3, n))
-        H[:, 6:9] = np.eye(3)
-        H[:, 15 + 3 * i:18 + 3 * i] = -np.eye(3)
-        y = d - (self.p - self.clone_p[i])
+        if self.cfg.yaw_frame:
+            # d is in the clone's local gravity-aligned frame: h = Rz(yaw_i)^T (p - p_i).
+            # A yaw error dgamma at the clone gives dh = -[e_z]x h dgamma. With the clone's
+            # rotation right-perturbed, R Exp(dtheta), and yaw = atan2(R10, R00):
+            # dgamma/dtheta_j = (R00 dR10 - R10 dR00) / (R00^2 + R10^2), dR = R [e_j]x.
+            A = self.clone_yaw(k0).T
+            h = A @ (self.p - self.clone_p[i])
+            ez = np.array([0.0, 0.0, 1.0])
+            Rm = self.clone_R[i].as_matrix()
+            dg = np.array([(Rm[0, 0] * dR[1, 0] - Rm[1, 0] * dR[0, 0]) for dR in
+                           (Rm @ skew(e) for e in np.eye(3))]) / max(Rm[0, 0] ** 2 + Rm[1, 0] ** 2, 1e-9)
+            H[:, o:o + 3] = np.outer(-skew(ez) @ h, dg)
+        else:
+            A = np.eye(3)
+            h = self.p - self.clone_p[i]
+        H[:, 6:9] = A
+        H[:, o + 3:o + 6] = -A
+        y = d - h
         anchored = k - getattr(self, "last_good_cam_k", -10 ** 9) <= self.cfg.outage_gap
         if anchored:
             S = H @ self.P @ H.T + cov
@@ -308,6 +344,9 @@ def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = 
             Rs = hist_R[k0:k]
             gw = np.einsum("nij,nj->ni", Rs, gyro[k0:k])
             aw = np.einsum("nij,nj->ni", Rs, acc[k0:k])
+            if cfg.cloning and cfg.yaw_frame and k0 in f.clone_k:
+                Rz = f.clone_yaw(k0)              # into the clone's yaw frame (row vectors: v @ Rz)
+                gw, aw = gw @ Rz, aw @ Rz
             d, cov = predictor(np.concatenate([gw, aw], 1))
             log.disp_std.append(float(np.sqrt(np.trace(cov))))
             if cfg.cloning:
