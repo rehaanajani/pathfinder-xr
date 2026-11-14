@@ -48,7 +48,7 @@ for aug in faults tlio; do
 done
 
 echo "== benchmark"
-$PY evaluate.py --seqs 10 --clip 60
+$PY evaluate.py --seqs 36 --clip 60
 echo "== demo"
 $PY make_demo.py
 echo "Open results/report.html and demo/index.html"

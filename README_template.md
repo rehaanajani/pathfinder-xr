@@ -92,7 +92,7 @@ Outputs: `results/report.html` (all numbers and plots), `results/summary.json`, 
 - **Fault-aware training helps less than the architecture.** Swapping in the TLIO-style-trained network gives
   similar numbers in most scenarios; the fault-aware network is clearly better only under vibration and saturation
   on every IMU. Most of the gain comes from voting, camera health, the robust gate and the model self-check.
-- **10 test sequences x 60 s.** Run `python evaluate.py --seqs 36` for the full test split.
+- **60 s clips.** Each of the 36 test sequences is scored on one 60 s clip; longer runs are a next step.
 
 - **The camera is simulated on TLIO.** The TLIO dataset has IMU and ground truth but no images. Visual fixes are
   ground truth plus noise, drift and jumps that grow with darkness and blur; the health score is measured from

@@ -1,6 +1,6 @@
 """One command to reproduce every number in the README.
 
-    python evaluate.py                 # 10 held-out test sequences, ~15 min on a laptop
+    python evaluate.py --seqs 36       # the full TLIO test split, ~10 min on 9 cores
     python evaluate.py --seqs 36       # the full TLIO test split
     python evaluate.py --synthetic     # no dataset needed: synthetic head walks
 

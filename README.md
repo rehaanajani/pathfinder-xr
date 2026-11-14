@@ -43,30 +43,30 @@ This system **finds which sensor is lying, stops trusting it, and keeps tracking
 
 ## Results
 
-All numbers come from `python evaluate.py` on 10 held-out test sequences of Meta's TLIO headset dataset
+All numbers come from `python evaluate.py` on 36 held-out test sequences of Meta's TLIO headset dataset
 (never seen in training), 60 s each, faults starting at 20 s. ATE = absolute trajectory error after
 yaw + translation alignment, the metric used by RoNIN and TLIO. Full table and plots: `results/report.html`.
 
-**Headline.** Camera off + one IMU biased: naive fusion drifts **2.10 m**, ours **0.27 m** (7.8x lower). After a 20 s blackout: **7.24 m vs 1.76 m**. Ours is clearly better in 10 of 16 scenarios, level in 5, worse in 1 (see Honest limits).
+**Headline.** Camera off + one IMU biased: naive fusion drifts **2.16 m**, ours **0.21 m** (10.4x lower). After a 20 s blackout: **9.08 m vs 1.18 m**. Ours is clearly better in 12 of 16 scenarios, level in 3, worse in 1 (see Honest limits).
 
 | Scenario | IMU only | Naive fusion | Ours w/o model | Ours w/ TLIO-trained model | **Ours** | Ours median | Gain vs naive |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| No fault | 29.4 | 0.03 | 0.03 | 0.03 | **0.03** | 0.03 | 1.0x |
-| Camera off 10 s | 29.4 | 0.37 | 0.70 | 0.23 | **0.24** | 0.12 | 1.6x |
-| Dark room 10 s | 29.4 | 0.24 | 0.70 | 0.23 | **0.24** | 0.12 | 1.0x |
-| Motion blur 10 s | 29.4 | 0.21 | 0.21 | 0.14 | **0.14** | 0.13 | 1.5x |
-| Camera tracks the wrong thing 10 s | 29.4 | 0.31 | 0.32 | 0.28 | **0.29** | 0.32 | 1.1x |
-| Noise on all IMUs | 30.7 | 0.03 | 0.04 | 0.04 | **0.04** | 0.04 | 0.8x |
-| One IMU biased | 123.6 | 0.03 | 0.03 | 0.03 | **0.03** | 0.03 | 1.0x |
-| One IMU dies | 460.7 | 0.15 | 0.03 | 0.03 | **0.03** | 0.03 | 5.0x |
-| One IMU spikes | 84.9 | 0.04 | 0.03 | 0.03 | **0.03** | 0.03 | 1.2x |
-| One IMU saturates | 83.4 | 0.04 | 0.03 | 0.03 | **0.03** | 0.03 | 1.3x |
-| Camera off + one IMU biased | 175.4 | 2.10 | 2.42 | 0.26 | **0.27** | 0.15 | 7.8x |
-| Dark room + all IMUs drift | 703.8 | 0.24 | 3.86 | 0.34 | **0.36** | 0.21 | 0.7x |
-| Camera off + vibration on all IMUs | 34.0 | 0.59 | 0.97 | 0.54 | **0.35** | 0.24 | 1.7x |
-| Camera off + spikes on all IMUs | 77.0 | 2.18 | 0.69 | 0.29 | **0.30** | 0.13 | 7.3x |
-| Camera off + all IMUs saturate | 255.6 | 4.74 | 4.52 | 0.67 | **0.58** | 0.45 | 8.2x |
-| Camera off + IMU packets dropped | 119.4 | 1.63 | 1.72 | 0.35 | **0.35** | 0.13 | 4.7x |
+| No fault | 29.8 | 0.03 | 0.03 | 0.03 | **0.03** | 0.03 | 1.1x |
+| Camera off 10 s | 29.8 | 0.43 | 0.51 | 0.19 | **0.19** | 0.12 | 2.2x |
+| Dark room 10 s | 29.8 | 0.22 | 0.51 | 0.19 | **0.20** | 0.12 | 1.1x |
+| Motion blur 10 s | 29.8 | 0.20 | 0.19 | 0.12 | **0.13** | 0.12 | 1.5x |
+| Camera tracks the wrong thing 10 s | 29.8 | 0.31 | 0.32 | 0.27 | **0.28** | 0.32 | 1.1x |
+| Noise on all IMUs | 33.7 | 0.03 | 0.04 | 0.04 | **0.04** | 0.04 | 0.9x |
+| One IMU biased | 122.6 | 0.03 | 0.03 | 0.03 | **0.03** | 0.03 | 1.1x |
+| One IMU dies | 448.8 | 0.15 | 0.03 | 0.03 | **0.03** | 0.03 | 5.2x |
+| One IMU spikes | 87.5 | 0.04 | 0.03 | 0.03 | **0.03** | 0.03 | 1.3x |
+| One IMU saturates | 116.1 | 0.04 | 0.03 | 0.03 | **0.03** | 0.03 | 1.3x |
+| Camera off + one IMU biased | 174.7 | 2.16 | 2.24 | 0.20 | **0.21** | 0.17 | 10.4x |
+| Dark room + all IMUs drift | 697.6 | 0.22 | 3.83 | 0.27 | **0.27** | 0.18 | 0.8x |
+| Camera off + vibration on all IMUs | 38.5 | 0.73 | 0.82 | 0.46 | **0.28** | 0.24 | 2.6x |
+| Camera off + spikes on all IMUs | 112.6 | 2.49 | 0.52 | 0.21 | **0.21** | 0.14 | 11.7x |
+| Camera off + all IMUs saturate | 418.3 | 8.90 | 8.87 | 2.07 | **1.98** | 0.63 | 4.5x |
+| Camera off + IMU packets dropped | 157.1 | 2.33 | 2.36 | 0.30 | **0.31** | 0.25 | 7.5x |
 
 ATE in metres, mean over sequences (median for ours alongside). Per-sequence values are in `results/summary.json`.
 
@@ -74,9 +74,9 @@ ATE in metres, mean over sequences (median for ours alongside). Per-sequence val
 
 | Blackout | 1 s | 2 s | 5 s | 10 s | 20 s |
 |---|---:|---:|---:|---:|---:|
-| IMU only | 5.26 | 5.98 | 8.58 | 14.49 | 33.25 |
-| Naive fusion | 0.08 | 0.18 | 0.64 | 2.04 | 7.24 |
-| **Ours** | 0.08 | 0.14 | 0.33 | 0.99 | 1.76 |
+| IMU only | 7.35 | 8.24 | 11.29 | 17.78 | 37.03 |
+| Naive fusion | 0.10 | 0.20 | 0.73 | 2.35 | 9.08 |
+| **Ours** | 0.11 | 0.16 | 0.36 | 0.76 | 1.18 |
 
 **Finding the faulty IMU** (share of faulty moments where the bad IMU is dropped and every good one kept):
 
@@ -130,7 +130,7 @@ Outputs: `results/report.html` (all numbers and plots), `results/summary.json`, 
 - **Fault-aware training helps less than the architecture.** Swapping in the TLIO-style-trained network gives
   similar numbers in most scenarios; the fault-aware network is clearly better only under vibration and saturation
   on every IMU. Most of the gain comes from voting, camera health, the robust gate and the model self-check.
-- **10 test sequences x 60 s.** Run `python evaluate.py --seqs 36` for the full test split.
+- **60 s clips.** Each of the 36 test sequences is scored on one 60 s clip; longer runs are a next step.
 
 - **The camera is simulated on TLIO.** The TLIO dataset has IMU and ground truth but no images. Visual fixes are
   ground truth plus noise, drift and jumps that grow with darkness and blur; the health score is measured from
