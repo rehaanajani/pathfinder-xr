@@ -5,6 +5,7 @@ __pycache__/
 local_data/
 models/*
 !models/camera_trust.json
+!models/camera_health_learned*.json
 results/runs/
 *.zip
 .DS_Store

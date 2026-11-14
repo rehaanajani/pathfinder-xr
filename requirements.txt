@@ -5,3 +5,6 @@ matplotlib>=3.8
 pandas>=2.0
 gdown>=5.0
 pytest>=8.0
+opencv-python-headless>=4.9
+onnx>=1.16
+onnxruntime>=1.18

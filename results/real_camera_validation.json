@@ -1,0 +1,102 @@
+{
+ "room1": {
+  "rows": [
+   {
+    "condition": "normal",
+    "health": 0.8250829444163376,
+    "correct_frac": 0.9976516146930824
+   },
+   {
+    "condition": "dim 50%",
+    "health": 0.28681770174039734,
+    "correct_frac": 0.9870341792070197
+   },
+   {
+    "condition": "dim 30%",
+    "health": 0.06205204365154106,
+    "correct_frac": 0.927066474871549
+   },
+   {
+    "condition": "dark 15%",
+    "health": 0.00014979934526814341,
+    "correct_frac": 0.6740781663096389
+   },
+   {
+    "condition": "very dark 6%",
+    "health": 0.0,
+    "correct_frac": 0.21500773524325342
+   },
+   {
+    "condition": "blur 5 px",
+    "health": 0.825439278367493,
+    "correct_frac": 0.9683243783106691
+   },
+   {
+    "condition": "blur 15 px",
+    "health": 0.6153554578719121,
+    "correct_frac": 0.8525458281434494
+   },
+   {
+    "condition": "blur 30 px",
+    "health": 0.32779263517253504,
+    "correct_frac": 0.6425108803304795
+   },
+   {
+    "condition": "dark 30% + blur 10 px",
+    "health": 0.061240536967913296,
+    "correct_frac": 0.5739384007186791
+   }
+  ],
+  "corr": 0.6343663823773332
+ },
+ "room2": {
+  "rows": [
+   {
+    "condition": "normal",
+    "health": 0.8823203291330073,
+    "correct_frac": 0.9975745501735964
+   },
+   {
+    "condition": "dim 50%",
+    "health": 0.3310259095496601,
+    "correct_frac": 0.9862824924977536
+   },
+   {
+    "condition": "dim 30%",
+    "health": 0.08244331652919451,
+    "correct_frac": 0.9331392287778196
+   },
+   {
+    "condition": "dark 15%",
+    "health": 0.00032629060248533855,
+    "correct_frac": 0.6848603562092871
+   },
+   {
+    "condition": "very dark 6%",
+    "health": 0.0,
+    "correct_frac": 0.21945002286903925
+   },
+   {
+    "condition": "blur 5 px",
+    "health": 0.8788567423749354,
+    "correct_frac": 0.9662728153913506
+   },
+   {
+    "condition": "blur 15 px",
+    "health": 0.6332851491527535,
+    "correct_frac": 0.8717740253225927
+   },
+   {
+    "condition": "blur 30 px",
+    "health": 0.3044991062185397,
+    "correct_frac": 0.6849086542869074
+   },
+   {
+    "condition": "dark 30% + blur 10 px",
+    "health": 0.0813485491193003,
+    "correct_frac": 0.6037577584093982
+   }
+  ],
+  "corr": 0.6508653809452624
+ }
+}
