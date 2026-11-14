@@ -1,0 +1,88 @@
+test=room1 calibrated on room2: trust [0.492, 0.436, 0.322, 0.308, 0.188, 0.169, 0.051]
+  room1 clean                        naive_fusion=0.041  ours_no_model=0.052  ours=0.053  learned_imu_only=1.941
+  room1 camera_blackout              naive_fusion=0.383  ours_no_model=0.324  ours=0.421  learned_imu_only=1.941
+  room1 camera_dark                  naive_fusion=0.261  ours_no_model=0.214  ours=0.200  learned_imu_only=1.941
+  room1 camera_blur                  naive_fusion=0.171  ours_no_model=0.163  ours=0.162  learned_imu_only=1.941
+  room1 dark_plus_imu_drift          naive_fusion=0.263  ours_no_model=0.272  ours=0.252  learned_imu_only=2.043
+  room1 blackout_plus_one_imu_bias   naive_fusion=5.900  ours_no_model=0.347  ours=0.425  learned_imu_only=2.936
+  room1 blackout_plus_saturation_all naive_fusion=19.404  ours_no_model=19.457  ours=5.559  learned_imu_only=132.372
+test=room2 calibrated on room1: trust [0.471, 0.471, 0.302, 0.277, 0.222, 0.166, 0.051]
+  room2 clean                        naive_fusion=0.045  ours_no_model=0.046  ours=0.046  learned_imu_only=1.642
+  room2 camera_blackout              naive_fusion=1.379  ours_no_model=1.273  ours=0.574  learned_imu_only=1.642
+  room2 camera_dark                  naive_fusion=0.290  ours_no_model=0.259  ours=0.290  learned_imu_only=1.642
+  room2 camera_blur                  naive_fusion=0.136  ours_no_model=0.109  ours=0.111  learned_imu_only=1.642
+  room2 dark_plus_imu_drift          naive_fusion=0.291  ours_no_model=0.271  ours=0.294  learned_imu_only=1.593
+  room2 blackout_plus_one_imu_bias   naive_fusion=2.107  ours_no_model=1.261  ours=0.575  learned_imu_only=1.935
+  room2 blackout_plus_saturation_all naive_fusion=2.434  ours_no_model=2.551  ours=0.550  learned_imu_only=1.621
+{
+ "clean": {
+  "imu_only": 41.05362757309431,
+  "naive_fusion": 0.042841578321003465,
+  "learned_imu_only": 1.7914310797626865,
+  "ours_no_model": 0.048846241677366925,
+  "ours": 0.04912158292892225,
+  "n_clips": 6,
+  "ours_median": 0.05274735378670474,
+  "naive_median": 0.044516498483842946
+ },
+ "camera_blackout": {
+  "imu_only": 41.05362757309431,
+  "naive_fusion": 0.881037251922749,
+  "learned_imu_only": 1.7914310797626865,
+  "ours_no_model": 0.7984443138854243,
+  "ours": 0.49754784180674744,
+  "n_clips": 6,
+  "ours_median": 0.5310010770427331,
+  "naive_median": 0.45996684479744665
+ },
+ "camera_dark": {
+  "imu_only": 41.05362757309431,
+  "naive_fusion": 0.2757112180464123,
+  "learned_imu_only": 1.7914310797626865,
+  "ours_no_model": 0.23649058355200717,
+  "ours": 0.24504646825293483,
+  "n_clips": 6,
+  "ours_median": 0.24383896600414107,
+  "naive_median": 0.28062915104350006
+ },
+ "camera_blur": {
+  "imu_only": 41.05362757309431,
+  "naive_fusion": 0.15340313184006946,
+  "learned_imu_only": 1.7914310797626865,
+  "ours_no_model": 0.13598625428426395,
+  "ours": 0.13641000776450227,
+  "n_clips": 6,
+  "ours_median": 0.13058372783965683,
+  "naive_median": 0.1529924454465979
+ },
+ "dark_plus_imu_drift": {
+  "imu_only": 233.82104989255131,
+  "naive_fusion": 0.2770649276395385,
+  "learned_imu_only": 1.8177482309671846,
+  "ours_no_model": 0.2712494106024408,
+  "ours": 0.2731869292495902,
+  "n_clips": 6,
+  "ours_median": 0.29297902745673904,
+  "naive_median": 0.2825424109735043
+ },
+ "blackout_plus_one_imu_bias": {
+  "imu_only": 318.097554059896,
+  "naive_fusion": 4.003667574263761,
+  "learned_imu_only": 2.4357081839618284,
+  "ours_no_model": 0.8038581717100072,
+  "ours": 0.49988383988716856,
+  "n_clips": 6,
+  "ours_median": 0.5333234401530083,
+  "naive_median": 2.6769412836475084
+ },
+ "blackout_plus_saturation_all": {
+  "imu_only": 485.3385717759242,
+  "naive_fusion": 10.919296772578198,
+  "learned_imu_only": 66.99649690888315,
+  "ours_no_model": 11.004052671976618,
+  "ours": 3.054614557866906,
+  "n_clips": 6,
+  "ours_median": 1.0794041472482352,
+  "naive_median": 7.191549393817137
+ }
+}

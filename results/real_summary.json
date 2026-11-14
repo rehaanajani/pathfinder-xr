@@ -1,0 +1,471 @@
+{
+ "dataset": "TUM-VI room1 + room2 (real IMU, real frames, OptiTrack truth)",
+ "clip_s": 60.0,
+ "summary": {
+  "clean": {
+   "imu_only": 41.05362757309431,
+   "naive_fusion": 0.042841578321003465,
+   "learned_imu_only": 1.7914310797626865,
+   "ours_no_model": 0.048846241677366925,
+   "ours": 0.04912158292892225,
+   "n_clips": 6,
+   "ours_median": 0.05274735378670474,
+   "naive_median": 0.044516498483842946
+  },
+  "camera_blackout": {
+   "imu_only": 41.05362757309431,
+   "naive_fusion": 0.881037251922749,
+   "learned_imu_only": 1.7914310797626865,
+   "ours_no_model": 0.7984443138854243,
+   "ours": 0.49754784180674744,
+   "n_clips": 6,
+   "ours_median": 0.5310010770427331,
+   "naive_median": 0.45996684479744665
+  },
+  "camera_dark": {
+   "imu_only": 41.05362757309431,
+   "naive_fusion": 0.2757112180464123,
+   "learned_imu_only": 1.7914310797626865,
+   "ours_no_model": 0.23649058355200717,
+   "ours": 0.24504646825293483,
+   "n_clips": 6,
+   "ours_median": 0.24383896600414107,
+   "naive_median": 0.28062915104350006
+  },
+  "camera_blur": {
+   "imu_only": 41.05362757309431,
+   "naive_fusion": 0.15340313184006946,
+   "learned_imu_only": 1.7914310797626865,
+   "ours_no_model": 0.13598625428426395,
+   "ours": 0.13641000776450227,
+   "n_clips": 6,
+   "ours_median": 0.13058372783965683,
+   "naive_median": 0.1529924454465979
+  },
+  "dark_plus_imu_drift": {
+   "imu_only": 233.82104989255131,
+   "naive_fusion": 0.2770649276395385,
+   "learned_imu_only": 1.8177482309671846,
+   "ours_no_model": 0.2712494106024408,
+   "ours": 0.2731869292495902,
+   "n_clips": 6,
+   "ours_median": 0.29297902745673904,
+   "naive_median": 0.2825424109735043
+  },
+  "blackout_plus_one_imu_bias": {
+   "imu_only": 318.097554059896,
+   "naive_fusion": 4.003667574263761,
+   "learned_imu_only": 2.4357081839618284,
+   "ours_no_model": 0.8038581717100072,
+   "ours": 0.49988383988716856,
+   "n_clips": 6,
+   "ours_median": 0.5333234401530083,
+   "naive_median": 2.6769412836475084
+  },
+  "blackout_plus_saturation_all": {
+   "imu_only": 485.3385717759242,
+   "naive_fusion": 10.919296772578198,
+   "learned_imu_only": 66.99649690888315,
+   "ours_no_model": 11.004052671976618,
+   "ours": 3.054614557866906,
+   "n_clips": 6,
+   "ours_median": 1.0794041472482352,
+   "naive_median": 7.191549393817137
+  }
+ },
+ "per_clip": {
+  "clean": [
+   {
+    "room": "room1",
+    "start": 5.0,
+    "imu_only": 54.62534684008748,
+    "naive_fusion": 0.033814796425930715,
+    "learned_imu_only": 1.6826678992850372,
+    "ours_no_model": 0.03138729571359122,
+    "ours": 0.0338404972104134
+   },
+   {
+    "room": "room1",
+    "start": 40.0,
+    "imu_only": 56.09270765466815,
+    "naive_fusion": 0.04401717922640865,
+    "learned_imu_only": 2.1350470778056287,
+    "ours_no_model": 0.057317975850389176,
+    "ours": 0.05742631307692692
+   },
+   {
+    "room": "room1",
+    "start": 75.0,
+    "imu_only": 28.223785144372663,
+    "naive_fusion": 0.04501581774127724,
+    "learned_imu_only": 2.0044281322734525,
+    "ours_no_model": 0.06669695199883709,
+    "ours": 0.06674811272641294
+   },
+   {
+    "room": "room2",
+    "start": 5.0,
+    "imu_only": 58.528712693757335,
+    "naive_fusion": 0.05129967967883489,
+    "learned_imu_only": 1.7123216718702854,
+    "ours_no_model": 0.05363858758093975,
+    "ours": 0.053974850154481835
+   },
+   {
+    "room": "room2",
+    "start": 40.0,
+    "imu_only": 24.187200343673286,
+    "naive_fusion": 0.04931568145622088,
+    "learned_imu_only": 1.4595913602372292,
+    "ours_no_model": 0.05216350871552785,
+    "ours": 0.051519857418927645
+   },
+   {
+    "room": "room2",
+    "start": 75.0,
+    "imu_only": 24.664012762006923,
+    "naive_fusion": 0.03358631539734841,
+    "learned_imu_only": 1.7545303371044858,
+    "ours_no_model": 0.03187313020491651,
+    "ours": 0.031219866986370803
+   }
+  ],
+  "camera_blackout": [
+   {
+    "room": "room1",
+    "start": 5.0,
+    "imu_only": 54.62534684008748,
+    "naive_fusion": 0.36067089787861234,
+    "learned_imu_only": 1.6826678992850372,
+    "ours_no_model": 0.24635520968311433,
+    "ours": 0.2757095436537694
+   },
+   {
+    "room": "room1",
+    "start": 40.0,
+    "imu_only": 56.09270765466815,
+    "naive_fusion": 0.559262791716281,
+    "learned_imu_only": 2.1350470778056287,
+    "ours_no_model": 0.48149404409110047,
+    "ours": 0.7036034479295573
+   },
+   {
+    "room": "room1",
+    "start": 75.0,
+    "imu_only": 28.223785144372663,
+    "naive_fusion": 0.2291584253735615,
+    "learned_imu_only": 2.0044281322734525,
+    "ours_no_model": 0.2444323367923783,
+    "ours": 0.2834737281393831
+   },
+   {
+    "room": "room2",
+    "start": 5.0,
+    "imu_only": 58.528712693757335,
+    "naive_fusion": 0.5798974754719491,
+    "learned_imu_only": 1.7123216718702854,
+    "ours_no_model": 0.32590241297151046,
+    "ours": 0.6604981770323084
+   },
+   {
+    "room": "room2",
+    "start": 40.0,
+    "imu_only": 24.187200343673286,
+    "naive_fusion": 3.477245364571638,
+    "learned_imu_only": 1.4595913602372292,
+    "ours_no_model": 3.3732168407711276,
+    "ours": 0.56881922939191
+   },
+   {
+    "room": "room2",
+    "start": 75.0,
+    "imu_only": 24.664012762006923,
+    "naive_fusion": 0.07998855652445154,
+    "learned_imu_only": 1.7545303371044858,
+    "ours_no_model": 0.11926503900331434,
+    "ours": 0.4931829246935563
+   }
+  ],
+  "camera_dark": [
+   {
+    "room": "room1",
+    "start": 5.0,
+    "imu_only": 54.62534684008748,
+    "naive_fusion": 0.22173212720533333,
+    "learned_imu_only": 1.6826678992850372,
+    "ours_no_model": 0.16139609711557884,
+    "ours": 0.12006360216422937
+   },
+   {
+    "room": "room1",
+    "start": 40.0,
+    "imu_only": 56.09270765466815,
+    "naive_fusion": 0.3145628982191089,
+    "learned_imu_only": 2.1350470778056287,
+    "ours_no_model": 0.25043926374204717,
+    "ours": 0.24563235950352882
+   },
+   {
+    "room": "room1",
+    "start": 75.0,
+    "imu_only": 28.223785144372663,
+    "naive_fusion": 0.24669540386789127,
+    "learned_imu_only": 2.0044281322734525,
+    "ours_no_model": 0.23026888961098885,
+    "ours": 0.23369144828895347
+   },
+   {
+    "room": "room2",
+    "start": 5.0,
+    "imu_only": 58.528712693757335,
+    "naive_fusion": 0.19488609858599398,
+    "learned_imu_only": 1.7123216718702854,
+    "ours_no_model": 0.14887183811439908,
+    "ours": 0.24204557250475328
+   },
+   {
+    "room": "room2",
+    "start": 40.0,
+    "imu_only": 24.187200343673286,
+    "naive_fusion": 0.34501686237656287,
+    "learned_imu_only": 1.4595913602372292,
+    "ours_no_model": 0.315925237451313,
+    "ours": 0.3158504820923459
+   },
+   {
+    "room": "room2",
+    "start": 75.0,
+    "imu_only": 24.664012762006923,
+    "naive_fusion": 0.3313739180235836,
+    "learned_imu_only": 1.7545303371044858,
+    "ours_no_model": 0.31204217527771594,
+    "ours": 0.31299534496379783
+   }
+  ],
+  "camera_blur": [
+   {
+    "room": "room1",
+    "start": 5.0,
+    "imu_only": 54.62534684008748,
+    "naive_fusion": 0.21467879416677552,
+    "learned_imu_only": 1.6826678992850372,
+    "ours_no_model": 0.20988050075117798,
+    "ours": 0.2090045087609839
+   },
+   {
+    "room": "room1",
+    "start": 40.0,
+    "imu_only": 56.09270765466815,
+    "naive_fusion": 0.12669648802884073,
+    "learned_imu_only": 2.1350470778056287,
+    "ours_no_model": 0.10876343812235033,
+    "ours": 0.1094018440198096
+   },
+   {
+    "room": "room1",
+    "start": 75.0,
+    "imu_only": 28.223785144372663,
+    "naive_fusion": 0.17029413796242376,
+    "learned_imu_only": 2.0044281322734525,
+    "ours_no_model": 0.16890555010548977,
+    "ours": 0.1684927175562486
+   },
+   {
+    "room": "room2",
+    "start": 5.0,
+    "imu_only": 58.528712693757335,
+    "naive_fusion": 0.1482452764224517,
+    "learned_imu_only": 1.7123216718702854,
+    "ours_no_model": 0.1265373810030817,
+    "ours": 0.13114775904953743
+   },
+   {
+    "room": "room2",
+    "start": 40.0,
+    "imu_only": 24.187200343673286,
+    "naive_fusion": 0.1577396144707441,
+    "learned_imu_only": 1.4595913602372292,
+    "ours_no_model": 0.1306617249635292,
+    "ours": 0.1300196966297762
+   },
+   {
+    "room": "room2",
+    "start": 75.0,
+    "imu_only": 24.664012762006923,
+    "naive_fusion": 0.10276447998918077,
+    "learned_imu_only": 1.7545303371044858,
+    "ours_no_model": 0.07116893075995465,
+    "ours": 0.07039352057065792
+   }
+  ],
+  "dark_plus_imu_drift": [
+   {
+    "room": "room1",
+    "start": 5.0,
+    "imu_only": 505.4804451832554,
+    "naive_fusion": 0.22361181019084964,
+    "learned_imu_only": 1.5669211431008367,
+    "ours_no_model": 0.21591895640426859,
+    "ours": 0.17088806517538865
+   },
+   {
+    "room": "room1",
+    "start": 40.0,
+    "imu_only": 70.65919419936642,
+    "naive_fusion": 0.31607694508958684,
+    "learned_imu_only": 2.494127701402448,
+    "ours_no_model": 0.33041136552244305,
+    "ours": 0.31031965417281365
+   },
+   {
+    "room": "room1",
+    "start": 75.0,
+    "imu_only": 264.4498751179639,
+    "naive_fusion": 0.2490078768574217,
+    "learned_imu_only": 2.066628218413986,
+    "ours_no_model": 0.2686756883525885,
+    "ours": 0.2756384007406644
+   },
+   {
+    "room": "room2",
+    "start": 5.0,
+    "imu_only": 410.02103894148684,
+    "naive_fusion": 0.1966816248354852,
+    "learned_imu_only": 1.5969475056849138,
+    "ours_no_model": 0.16763706174069534,
+    "ours": 0.24926535504658753
+   },
+   {
+    "room": "room2",
+    "start": 40.0,
+    "imu_only": 23.144302433169763,
+    "naive_fusion": 0.3442736714740742,
+    "learned_imu_only": 1.528444109096085,
+    "ours_no_model": 0.31322497346549893,
+    "ours": 0.3170218667688818
+   },
+   {
+    "room": "room2",
+    "start": 75.0,
+    "imu_only": 129.17144348006568,
+    "naive_fusion": 0.3327376373898134,
+    "learned_imu_only": 1.6534207081048375,
+    "ours_no_model": 0.3316284181291501,
+    "ours": 0.3159882335932052
+   }
+  ],
+  "blackout_plus_one_imu_bias": [
+   {
+    "room": "room1",
+    "start": 5.0,
+    "imu_only": 746.1020930135588,
+    "naive_fusion": 9.96846787482738,
+    "learned_imu_only": 2.921972539290858,
+    "ours_no_model": 0.2554505836801472,
+    "ours": 0.2768271967059927
+   },
+   {
+    "room": "room1",
+    "start": 40.0,
+    "imu_only": 317.6128765615982,
+    "naive_fusion": 1.7620836060696978,
+    "learned_imu_only": 2.740089540063209,
+    "ours_no_model": 0.4671932087766444,
+    "ours": 0.7062750244468049
+   },
+   {
+    "room": "room1",
+    "start": 75.0,
+    "imu_only": 369.3194831384456,
+    "naive_fusion": 5.970681336392207,
+    "learned_imu_only": 3.146843121750143,
+    "ours_no_model": 0.31715484156215956,
+    "ours": 0.2913612384395334
+   },
+   {
+    "room": "room2",
+    "start": 5.0,
+    "imu_only": 186.21581294730595,
+    "naive_fusion": 1.9805791160176387,
+    "learned_imu_only": 2.146322157504516,
+    "ours_no_model": 0.2970407737689313,
+    "ours": 0.6581926994246637
+   },
+   {
+    "room": "room2",
+    "start": 40.0,
+    "imu_only": 142.81074207057148,
+    "naive_fusion": 3.3733034512773776,
+    "learned_imu_only": 1.6416806032114288,
+    "ours_no_model": 3.384773680097375,
+    "ours": 0.5757715578732068
+   },
+   {
+    "room": "room2",
+    "start": 75.0,
+    "imu_only": 146.52431662789618,
+    "naive_fusion": 0.9668900609982647,
+    "learned_imu_only": 2.017341141950815,
+    "ours_no_model": 0.10153594237478554,
+    "ours": 0.49087532243280985
+   }
+  ],
+  "blackout_plus_saturation_all": [
+   {
+    "room": "room1",
+    "start": 5.0,
+    "imu_only": 556.9559917980212,
+    "naive_fusion": 15.405535945550849,
+    "learned_imu_only": 2.4268373959383274,
+    "ours_no_model": 15.516476361425516,
+    "ours": 2.3503871655882644
+   },
+   {
+    "room": "room1",
+    "start": 40.0,
+    "imu_only": 316.0314902444419,
+    "naive_fusion": 10.995066257702609,
+    "learned_imu_only": 4.157400239253353,
+    "ours_no_model": 10.987694376739544,
+    "ours": 1.5375775490314147
+   },
+   {
+    "room": "room1",
+    "start": 75.0,
+    "imu_only": 1872.1214286223199,
+    "naive_fusion": 31.811681688630145,
+    "learned_imu_only": 390.5326318242909,
+    "ours_no_model": 31.866619445459882,
+    "ours": 12.789530234567374
+   },
+   {
+    "room": "room2",
+    "start": 5.0,
+    "imu_only": 88.55899208778267,
+    "naive_fusion": 3.2274414683809893,
+    "learned_imu_only": 1.5272645405495167,
+    "ours_no_model": 3.4770335524539733,
+    "ours": 0.6212307454650555
+   },
+   {
+    "room": "room2",
+    "start": 40.0,
+    "imu_only": 46.31671875825402,
+    "naive_fusion": 3.388032529931666,
+    "learned_imu_only": 1.5145120176114961,
+    "ours_no_model": 3.4102777017207426,
+    "ours": 0.4991765245005288
+   },
+   {
+    "room": "room2",
+    "start": 75.0,
+    "imu_only": 32.046809144725415,
+    "naive_fusion": 0.6880227452729284,
+    "learned_imu_only": 1.8203354356552872,
+    "ours_no_model": 0.7662145940600635,
+    "ours": 0.5297851280487968
+   }
+  ]
+ },
+ "runtime_s": 1162.5863091945648
+}
