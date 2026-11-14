@@ -296,7 +296,7 @@ def main():
            ["Trained on broken IMU data", "Bias + tilt only", "n/a", "Noise, drift, dropout, spikes, saturation, dead"],
            ["Handles a camera that jumps to the wrong place", "n/a", "Partly", "Soft gate + 10 s hold-out"],
            ["Phone-class compute", "Yes", "Dense, heavy (their next step)", f"{S['model'].get('size_mb', 0):.1f} MB, {S['model'].get('ms_per_prediction_cpu', 0):.1f} ms per step"],
-           ["Outputs a tracking-quality signal", "No", "No", "Per-sensor trust + uncertainty"]]
+           ["Tracking-quality output", "No", "No", "Per-sensor trust + metres (OpenXR: yes/no flag)"]]
     tbl = s.shapes.add_table(len(rws) + 1, 4, Inches(0.5), Inches(1.6), Inches(8.0), Inches(3.4)).table
     widths = [2.4, 1.7, 1.7, 2.2]
     for j, w in enumerate(widths):

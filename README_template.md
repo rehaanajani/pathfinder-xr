@@ -26,8 +26,24 @@ This system **finds which sensor is lying, stops trusting it, and keeps tracking
 5. **A self-check on the learned model.** While the camera is healthy, the filter compares the network's predictions
    with what the camera sees. If the network keeps being wrong on this kind of motion, its uncertainty is inflated
    so it is trusted less once the camera drops out.
-6. **A health signal out.** Per-sensor trust and the filter's own position uncertainty, the tracking-quality
-   signal that apps can use and that today's Android XR pose API does not expose.
+6. **A health signal out.** Per-sensor trust and the filter's own position uncertainty in metres. OpenXR today
+   only reports a yes/no "position tracked" flag; this gives a graded one.
+
+## Where this sits in a headset
+
+The OpenXR spec asks runtimes, during tracking loss, to keep providing an inferred pose "based on ... inertial dead
+reckoning", clear the TRACKED flag, and snap back when tracking recovers. This project is that component, made
+fault-aware:
+
+```
+IMUs + cameras -> Sensors HAL -> [ IMU voting ] -> perception / VIO service -> OpenXR runtime -> apps (xrLocateSpace)
+                                 [ camera health ] ->        |
+                                 [ learned inertial model + robust filter ] -> pose when VIO is lost or degraded
+                                 [ health signal ] -> graded tracking quality (beyond the TRACKED bit)
+```
+
+It is a library for the device's tracking service, not an app: users never install it, and apps only see better
+poses. Shipping it means a C++ port of the filter and voting, and the network exported to TFLite / the phone's NPU.
 
 ## Submission package
 
