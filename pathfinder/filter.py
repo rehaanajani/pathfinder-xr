@@ -42,9 +42,15 @@ class FilterConfig:
     sigma_ba: float = 1e-3
     min_health: float = 0.005     # only frames with essentially nothing visible are ignored
     recover_health: float = 0.6   # frames this healthy can re-anchor a drifted estimate
-    recover_after: int = 10       # after an outage: re-anchor after 1 s of healthy disagreement
-    recover_after_jump: int = 100 # after a sudden camera jump: hold out for 10 s
-    outage_gap: int = 100         # samples (0.5 s) without a good frame counts as an outage
+    # Camera recovery, in seconds (independent of frame rate and dropped frames):
+    outage_gap_s: float = 2.0     # this long without an accepted healthy frame counts as an outage
+                                  # (shorter gaps, e.g. dropped frames, cannot explain a big jump)
+    recover_after_s: float = 1.0  # after an outage: re-anchor once a healthy camera has disagreed
+                                  # steadily for this long (we are the one that drifted)
+    max_holdout_s: float = 30.0   # after a sudden jump while tracking well: reject the camera until
+                                  # our own uncertainty makes it plausible, or at most this long
+    min_recover_frames: int = 3   # and never on fewer frames than this
+    steady_ratio: float = 0.5     # "steady": spread of the disagreement < this x its size
     model_check_up: float = 0.1     # learned-model self-check: how fast trust drops (per update)
     model_check_down: float = 0.003 # ... and how slowly it comes back
     use_health: bool = True       # off = naive fusion that trusts every frame equally
@@ -212,7 +218,7 @@ class ESKF:
         H[:, 6:9] = A
         H[:, o + 3:o + 6] = -A
         y = d - h
-        anchored = k - getattr(self, "last_good_cam_k", -10 ** 9) <= self.cfg.outage_gap
+        anchored = self._anchored(k)
         if anchored:
             S = H @ self.P @ H.T + cov
             ratio = float(y @ np.linalg.solve(S, y)) / 3.0
@@ -226,8 +232,27 @@ class ESKF:
         else:
             log.disp_rejected += 1
 
+    def _t(self, k):
+        return k * getattr(self, "dt", 1.0 / 200.0)
+
+    def _anchored(self, k):
+        """A healthy camera fix was accepted recently, so our state is pinned to the world."""
+        return self._t(k) - getattr(self, "last_good_cam_t", -1e9) <= self.cfg.outage_gap_s
+
     def camera_update(self, fix, health, log: FilterLog, k: int = 0):
+        """Camera position fix with a small state machine (see ``self.cam_state``):
+
+        tracking  - fixes agree; adaptive process noise may learn from healthy innovations.
+        recovering- a healthy camera disagrees after an outage: we drifted. Adaptive noise may grow;
+                    re-anchor once the disagreement has been steady for ``recover_after_s``.
+        suspect   - a healthy camera jumped away while we were tracking well: probably locked onto
+                    the wrong thing. Rejected outright and never allowed to inflate our noise, so it
+                    cannot talk its way back in. It is accepted only when our own uncertainty has
+                    grown enough to make it plausible (normal gate), or after ``max_holdout_s`` of
+                    steady disagreement.
+        """
         c = self.cfg
+        t = self._t(k)
         if c.use_health:
             if c.trust is not None:
                 # Calibrated on training data: measured fix error for this health level.
@@ -241,44 +266,63 @@ class ESKF:
             std = c.fix_std
         Rm = np.eye(3) * std ** 2
         healthy = health >= c.recover_health
-        if c.adaptive_q and healthy:
-            # Use the innovation of healthy frames to check whether the IMU model is too optimistic.
-            H = np.zeros((3, self.P.shape[0])); H[:, 6:9] = np.eye(3)
-            y = fix - self.p
-            S = H @ self.P @ H.T + Rm
-            ratio = float(y @ np.linalg.solve(S, y)) / 3.0
-            cur = getattr(self, "q_scale", 1.0)
-            target = float(np.clip(ratio, 1.0, c.q_max))
-            a = c.q_up if target > cur else c.q_down
-            self.q_scale = (1 - a) * cur + a * target
-        if self._update_position(fix, Rm):
+        n = self.P.shape[0]
+        H = np.zeros((3, n)); H[:, 6:9] = np.eye(3)
+        y = fix - self.p
+        S = H @ self.P @ H.T + Rm
+        nis = float(y @ np.linalg.solve(S, y))
+        state = getattr(self, "cam_state", "tracking")
+        consistent = (not c.use_gate) or nis <= c.gate
+
+        def adapt_q():
+            if c.adaptive_q and healthy:
+                # Innovations of trusted healthy frames tell us whether the IMU model is too optimistic.
+                cur = getattr(self, "q_scale", 1.0)
+                target = float(np.clip(nis / 3.0, 1.0, c.q_max))
+                a = c.q_up if target > cur else c.q_down
+                self.q_scale = (1 - a) * cur + a * target
+
+        if consistent:
+            adapt_q()
+            self._update(y, H, Rm)
             log.cam_used += 1
-            self.cam_fail_streak = 0
             if healthy:
-                self.last_good_cam_k = k
+                self.last_good_cam_t = t
+                self.cam_state, self.streak = "tracking", []
             return
-        log.cam_rejected += 1
+
         if not healthy:
+            # A dim or blurred frame that disagrees: soft-gated (heavily down-weighted), no state change.
+            if state != "suspect":
+                self._update(y, H, Rm)
+            log.cam_rejected += 1
             return
-        streak = getattr(self, "cam_fail_streak", 0)
-        if streak == 0:
-            # Why does a healthy camera disagree with us? If we just came back from an outage,
-            # we are the one that drifted. If the camera was agreeing a moment ago and suddenly
-            # jumped, it has probably locked onto the wrong thing.
-            gap = k - getattr(self, "last_good_cam_k", -10 ** 9)
-            self.streak_origin = "outage" if gap > c.outage_gap else "jump"
-        self.cam_fail_streak = streak + 1
-        needed = c.recover_after if self.streak_origin == "outage" else c.recover_after_jump
-        if self.cam_fail_streak >= needed:
-            # Re-anchor: open our position uncertainty to the size of the disagreement, then
-            # take the camera fix with the gate off.
-            y = fix - self.p
-            self.P[6:9, 6:9] += np.eye(3) * float(y @ y)
+
+        # Healthy frame that disagrees with us. Why?
+        if state == "tracking":
+            outage = t - getattr(self, "last_good_cam_t", -1e9) > c.outage_gap_s
+            self.cam_state = state = "recovering" if outage else "suspect"
+            self.streak, self.streak_t0 = [], t
+        self.streak.append(y.copy())
+        log.cam_rejected += 1
+        if state == "recovering":
+            adapt_q()
+            self._update(y, H, Rm)                   # soft-gated pull while we confirm
+            wait = c.recover_after_s
+        else:
+            wait = c.max_holdout_s                   # suspect: no update, no noise inflation
+        Y = np.array(self.streak)
+        steady = np.linalg.norm(Y.std(0)) < c.steady_ratio * max(np.linalg.norm(Y.mean(0)), 1e-6)
+        if t - self.streak_t0 >= wait and len(Y) >= c.min_recover_frames and steady:
+            # Re-anchor: open our position uncertainty to the size of the disagreement, then take the
+            # camera fix with the gate off.
+            yy = fix - self.p
+            self.P[6:9, 6:9] += np.eye(3) * float(yy @ yy)
             gate, self.cfg.use_gate = self.cfg.use_gate, False
             self._update_position(fix, Rm)
             self.cfg.use_gate = gate
-            self.cam_fail_streak = 0
-            self.last_good_cam_k = k
+            self.last_good_cam_t = t
+            self.cam_state, self.streak = "tracking", []
             log.cam_recovered += 1
 
     def displacement_update(self, d, cov, p_past, P_past_pos, log: FilterLog, k: int = 0):
@@ -286,7 +330,7 @@ class ESKF:
         # Self-check of the learned model: while the camera is healthy our state is anchored,
         # so a large innovation here means the *model* is wrong on this kind of motion. Track
         # how far off it is relative to its own claimed uncertainty and scale its covariance.
-        anchored = k - getattr(self, "last_good_cam_k", -10 ** 9) <= self.cfg.outage_gap
+        anchored = self._anchored(k)
         if anchored:
             y = z - self.p
             S = self.P[6:9, 6:9] + cov + P_past_pos
@@ -314,6 +358,7 @@ def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = 
     N = len(seq.t)
     dt = seq.dt
     f = ESKF(cfg, seq.p[start], seq.v[start], seq.q[start])
+    f.dt = seq.dt
     log = FilterLog()
     cam_at = {} if cam is None else {int(i): j for j, i in enumerate(cam["idx"])}
     disp_at = {} if disp is None or callable(disp) else {int(i): j for j, i in enumerate(disp["idx"])}
