@@ -69,7 +69,8 @@ class FilterConfig:
     gate_mode: str = "soft"       # "soft" = robust down-weighting, "hard" = reject + re-anchor
     soft_power: float = 2.0
     fix_std: float = 0.03
-    low_conf_inflate: float = 25.0   # process-noise multiplier when IMU confidence is 0
+    low_conf_inflate: float = 10.0   # process-noise multiplier when IMU confidence is 0 (chosen on the
+                                     # validation split from 1, 4, 10, 25; see results/diagnostics)
 
 
 @dataclass
