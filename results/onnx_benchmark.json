@@ -1,0 +1,12 @@
+{
+ "fp32_mb": 1.502353,
+ "int8_mb": 0.403259,
+ "fp32_ms_1core": 0.40188525000121444,
+ "int8_ms_1core": 0.27696141801425256,
+ "max_abs_diff_torch_vs_onnx_m": 7.450580596923828e-08,
+ "max_abs_diff_int8_vs_fp32_m": 0.02087119221687317,
+ "rmse_fp32_m": 0.16622637851756814,
+ "rmse_int8_m": 0.17399408010235617,
+ "windows_scored": 200,
+ "device": "Apple M5 laptop, 1 CPU thread, ONNX Runtime 1.32.0"
+}
