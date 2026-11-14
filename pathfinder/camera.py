@@ -89,3 +89,61 @@ def visual_fixes(t: np.ndarray, p_true: np.ndarray, sched: dict, seed: int = 0) 
 def frame_times(t: np.ndarray) -> np.ndarray:
     step = max(int(round((1 / CAM_RATE) / np.median(np.diff(t)))), 1)
     return t[::step]
+
+
+# ---------------------------------------------------------------------------------------------
+# Trust calibration: how wrong is a visual fix, as a function of the measured health score?
+# Learned once on TRAINING sequences, then the filter uses the table instead of a hand-set rule.
+
+TRUST_PATH = "models/camera_trust.json"
+BINS = [0.0, 0.02, 0.05, 0.1, 0.2, 0.35, 0.5, 0.7, 0.85, 0.97, 1.01]
+
+
+def calibrate_trust(seqs, seed: int = 0, out: str = TRUST_PATH) -> dict:
+    """Random darkness / blur episodes on training sequences -> RMS fix error per health bin."""
+    import json
+    from pathlib import Path
+
+    from .faults import Fault, camera_schedule
+    rng = np.random.default_rng(seed)
+    h_all, e_all = [], []
+    for i, s in enumerate(seqs):
+        ft = frame_times(s.t)
+        dur = ft[-1] - ft[0]
+        faults = []
+        for _ in range(4):
+            start, length = rng.uniform(0, dur - 5), rng.uniform(3, 12)
+            if rng.random() < 0.5:
+                faults.append(Fault("camera_dark", start, length, params={"level": rng.uniform(0.04, 0.6)}))
+            else:
+                faults.append(Fault("camera_blur", start, length, params={"pixels": rng.uniform(3, 35)}))
+        cam = visual_fixes(s.t, s.p, camera_schedule(ft, faults), seed + i)
+        ok = ~np.isnan(cam["fix"][:, 0])
+        err = np.linalg.norm(cam["fix"][ok] - s.p[cam["idx"][ok]], axis=1) / np.sqrt(3)
+        h_all.append(cam["health"][ok])
+        e_all.append(err)
+    h, e = np.concatenate(h_all), np.concatenate(e_all)
+    centers, stds, counts = [], [], []
+    for lo, hi in zip(BINS[:-1], BINS[1:]):
+        m = (h >= lo) & (h < hi)
+        if m.sum() >= 20:
+            centers.append(float(h[m].mean()))
+            stds.append(float(np.sqrt(np.mean(e[m] ** 2))))
+            counts.append(int(m.sum()))
+    # Trust can only fall as health falls: enforce a monotone table.
+    for j in range(len(stds) - 2, -1, -1):
+        stds[j] = max(stds[j], stds[j + 1])
+    table = {"health": centers, "std_m": stds, "count": counts, "n_frames": int(len(h))}
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    Path(out).write_text(json.dumps(table, indent=1))
+    return table
+
+
+def load_trust(path: str = TRUST_PATH):
+    import json
+    from pathlib import Path
+    p = Path(path)
+    if not p.exists():
+        return None
+    t = json.loads(p.read_text())
+    return np.array(t["health"]), np.array(t["std_m"])

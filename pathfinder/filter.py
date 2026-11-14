@@ -44,6 +44,12 @@ class FilterConfig:
     model_check_up: float = 0.1     # learned-model self-check: how fast trust drops (per update)
     model_check_down: float = 0.003 # ... and how slowly it comes back
     use_health: bool = True       # off = naive fusion that trusts every frame equally
+    trust: tuple | None = None    # (health, std_m) table from camera.calibrate_trust
+    adaptive_q: bool = False      # inflate IMU process noise when healthy camera disagrees
+    q_up: float = 0.2
+    q_down: float = 0.01
+    q_max: float = 400.0
+    bias_q_gain: float = 1.0
     use_gate: bool = True
     gate: float = CHI2_3DOF_999
     gate_mode: str = "soft"       # "soft" = robust down-weighting, "hard" = reject + re-anchor
@@ -96,10 +102,13 @@ class ESKF:
         c = self.cfg
         k = 1.0 + (c.low_conf_inflate - 1.0) * (1.0 - np.clip(imu_conf, 0, 1))
         Q = np.zeros(15)
-        Q[0:3] = (c.sigma_g * k) ** 2 * dt
-        Q[3:6] = (c.sigma_a * k) ** 2 * dt
-        Q[9:12] = c.sigma_bg ** 2 * dt
-        Q[12:15] = c.sigma_ba ** 2 * dt
+        # Adaptive process noise (Mehra 1970 style): q_scale grows when healthy camera fixes keep
+        # disagreeing with the IMU prediction more than the filter expected.
+        q = getattr(self, "q_scale", 1.0) if c.adaptive_q else 1.0
+        Q[0:3] = (c.sigma_g * k) ** 2 * dt * q
+        Q[3:6] = (c.sigma_a * k) ** 2 * dt * q
+        Q[9:12] = c.sigma_bg ** 2 * dt * q * c.bias_q_gain
+        Q[12:15] = c.sigma_ba ** 2 * dt * q * c.bias_q_gain
         self.P = F @ self.P @ F.T + np.diag(Q)
 
     def _update_position(self, z, Rmeas):
@@ -108,6 +117,7 @@ class ESKF:
         y = z - self.p
         S = H @ self.P @ H.T + Rmeas
         nis = float(y @ np.linalg.solve(S, y))
+        self.last_nis = nis
         accepted = True
         if self.cfg.use_gate and nis > self.cfg.gate:
             if self.cfg.gate_mode == "hard":
@@ -131,15 +141,28 @@ class ESKF:
     def camera_update(self, fix, health, log: FilterLog, k: int = 0):
         c = self.cfg
         if c.use_health:
-            if health < c.min_health:
-                log.cam_skipped += 1
-                return
-            # Trust falls off fast with health: a frame at 0.1 counts ~100x less than a clean one.
-            std = c.fix_std / max(health, 0.02)
+            if c.trust is not None:
+                # Calibrated on training data: measured fix error for this health level.
+                std = float(np.interp(health, c.trust[0], c.trust[1]))
+            else:
+                if health < c.min_health:
+                    log.cam_skipped += 1
+                    return
+                std = c.fix_std / max(health, 0.02)
         else:
             std = c.fix_std
         Rm = np.eye(3) * std ** 2
         healthy = health >= c.recover_health
+        if c.adaptive_q and healthy:
+            # Use the innovation of healthy frames to check whether the IMU model is too optimistic.
+            H = np.zeros((3, 15)); H[:, 6:9] = np.eye(3)
+            y = fix - self.p
+            S = H @ self.P @ H.T + Rm
+            ratio = float(y @ np.linalg.solve(S, y)) / 3.0
+            cur = getattr(self, "q_scale", 1.0)
+            target = float(np.clip(ratio, 1.0, c.q_max))
+            a = c.q_up if target > cur else c.q_down
+            self.q_scale = (1 - a) * cur + a * target
         if self._update_position(fix, Rm):
             log.cam_used += 1
             self.cam_fail_streak = 0

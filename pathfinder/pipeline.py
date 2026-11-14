@@ -20,6 +20,15 @@ from .imu_vote import vote
 from .parity import ParityFDI, fuse
 from .integrator import strapdown
 
+from .camera import load_trust
+
+TRUST = load_trust()      # measured health -> fix-error table; None until calibrated
+
+
+def ours_cfg():
+    return FilterConfig(trust=TRUST, adaptive_q=True, bias_q_gain=10.0)
+
+
 ALL = ("imu_only", "naive_fusion", "tlio_style", "ours_no_model", "ours_tlio_model", "ours")
 
 
@@ -70,12 +79,12 @@ def run_methods(seq, faults, seed=0, ours_model=None, tlio_model=None, methods=A
         est, log = run(seq, avg_g, avg_a, None, None, tlio_model, FilterConfig())
         res["tlio_style"] = _pack(est, seq, log)
     if "ours_no_model" in methods:
-        est, log = run(seq, fg, fa, conf, cam, None, FilterConfig())
+        est, log = run(seq, fg, fa, conf, cam, None, ours_cfg())
         res["ours_no_model"] = _pack(est, seq, log)
     if "ours_tlio_model" in methods and tlio_model is not None:
-        est, log = run(seq, fg, fa, conf, cam, tlio_model, FilterConfig())
+        est, log = run(seq, fg, fa, conf, cam, tlio_model, ours_cfg())
         res["ours_tlio_model"] = _pack(est, seq, log)
     if "ours" in methods and ours_model is not None:
-        est, log = run(seq, fg, fa, conf, cam, ours_model, FilterConfig())
+        est, log = run(seq, fg, fa, conf, cam, ours_model, ours_cfg())
         res["ours"] = _pack(est, seq, log, imu_weights=info["weights"], imu_reasons=info["reasons"])
     return res

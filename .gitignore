@@ -3,7 +3,8 @@ __pycache__/
 *.pyc
 .pytest_cache/
 local_data/
-models/
+models/*
+!models/camera_trust.json
 results/runs/
 *.zip
 .DS_Store
