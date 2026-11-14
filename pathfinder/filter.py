@@ -45,6 +45,7 @@ class FilterConfig:
     model_check_down: float = 0.003 # ... and how slowly it comes back
     use_health: bool = True       # off = naive fusion that trusts every frame equally
     trust: tuple | None = None    # (health, std_m) table from camera.calibrate_trust
+    cloning: bool = False         # TLIO-style stochastic cloning (mixed results, see README)
     adaptive_q: bool = False      # inflate IMU process noise when healthy camera disagrees
     q_up: float = 0.2
     q_down: float = 0.01
@@ -83,6 +84,8 @@ class ESKF:
         self.P = np.eye(15) * P0_scale
         self.P[9:12, 9:12] = np.eye(3) * 1e-4
         self.P[12:15, 12:15] = np.eye(3) * 1e-2
+        self.clone_k: list[int] = []      # stochastic cloning: past positions kept in the state
+        self.clone_p: list[np.ndarray] = []
 
     def propagate(self, gyro, acc, dt, imu_conf: float = 1.0):
         w = gyro - self.bg
@@ -109,12 +112,14 @@ class ESKF:
         Q[3:6] = (c.sigma_a * k) ** 2 * dt * q
         Q[9:12] = c.sigma_bg ** 2 * dt * q * c.bias_q_gain
         Q[12:15] = c.sigma_ba ** 2 * dt * q * c.bias_q_gain
-        self.P = F @ self.P @ F.T + np.diag(Q)
+        P = self.P
+        P[:15, :15] = F @ P[:15, :15] @ F.T + np.diag(Q)
+        if P.shape[0] > 15:                       # clones are static; only cross terms move
+            P[:15, 15:] = F @ P[:15, 15:]
+            P[15:, :15] = P[:15, 15:].T
 
-    def _update_position(self, z, Rmeas):
-        H = np.zeros((3, 15))
-        H[:, 6:9] = np.eye(3)
-        y = z - self.p
+    def _update(self, y, H, Rmeas):
+        n = self.P.shape[0]
         S = H @ self.P @ H.T + Rmeas
         nis = float(y @ np.linalg.solve(S, y))
         self.last_nis = nis
@@ -129,14 +134,60 @@ class ESKF:
             accepted = False
         K = self.P @ H.T @ np.linalg.inv(S)
         dx = K @ y
-        I_KH = np.eye(15) - K @ H
+        I_KH = np.eye(n) - K @ H
         self.P = I_KH @ self.P @ I_KH.T + K @ Rmeas @ K.T
         self.R = self.R * Rot.from_rotvec(dx[0:3])
         self.v += dx[3:6]
         self.p += dx[6:9]
         self.bg += dx[9:12]
         self.ba += dx[12:15]
+        for i in range(len(self.clone_p)):
+            self.clone_p[i] = self.clone_p[i] + dx[15 + 3 * i:18 + 3 * i]
         return accepted
+
+    def _update_position(self, z, Rmeas):
+        H = np.zeros((3, self.P.shape[0]))
+        H[:, 6:9] = np.eye(3)
+        return self._update(z - self.p, H, Rmeas)
+
+    def add_clone(self, k: int, max_clones: int):
+        """Stochastic cloning (Roumeliotis & Burdick 2002): copy the current position into the state."""
+        n = self.P.shape[0]
+        J = np.zeros((n + 3, n))
+        J[:n, :n] = np.eye(n)
+        J[n:, 6:9] = np.eye(3)
+        self.P = J @ self.P @ J.T
+        self.clone_k.append(k)
+        self.clone_p.append(self.p.copy())
+        while len(self.clone_k) > max_clones:
+            keep = np.r_[0:15, 18:self.P.shape[0]]
+            self.P = self.P[np.ix_(keep, keep)]
+            self.clone_k.pop(0)
+            self.clone_p.pop(0)
+
+    def displacement_update_clone(self, d, cov, k0, log, k: int = 0):
+        """Learned displacement d = p(k) - p(k0), with p(k0) a clone in the state (as in TLIO)."""
+        if k0 not in self.clone_k:
+            return
+        i = self.clone_k.index(k0)
+        n = self.P.shape[0]
+        H = np.zeros((3, n))
+        H[:, 6:9] = np.eye(3)
+        H[:, 15 + 3 * i:18 + 3 * i] = -np.eye(3)
+        y = d - (self.p - self.clone_p[i])
+        anchored = k - getattr(self, "last_good_cam_k", -10 ** 9) <= self.cfg.outage_gap
+        if anchored:
+            S = H @ self.P @ H.T + cov
+            ratio = float(y @ np.linalg.solve(S, y)) / 3.0
+            cur = getattr(self, "model_scale", 1.0)
+            target = max(ratio, 1.0)
+            a = self.cfg.model_check_up if target > cur else self.cfg.model_check_down
+            self.model_scale = (1 - a) * cur + a * target
+        cov = cov * getattr(self, "model_scale", 1.0)
+        if self._update(y, H, cov):
+            log.disp_used += 1
+        else:
+            log.disp_rejected += 1
 
     def camera_update(self, fix, health, log: FilterLog, k: int = 0):
         c = self.cfg
@@ -259,8 +310,13 @@ def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = 
             aw = np.einsum("nij,nj->ni", Rs, acc[k0:k])
             d, cov = predictor(np.concatenate([gw, aw], 1))
             log.disp_std.append(float(np.sqrt(np.trace(cov))))
-            f.displacement_update(d, cov, hist_p[k0], hist_Pp[k0], log, k)
+            if cfg.cloning:
+                f.displacement_update_clone(d, cov, k0, log, k)
+            else:
+                f.displacement_update(d, cov, hist_p[k0], hist_Pp[k0], log, k)
             log.model_scale.append(getattr(f, "model_scale", 1.0))
+        if predictor is not None and cfg.cloning and (k - start) % every == 0:
+            f.add_clone(k, W // every + 1)
         if k < N - 1:
             c = 1.0 if imu_conf is None else float(imu_conf[k])
             f.propagate(gyro[k], acc[k], dt, c)
