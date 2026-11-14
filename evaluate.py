@@ -25,7 +25,7 @@ from pathfinder import data_tlio as D
 from pathfinder.faults import Fault, scenarios
 from pathfinder.imu_vote import vote
 from pathfinder.faults import apply_imu_faults
-from pathfinder.pipeline import ALL, run_methods
+from pathfinder.pipeline import ALL, fuse_imus, run_methods
 from pathfinder.synthetic import head_walk
 
 OUT = Path("results")
@@ -131,6 +131,8 @@ def main():
     # 3) faulty-IMU isolation vs number of IMUs
     iso = {}
     kinds = {"bias": Fault("imu_bias", 5, 1e9, 0, {"gyro": [0.08, -0.05, 0.04], "acc": [0.8, -0.5, 0.4]}),
+             "small bias": Fault("imu_bias", 5, 1e9, 0, {"gyro": [0.02, -0.015, 0.01], "acc": [0.3, -0.2, 0.15]}),
+             "slow drift": Fault("imu_bias_drift", 5, 1e9, 0),
              "stuck": Fault("imu_stuck", 5, 1e9, 0), "spikes": Fault("imu_spikes", 5, 1e9, 0),
              "noise": Fault("imu_noise", 5, 1e9, 0)}
     base = [D.load(sid, max_seconds=40) for sid in D.split("test")[:5]] if not args.synthetic else \
@@ -142,7 +144,7 @@ def main():
             for b in base:
                 s = D.redundant_imus(b, k, seed=3) if not args.synthetic else head_walk(40, n_imus=k, seed=1)
                 bad = apply_imu_faults(s, [f])
-                _, _, info = vote(bad.gyro, bad.acc)
+                _, _, info = fuse_imus(bad)
                 # Only score the 0.1 s windows where the fault actually changed the readings.
                 diff = np.abs(bad.gyro[0] - s.gyro[0]).max(1) + np.abs(bad.acc[0] - s.acc[0]).max(1)
                 n_w = info["weights"].shape[1]

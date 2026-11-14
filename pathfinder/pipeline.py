@@ -17,6 +17,7 @@ from . import camera, metrics
 from .faults import Fault, apply_imu_faults, camera_schedule
 from .filter import FilterConfig, run
 from .imu_vote import vote
+from .parity import ParityFDI, fuse
 from .integrator import strapdown
 
 ALL = ("imu_only", "naive_fusion", "tlio_style", "ours_no_model", "ours_tlio_model", "ours")
@@ -39,13 +40,25 @@ def _pack(est, seq, log=None, **extra):
     return r
 
 
+def fuse_imus(bad):
+    """3+ IMUs: parity-space GLRT detection and isolation. 2 IMUs: parity can only detect,
+    so per-IMU signal checks (stuck, saturated, spiky, noisy) decide who is wrong."""
+    if bad.n_imus >= 3:
+        w, D, pinfo = ParityFDI(bad.n_imus).run(bad.gyro, bad.acc, bad.rate)
+        fg, fa = fuse(bad.gyro, bad.acc, w, 20)
+        return fg, fa, {"weights": w, "reasons": pinfo["isolated"], "confidence": w.max(0),
+                        "parity_D": D, "method": "parity"}
+    fg, fa, info = vote(bad.gyro, bad.acc)
+    return fg, fa, {**info, "method": "vote"}
+
+
 def run_methods(seq, faults, seed=0, ours_model=None, tlio_model=None, methods=ALL):
     bad, cam = prepare(seq, faults, seed)
     res = {"_cam": cam}
     avg_g, avg_a = bad.gyro.mean(0), bad.acc.mean(0)
     fg = fa = info = conf = None
     if any(m.startswith("ours") for m in methods):
-        fg, fa, info = vote(bad.gyro, bad.acc)
+        fg, fa, info = fuse_imus(bad)
         conf = np.repeat(info["confidence"], 20)[: len(seq.t)]
     if "imu_only" in methods:
         est = strapdown(avg_g, avg_a, seq.dt, seq.p[0], seq.v[0], seq.q[0])

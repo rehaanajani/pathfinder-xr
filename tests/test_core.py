@@ -60,3 +60,21 @@ def test_vote_drops_stuck_imu_even_with_two():
     fg, fa, info = vote(bad.gyro, bad.acc)
     w = info["weights"][:, 35:65]
     assert w[0].mean() < 0.1 and w[1].mean() > 0.9
+
+
+def test_parity_isolates_small_bias_that_voting_misses():
+    from pathfinder.parity import ParityFDI
+    s = head_walk(10, n_imus=3)
+    bad = apply_imu_faults(s, [Fault("imu_bias", 2, 1e9, 1, {"gyro": [0.02, 0, 0], "acc": [0.3, 0, 0]})])
+    w, D, info = ParityFDI(3).run(bad.gyro, bad.acc, s.rate)
+    after = w[:, 30:]
+    assert after[1].mean() < 0.1 and after[0].mean() > 0.9 and after[2].mean() > 0.9
+
+
+def test_parity_detects_but_cannot_isolate_with_two_imus():
+    from pathfinder.parity import ParityFDI
+    s = head_walk(10, n_imus=2)
+    bad = apply_imu_faults(s, [Fault("imu_bias", 2, 1e9, 0, {"gyro": [0.1, 0, 0], "acc": [1.0, 0, 0]})])
+    w, D, info = ParityFDI(2).run(bad.gyro, bad.acc, s.rate)
+    assert info["detected"][30:].mean() > 0.9
+    assert np.allclose(w[:, 30:], 0.5)
