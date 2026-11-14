@@ -25,8 +25,12 @@ from .camera import load_trust
 TRUST = load_trust()      # measured health -> fix-error table; None until calibrated
 
 
+OURS_OVERRIDES: dict = {}          # set by evaluate.py --set, for validation sweeps
+
+
 def ours_cfg():
-    return FilterConfig(trust=TRUST, adaptive_q=True, bias_q_gain=10.0)
+    from dataclasses import replace
+    return replace(FilterConfig(trust=TRUST, adaptive_q=True, bias_q_gain=10.0), **OURS_OVERRIDES)
 
 
 ALL = ("imu_only", "naive_fusion", "tlio_style", "ours_no_model", "ours_tlio_model", "ours")

@@ -47,11 +47,11 @@ def load_models():
     return ours, tl
 
 
-def sequences(n, clip, synthetic, k_imus=3):
+def sequences(n, clip, synthetic, k_imus=3, split="test"):
     if synthetic:
         return [head_walk(clip, n_imus=k_imus, seed=i) for i in range(n)]
     out = []
-    for sid in D.split("test")[:n]:
+    for sid in D.split(split)[:n]:
         s = D.load(sid)
         start = int(min(30, max(0, s.t[-1] - clip - 1)) * 200)     # skip the first 30 s settle
         out.append(D.redundant_imus(s.slice(start, start + int(clip * 200) + 1), k_imus, seed=len(out)))
@@ -63,9 +63,21 @@ def sequences(n, clip, synthetic, k_imus=3):
 _W = {}
 
 
-def _init(seqs, methods):
+def _parse_set(items):
+    from pathfinder.filter import FilterConfig
+    out = {}
+    for it in items:
+        k, v = it.split("=", 1)
+        t = type(getattr(FilterConfig(), k))
+        out[k] = (v.lower() in ("1", "true", "yes")) if t is bool else t(v)
+    return out
+
+
+def _init(seqs, methods, overrides=None):
     import torch
+    from pathfinder import pipeline
     torch.set_num_threads(1)
+    pipeline.OURS_OVERRIDES.update(overrides or {})
     _W["seqs"], _W["methods"] = seqs, methods
     _W["ours"], _W["tl"] = load_models()
 
@@ -97,17 +109,26 @@ def main():
     ap.add_argument("--clip", type=float, default=60.0)
     ap.add_argument("--synthetic", action="store_true")
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--split", default="test", choices=["val", "test"],
+                    help="choose settings on val; test is for final reporting")
+    ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
+                    help="override a field of the shipped filter config (pipeline.ours_cfg), e.g. low_conf_inflate=6")
+    ap.add_argument("--methods", default=None, help="comma-separated subset of methods")
     ap.add_argument("--out", default="results", help="output folder (use a run folder for checks, so "
                     "committed results are only replaced on purpose)")
     args = ap.parse_args()
     global OUT
+    from pathfinder import pipeline as _pl
+    _pl.OURS_OVERRIDES.update(_parse_set(args.set))
     OUT = Path(args.out)
     OUT.mkdir(parents=True, exist_ok=True)
     OUT.mkdir(exist_ok=True)
     t0 = time.time()
     ours, tl = load_models()
-    seqs = sequences(args.seqs, args.clip, args.synthetic)
+    seqs = sequences(args.seqs, args.clip, args.synthetic, split=args.split)
     methods = [m for m in ALL if (m != "ours" or ours) and (m not in ("tlio_style", "ours_tlio_model") or tl)]
+    if args.methods:
+        methods = [m for m in methods if m in args.methods.split(",")]
     print(f"{len(seqs)} sequences x {args.clip:.0f}s, methods: {methods}", flush=True)
 
     # 1) every named scenario and 2) the blackout-length sweep, all sequences in parallel
@@ -117,7 +138,7 @@ def main():
     jobs += [("sweep", L, i) for L in lengths for i in range(len(seqs))]
     workers = max(1, min(args.workers, os.cpu_count() or 1))
     print(f"{len(jobs)} runs on {workers} processes", flush=True)
-    with ProcessPoolExecutor(workers, initializer=_init, initargs=(seqs, methods)) as ex:
+    with ProcessPoolExecutor(workers, initializer=_init, initargs=(seqs, methods, _parse_set(args.set))) as ex:
         out = list(ex.map(_job, jobs, chunksize=1))
     res = dict(zip(jobs, out))
     table = {}
