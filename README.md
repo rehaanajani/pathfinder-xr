@@ -21,7 +21,7 @@ or without Docker: `make -C src && src/pathfinder <imu folder | zip | csv> -o es
 | Entry | `src/main.cpp` (C++17 + zlib); `src/main.py` is the readable reference with the same output |
 | Peak RAM / compute | 2.2 MB / 4 ms per second of IMU (Apple M5), one thread |
 | Output contract | 24 tests: one pose per row through NaN, frozen, zero and missing rows, cut files, unknown gravity (`PF_ENTRY=cpp pytest tests/stress/test_main_contract.py`) |
-| Accuracy, held-out EuRoC MH_05 + V2_03 + TUM-VI room6 | ATE 3.19 m vs 3.28 m standing still and 4.54 m physics only ([details](docs/LEARNED_VELOCITY.md)) |
+| Accuracy, held-out EuRoC MH_05 + V2_03 + TUM-VI room6 | ATE 3.19 m vs 3.28 m standing still and 4.54 m for our original filter settings. The retuned filter without the network also reaches 3.19 m there, so the network's own share is not proven on held-out data ([details](docs/LEARNED_VELOCITY.md)) |
 | Bundle | `python tools/make_bundle.py <input>` writes `dist/CaliforniaBurrito.zip` with `metadata.json` |
 | Slides | [`deck/SRMIST_CaliforniaBurrito.pptx`](deck/SRMIST_CaliforniaBurrito.pptx) |
 

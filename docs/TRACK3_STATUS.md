@@ -40,6 +40,25 @@ stand still on held-out EuRoC and TUM-VI is the target; Debadrita's entry does i
 | Presentation | Done: `deck/SRMIST_CaliforniaBurrito.pptx` on Samsung's template (`python deck/build_track3_deck.py`) |
 | **Packaging (rest)** | **Not done**: the real `estimated_trajectory.txt` (needs the organisers' input file), video ≤ 3 min, repo made public/shared, Google Form |
 
+## Independent review (15 Nov, Raghav + an AI reviewer, read-only)
+
+Verdict: efficiency full marks, accuracy edge over standing still small but real (reproduced on MH_05 with evo: ATE
+6.75 vs 6.83 m). Estimated 62/100. Everything it reproduced is fixed, each with a regression test
+(`tests/stress/test_review_fixes.py`); output on real recordings is bit-identical to before:
+
+| Finding | Fix |
+|---|---|
+| Accelerometer reading zero at the start: every pose NaN | gravity only from readings that carry it; a reading with no gravity counts as bad; a step that turns NaN restores the last finite state |
+| `--extend-blind` lost when the file is exactly 200 rows | start-up replay records the last timestamp |
+| Bundle metadata reported 140 MB (it measured the compiler) | measures the estimator process alone (wait4): 2.08 MB |
+| Zip with 100k members: 9 MB | zip directory read one entry at a time: 2.2 MB |
+| "1 s RPE" counted 200 rows, position only | pairs chosen by time; renamed "1 s position drift", not evo's RPE |
+| README "physics only" comparison overstated the network | README says the retuned filter alone also reaches 3.19 m on held-out |
+
+**For the PPT pass (at the end):** slide 4 says "single pass, constant memory" (say "streamed, bounded memory, one
+short pre-scan"); slide 5 footnote "physics only = our filter without the network" (say "original filter settings",
+and that the retuned filter alone matches us on held-out); notes mention RPE (say "1 s position drift").
+
 ## Open issues
 
 #13-#19 (Mayank's stress findings, in the streaming tracker and live server, not the scored entry): all fixed in

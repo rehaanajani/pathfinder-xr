@@ -100,7 +100,7 @@ multi-IMU fault isolation, OpenXR-style flags.
 | 5 s prediction after IMU death (20 pts) | Motion-model extrapolation from the last trusted state (velocity / turn-rate decay, speed limit) |
 | Start with no ground truth, unknown gravity | Gravity and gyro bias from the first static period; world frame fixed by gravity |
 | Exact I/O, one pose per row, through dropouts | `src/main.py` streams the CSV and writes a pose for every row, bridging gaps |
-| ≤ 8 MB, ≤ 20 ms/s, 1 thread (40 pts) | Streaming, constant-memory design; C++ `src/main.cpp` port (Python itself exceeds 8 MB) |
+| ≤ 8 MB, ≤ 20 ms/s, 1 thread (40 pts) | Streamed, bounded-memory design (one short pre-scan for gyro bias); C++ `src/main.cpp` port (Python itself exceeds 8 MB) |
 | EuRoC data | Download IMU + ground truth for all 11 sequences |
 | Their degradation | `tools/degrade_imu.py` following the description until we get theirs |
 | Their scoring | `evo` ATE/RPE harness with waypoint, blind-5 s and dropout sub-scores |
