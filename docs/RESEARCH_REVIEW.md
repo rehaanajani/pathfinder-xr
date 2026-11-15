@@ -19,7 +19,7 @@ not touched.
 5. **Evaluate exactly like the scorer**: real `evo_ape` with the same alignment flags, per checkpoint, and the
    blind 5 s cut at many random times.
 
-Repos and papers as the reviewers cited them (links not yet checked by us): TLIO (arxiv.org/abs/2007.01867, github.com/CathIAS/TLIO), AirIO (arxiv.org/abs/2506.10607),
+Repos and papers as the reviewers cited them (links not yet checked by us): TLIO (arxiv.org/abs/2007.01867, github.com/CathIAS/TLIO), AirIO (arxiv.org/abs/2501.15659; the id 2506.10607 first given here is a different paper),
 AI-IMU (github.com/mbrossar/ai-imu-dr), gyro denoising (github.com/mbrossar/denoise-imu-gyro), TinyOdom
 (github.com/nesl/tinyodom, small TCNs for tight budgets), SSIO (arxiv.org/abs/2506.08016).
 

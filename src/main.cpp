@@ -75,6 +75,7 @@ struct Opt {
     double blind_vel_tau = 1.5, blind_turn_tau = 0.5;
     int model_every = 20; double model_min_valid = 0.25, model_ref = 0.1, model_vref = 1.0;
     double model_pos_gain = 0.0, model_vel_gain = 1.0; int model_window = 200, model_dec = 1;
+    std::string model_input = "world";
     double yaw_q = 0.0, yaw_q_blind = 2.0, model_blind_tau = 0.7, acc_max = 16 * G, gyro_max = 35.0, acc_min = 1.0;
 };
 
@@ -104,6 +105,7 @@ static void parse_args(int argc, char** argv, Opt& a) {
         {"model-ref", &a.model_ref, nullptr, nullptr}, {"model-vref", &a.model_vref, nullptr, nullptr},
         {"model-pos-gain", &a.model_pos_gain, nullptr, nullptr}, {"model-vel-gain", &a.model_vel_gain, nullptr, nullptr},
         {"model-window", nullptr, &a.model_window, nullptr}, {"model-dec", nullptr, &a.model_dec, nullptr},
+        {"model-input", nullptr, nullptr, &a.model_input},
         {"yaw-q", &a.yaw_q, nullptr, nullptr}, {"yaw-q-blind", &a.yaw_q_blind, nullptr, nullptr},
         {"model-blind-tau", &a.model_blind_tau, nullptr, nullptr}, {"acc-max", &a.acc_max, nullptr, nullptr}, {"acc-min", &a.acc_min, nullptr, nullptr},
         {"gyro-max", &a.gyro_max, nullptr, nullptr},
@@ -132,7 +134,7 @@ static void parse_args(int argc, char** argv, Opt& a) {
     if (!have_input) usage_exit("the input is required");
     if (a.model == "auto") {                    // default: velnet_weights.bin next to the program, if present
         std::string self = argv[0];
-        size_t sl = self.rfind('/');
+        size_t sl = self.find_last_of("/\\");
         std::string cand = (sl == std::string::npos ? std::string(".") : self.substr(0, sl)) + "/velnet_weights.bin";
         struct stat st;
         a.model = stat(cand.c_str(), &st) == 0 ? cand : "";
@@ -336,12 +338,13 @@ struct Conv { int cout, cin, k, stride, pad; std::vector<float> w, b; };
 struct Dense { int out, in; std::vector<float> w, b; };
 
 struct VelNet {
-    int window = 0, dec = 1, n_in = 0;
+    int version = 0, window = 0, dec = 1, n_in = 0;
     float rate = 0;
     std::vector<float> scale;
     std::vector<Conv> convs;
     std::vector<Dense> fcs;
-    std::vector<float> x, y;        // activation buffers, reused
+    std::vector<float> x, y, xp;    // activation buffers, reused
+    std::vector<double> acc;
 
     bool load(const std::string& path) {
         FILE* f = std::fopen(path.c_str(), "rb");
@@ -351,7 +354,7 @@ struct VelNet {
         auto f32 = [&](std::vector<float>& v, size_t n) { v.resize(n); ok &= std::fread(v.data(), 4, n, f) == n; };
         char magic[4];
         ok &= std::fread(magic, 1, 4, f) == 4 && std::memcmp(magic, "PFVN", 4) == 0;
-        i32();                      // version
+        version = i32();            // 2: gravity-aligned input; 3: body-frame input and outputs (AirIO style)
         window = i32(); dec = i32();
         std::vector<float> r; f32(r, 1); rate = ok ? r[0] : 0;
         n_in = i32();
@@ -380,21 +383,30 @@ struct VelNet {
         x = in;
         for (const Conv& c : convs) {
             int lout = (L + 2 * c.pad - c.k) / c.stride + 1;
+            // Zero-padded copy of the input, then accumulate with the output position innermost (vectorises).
+            // For every output the products are summed in the same order (ci, then k) as a direct loop would.
+            int Lp = L + 2 * c.pad;
+            xp.assign((size_t)c.cin * Lp, 0.0f);
+            for (int ci = 0; ci < c.cin; ci++)
+                std::memcpy(&xp[(size_t)ci * Lp + c.pad], &x[(size_t)ci * L], sizeof(float) * L);
+            acc.resize(lout);
             y.assign((size_t)c.cout * lout, 0.0f);
             for (int co = 0; co < c.cout; co++) {
                 const float* wc = &c.w[(size_t)co * c.cin * c.k];
-                for (int l = 0; l < lout; l++) {
-                    double s = 0;
-                    int base = l * c.stride - c.pad;
-                    for (int ci = 0; ci < c.cin; ci++) {
-                        const float* xr = &x[(size_t)ci * L];
-                        const float* wr = wc + (size_t)ci * c.k;
-                        for (int k = 0; k < c.k; k++) {
-                            int j = base + k;
-                            if (j >= 0 && j < L) s += (double)wr[k] * xr[j];
-                        }
+                std::fill(acc.begin(), acc.end(), 0.0);
+                double* ac = acc.data();
+                for (int ci = 0; ci < c.cin; ci++) {
+                    const float* xr = &xp[(size_t)ci * Lp];
+                    const float* wr = wc + (size_t)ci * c.k;
+                    for (int k = 0; k < c.k; k++) {
+                        double w = wr[k];
+                        const float* src = xr + k;
+                        if (c.stride == 2) for (int l = 0; l < lout; l++) ac[l] += w * src[2 * l];
+                        else for (int l = 0; l < lout; l++) ac[l] += w * src[l * c.stride];
                     }
-                    float v = (float)s + c.b[co];
+                }
+                for (int l = 0; l < lout; l++) {
+                    float v = (float)ac[l] + c.b[co];
                     y[(size_t)co * lout + l] = v > 0 ? v : 0.0f;
                 }
             }
@@ -422,8 +434,21 @@ struct VelNet {
     }
 };
 
+// Rotate m (per-axis std s) from the body frame into the world frame; s becomes sqrt(diag(R diag(s^2) R^T)).
+static void rot_cov(const Q& q, double m[3], double s[3]) {
+    V3 mw = qrot(q, {{m[0], m[1], m[2]}});
+    V3 c[3] = {qrot(q, {{1.0, 0.0, 0.0}}), qrot(q, {{0.0, 1.0, 0.0}}), qrot(q, {{0.0, 0.0, 1.0}})};
+    double sw[3];
+    for (int i = 0; i < 3; i++) {
+        double acc = 0;
+        for (int j = 0; j < 3; j++) acc += sq(c[j][i] * s[j]);
+        sw[i] = std::sqrt(acc);
+    }
+    for (int i = 0; i < 3; i++) { m[i] = mw[i]; s[i] = sw[i]; }
+}
+
 // ------------------------------------------------------------------------------------------------ the estimator
-struct Feat { bool has = false; double v[7]; };
+struct Feat { bool has = false; double v[10]; };   // world: 7 channels, body: 10 (see main.py push_slot)
 
 struct PathFinder {
     const Opt& A;
@@ -447,15 +472,18 @@ struct PathFinder {
     double v_blind_tau;
     bool ring_made = false;
     std::vector<Feat> ring; std::vector<V3> ring_p;
-    double bin[6]; int bin_n = 0, bin_k = 0; long long slots = 0;
+    bool body = false; int nb = 6;
+    double bin[9]; int bin_n = 0, bin_k = 0; long long slots = 0;
     int ring_i = 0, ring_valid = 0; long long since = 0;
     bool net_ok = false;
     V3 p_then{{0, 0, 0}};
     std::vector<float> xin;
 
     PathFinder(const Opt& a, VelNet* n) : A(a), net(n), W(a.model_window), dec(a.model_dec), v_blind_tau(a.blind_vel_tau) {
+        body = A.model_input == "body";
         if (net) {
             W = net->window; dec = net->dec;
+            body = net->version >= 3;
             if (A.model_blind_tau > 0) v_blind_tau = A.model_blind_tau;
         }
     }
@@ -556,6 +584,7 @@ struct PathFinder {
             bad_time = 0.0;
             yaw_var += A.yaw_q * dt;
             V3 w = {{g[0] - bg[0], g[1] - bg[1], g[2] - bg[2]}};
+            V3 w_raw = w;           // before the gravity correction (body-frame network input)
             V3 f = {{a[0] - ba[0], a[1] - ba[1], a[2] - ba[2]}};
             double fn = norm3(f);
             double boost = A.kp_boost > 0 ? A.kp_boost * std::exp(-good_time / A.kp_boost_tau) : 0.0;
@@ -603,7 +632,7 @@ struct PathFinder {
                 v[i] += acc_w[i] * dt;
             }
             w_last = w;
-            if (net && push_slot(&w, &f)) learned_update();
+            if (net && push_slot(body ? &w_raw : &w, &f)) learned_update();
             if (zero_velocity(g, a)) {
                 double k = std::min(1.0, dt / A.zupt_tau);
                 for (int i = 0; i < 3; i++) {
@@ -650,13 +679,21 @@ struct PathFinder {
     bool push_slot(const V3* w, const V3* f) {
         if (!ring_made) {
             ring.assign(W, Feat{}); ring_p.assign(W, V3{{0, 0, 0}});
+            nb = body ? 9 : 6;
             for (double& b : bin) b = 0.0;
             bin_n = bin_k = 0; slots = 0; ring_made = true;
         }
         if (w) {
-            V3 gw = qrot(q, *w), aw = qrot(q, *f);
-            bin[0] += gw[0]; bin[1] += gw[1]; bin[2] += gw[2];
-            bin[3] += aw[0]; bin[4] += aw[1]; bin[5] += aw[2] - G;
+            if (body) {             // body frame, gravity kept, plus our "up" seen from the body
+                V3 u = qrot({q.w, -q.x, -q.y, -q.z}, {{0.0, 0.0, 1.0}});
+                bin[0] += (*w)[0]; bin[1] += (*w)[1]; bin[2] += (*w)[2];
+                bin[3] += (*f)[0]; bin[4] += (*f)[1]; bin[5] += (*f)[2];
+                bin[6] += u[0]; bin[7] += u[1]; bin[8] += u[2];
+            } else {
+                V3 gw = qrot(q, *w), aw = qrot(q, *f);
+                bin[0] += gw[0]; bin[1] += gw[1]; bin[2] += gw[2];
+                bin[3] += aw[0]; bin[4] += aw[1]; bin[5] += aw[2] - G;
+            }
             bin_n++; since++;
         }
         bin_k++;
@@ -665,8 +702,8 @@ struct PathFinder {
         if (bin_n) {
             double n = bin_n;
             feat.has = true;
-            for (int i = 0; i < 6; i++) feat.v[i] = bin[i] / n;
-            feat.v[6] = n / dec;
+            for (int i = 0; i < nb; i++) feat.v[i] = bin[i] / n;
+            feat.v[nb] = n / dec;
         }
         for (double& b : bin) b = 0.0;
         bin_n = bin_k = 0;
@@ -690,9 +727,9 @@ struct PathFinder {
         for (int j = 0; j < W; j++) {
             const Feat& s = ring[(ring_i + j) % W];
             if (!s.has) continue;
-            for (int c = 0; c < ni && c < 7; c++) xin[(size_t)c * W + j] = (float)s.v[c];
+            for (int c = 0; c < ni && c < nb + 1; c++) xin[(size_t)c * W + j] = (float)s.v[c];
         }
-        for (int c = 0; c < 6 && c < ni - 1; c++)
+        for (int c = 0; c < nb && c < ni - 1; c++)
             for (int j = 0; j < W; j++) xin[(size_t)c * W + j] *= net->scale[c];
         float o[12];
         net->forward(xin, o);
@@ -701,6 +738,10 @@ struct PathFinder {
             d[i] = o[i]; vv[i] = o[6 + i];
             sd[i] = (double)std::exp(std::min(3.0f, std::max(-7.0f, o[3 + i])));
             sv[i] = (double)std::exp(std::min(3.0f, std::max(-7.0f, o[9 + i])));
+        }
+        if (body) {                 // body-frame outputs -> our world frame (diagonal covariance rotated)
+            rot_cov(q, d, sd);
+            rot_cov(q, vv, sv);
         }
         double k = std::exp(-0.5 * yaw_var);
         d[0] *= k; d[1] *= k; vv[0] *= k; vv[1] *= k;

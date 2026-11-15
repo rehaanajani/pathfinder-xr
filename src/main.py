@@ -20,8 +20,8 @@ Pipeline (single pass over the samples, single thread, standard library only):
   5. Dropouts and the final IMU failure: dead reckoning from the last trusted state — constant turn rate decaying
      to zero, velocity decaying with a time constant, never faster than the speed limit.
   6. Learned velocity (default when src/velnet_weights.bin is present, needs numpy; --model none turns it off): a
-     small learned network reads the last 1 s of
-     gravity-aligned IMU and its velocity is used as a measurement; this also switches the filter to the
+     small learned network reads the last 1 s of IMU (body frame with gravity kept plus our "up" direction,
+     docs/AIRIO.md; velnet_weights_world.bin: the earlier gravity-aligned input) and its velocity is used as a measurement; this also switches the filter to the
      "learned" preset (see PRESETS and docs/LEARNED_VELOCITY.md). --model none --preset physics is the original filter.
 """
 
@@ -144,11 +144,16 @@ class PathFinder:
         self.rec = None                           # tools/train_velocity.py sets a list here to record slots
         self.W, self.dec = a.model_window, a.model_dec
         self.v_blind_tau = a.blind_vel_tau
+        # Network input: "world" (weights version 2, 7 channels: gravity-aligned gyro, specific force minus g, health)
+        # or "body" (version 3, 10 channels, AirIO style: body-frame gyro and specific force with gravity kept, the
+        # gravity direction in the body frame from our own orientation, health; outputs in the body frame).
+        self.body = a.model_input == "body"
         if a.model:
             sys.path.insert(0, str(Path(__file__).resolve().parent))
             from velnet import VelNet
             self.net = VelNet(a.model)
             self.W, self.dec = self.net.window, self.net.dec
+            self.body = self.net.version >= 3
             if a.model_blind_tau > 0:
                 self.v_blind_tau = a.model_blind_tau
         self.ring = None
@@ -252,6 +257,7 @@ class PathFinder:
             self.bad_time = 0.0
             self.yaw_var += A.yaw_q * dt
             w = [g[0] - self.bg[0], g[1] - self.bg[1], g[2] - self.bg[2]]
+            w_raw = (w[0], w[1], w[2])            # bias-corrected gyro before the gravity correction (body input)
             f = (a[0] - self.ba[0], a[1] - self.ba[1], a[2] - self.ba[2])
             # Gravity correction (Mahony complementary filter): when the specific force is close to 1 g, pull the
             # estimated "down" toward the measured one and learn the gyro bias from the disagreement.
@@ -300,7 +306,7 @@ class PathFinder:
                 self.v[i] += acc_w[i] * dt
             self.w_last = w
             if self.net is not None or self.rec is not None:
-                if self.push_slot(t, w, f):
+                if self.push_slot(t, w_raw if self.body else w, f):
                     self.learned_update()
             if self.zero_velocity(g, a):
                 k = min(1.0, dt / A.zupt_tau)
@@ -349,14 +355,21 @@ class PathFinder:
         if self.ring is None:
             self.ring = [None] * W                # features per slot (None = empty)
             self.ring_p = [(0.0, 0.0, 0.0)] * W   # position when the slot was written
-            self.bin = [0.0] * 6
+            self.nb = 9 if self.body else 6
+            self.bin = [0.0] * self.nb
             self.bin_n = self.bin_k = 0
             self.slots = 0
         if w is not None:
-            gw, aw = qrot(self.q, w), qrot(self.q, f)
             b = self.bin
-            b[0] += gw[0]; b[1] += gw[1]; b[2] += gw[2]
-            b[3] += aw[0]; b[4] += aw[1]; b[5] += aw[2] - G
+            if self.body:                         # body frame, gravity kept, plus our "up" seen from the body
+                u = qrot((self.q[0], -self.q[1], -self.q[2], -self.q[3]), (0.0, 0.0, 1.0))
+                b[0] += w[0]; b[1] += w[1]; b[2] += w[2]
+                b[3] += f[0]; b[4] += f[1]; b[5] += f[2]
+                b[6] += u[0]; b[7] += u[1]; b[8] += u[2]
+            else:
+                gw, aw = qrot(self.q, w), qrot(self.q, f)
+                b[0] += gw[0]; b[1] += gw[1]; b[2] += gw[2]
+                b[3] += aw[0]; b[4] += aw[1]; b[5] += aw[2] - G
             self.bin_n += 1
             self.since += 1
         self.bin_k += 1
@@ -365,9 +378,8 @@ class PathFinder:
         feat = None
         if self.bin_n:
             n = self.bin_n
-            feat = (self.bin[0] / n, self.bin[1] / n, self.bin[2] / n, self.bin[3] / n, self.bin[4] / n,
-                    self.bin[5] / n, n / self.dec)
-        self.bin = [0.0] * 6
+            feat = tuple(x / n for x in self.bin) + (n / self.dec,)
+        self.bin = [0.0] * self.nb
         self.bin_n = self.bin_k = 0
         if self.ring[self.ring_i] is not None:
             self.ring_valid -= 1
@@ -396,6 +408,9 @@ class PathFinder:
             return                                # trained for one sample rate only: fall back to physics
         self.since = 0
         d, sd, v, sv = self.net.predict(self.ring, self.ring_i)
+        if self.body:                             # body-frame outputs -> our world frame (diagonal covariance rotated)
+            d, sd = rot_cov(self.q, d, sd)
+            v, sv = rot_cov(self.q, v, sv)
         # Heading is unobservable for an IMU: gyro drift and, above all, every dropout (the head keeps turning
         # while we see nothing) rotate our frame by an unknown yaw. With a heading error of variance s2 the best
         # estimate of a horizontal vector is the predicted one shrunk by E[cos] = exp(-s2 / 2).
@@ -412,6 +427,15 @@ class PathFinder:
     def pose(self):
         w, x, y, z = self.q
         return self.p[0], self.p[1], self.p[2], x, y, z, w
+
+
+def rot_cov(q, m, s):
+    """Rotate a vector m with independent per-axis std s from the body frame into the world frame; returns the
+    rotated vector and the per-axis world std (square root of the diagonal of R diag(s^2) R^T)."""
+    mw = qrot(q, m)
+    c = [qrot(q, e) for e in ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))]   # columns of R
+    sw = [math.sqrt(sum((c[j][i] * s[j]) ** 2 for j in range(3))) for i in range(3)]
+    return list(mw), sw
 
 
 def prescan_bias(inp, a):
@@ -552,6 +576,7 @@ def args(argv=None):
     ap.add_argument("--model-vel-gain", type=float, default=1.0)
     ap.add_argument("--model-window", type=int, default=200, help=argparse.SUPPRESS)   # taken from the weights file;
     ap.add_argument("--model-dec", type=int, default=1, help=argparse.SUPPRESS)        # only set when recording
+    ap.add_argument("--model-input", choices=["world", "body"], default="world", help=argparse.SUPPRESS)
     ap.add_argument("--yaw-q", type=float, default=0.0, help="rad^2/s; heading uncertainty growth on healthy data")
     ap.add_argument("--yaw-q-blind", type=float, default=2.0, help="rad^2/s; heading uncertainty growth in dropouts")
     ap.add_argument("--model-blind-tau", type=float, default=0.7,

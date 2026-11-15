@@ -49,9 +49,11 @@ appends 5 s of predicted poses after the last row.
 2. **Start without ground truth**: gravity direction and gyro bias come from the data (the first still stretch).
 3. **Strapdown integration** with gravity correction (complementary filter), gyro-bias learning, zero-velocity
    updates when still, residual-acceleration removal, a soft speed limit and a pull back toward the start point.
-4. **Learned velocity**: a 27,020-parameter 1-D CNN (`velnet_weights.bin`, 108 KB) reads the last second of
-   gravity-aligned IMU and predicts displacement and velocity with their uncertainty; these correct the filter,
-   weighted by that uncertainty. On by default; `--model none --preset physics` gives the physics-only filter.
+4. **Learned velocity**: a 42,716-parameter 1-D CNN (`velnet_weights.bin`, 171 KB) reads the last second of
+   body-frame IMU with gravity kept plus our own "up" direction (AirIO style, `docs/AIRIO.md`) and predicts
+   body-frame displacement and velocity with their uncertainty; rotated into the world frame, these correct the
+   filter, weighted by that uncertainty. On by default; `--model velnet_weights_world.bin` is the previous
+   gravity-aligned network, `--model none --preset physics` the physics-only filter.
 5. **Dropouts and IMU death**: dead reckoning from the last trusted state, with turn rate and velocity decaying.
 
 `main.py` is the commented reference; `main.cpp` is a line-by-line port (exact match without the network, within
@@ -63,5 +65,9 @@ appends 5 s of predicted poses after the last row.
 |---|---:|---:|
 | Peak RAM | 2.2 MB | 28 MB |
 | Time per second of IMU | 4 ms | 4.5 ms |
+
+These were measured with the earlier 27,020-parameter network. On a Windows laptop where that network takes 4.1 ms
+per second of IMU in C++, the AirIO network takes 6.0 ms, peak working set about 5.2 MB for both
+(`docs/AIRIO.md`); not yet re-measured on the M5.
 
 Options: `python3 src/main.py --help` lists them; the C++ entry accepts the same ones.
