@@ -35,17 +35,18 @@ stand still on held-out EuRoC and TUM-VI is the target; Debadrita's entry does i
 | Their degradation script | Stand-in `tools/degrade_imu.py`; organisers' script not received |
 | Their scoring | Done: `tools/score_track3.py` and Mayank's `evo`-based `tests/stress/track3_eval.py` |
 | Packaging (code) | Done: `src/Dockerfile`, `src/README.md`, `tools/make_bundle.py <input>` -> `dist/CaliforniaBurrito.zip` (trajectory + `metadata.json` + `src/`); CI builds the image and runs the contract tests on Linux |
-| **Packaging (rest)** | **Not done**: the real `estimated_trajectory.txt` (needs the organisers' input file), PPT `SRMIST_CaliforniaBurrito`, video ≤ 3 min, repo made public/shared, Google Form |
+| Presentation | Done: `deck/SRMIST_CaliforniaBurrito.pptx` on Samsung's template (`python deck/build_track3_deck.py`) |
+| **Packaging (rest)** | **Not done**: the real `estimated_trajectory.txt` (needs the organisers' input file), video ≤ 3 min, repo made public/shared, Google Form |
 
 ## Open issues
 
-#13-#19 (Mayank's stress findings) are in the streaming tracker and live server, the demo line, not the scored
-entry. Fix them when that line is reconciled with `main`.
+#13-#19 (Mayank's stress findings, in the streaming tracker and live server, not the scored entry): all fixed in
+PR #24 (on top of Mayank's #20), with his tests now passing.
 
 ## Next, in order
 
 1. Done: `src/main.cpp`. The network is now the default in both entries (`--model none` = old filter); with it the
    C++ entry beats stand still on MH_05 + room3 (ATE 3.81 vs 4.04 m, checkpoints 3.43 vs 3.68 m).
 2. Done: Dockerfile, bundle script, `src/README.md`, `metadata.json`, CI.
-3. PPT and video.
-4. Reconcile the demo line with `main`; fix #13-#19.
+3. Done: PPT. Left: video (needs a screen recording and a voice).
+4. Reconcile the demo line (#4-#11, #20, #24) with `main`.
