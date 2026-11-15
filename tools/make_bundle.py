@@ -13,7 +13,6 @@ import hashlib
 import json
 import os
 import platform
-import resource
 import subprocess
 import sys
 import time
@@ -55,14 +54,18 @@ def main():
     cmd = [str(SRC / "pathfinder"), a.input, "-o", str(traj)]
     if a.extend_blind > 0:
         cmd += ["--extend-blind", str(a.extend_blind)]
-    before = resource.getrusage(resource.RUSAGE_CHILDREN)
+    # Measure the estimator process alone (wait4 gives that one child's own usage; RUSAGE_CHILDREN would also
+    # count the compiler that make just ran).
     t0 = time.perf_counter()
-    subprocess.run(cmd, check=True)
+    proc = subprocess.Popen(cmd)
+    _, status, ru = os.wait4(proc.pid, 0)
     wall = time.perf_counter() - t0
-    ru = resource.getrusage(resource.RUSAGE_CHILDREN)
-    # ru_maxrss: bytes on macOS, kilobytes on Linux (max over children, and this is the only big child)
+    proc.returncode = os.waitstatus_to_exitcode(status)
+    if proc.returncode != 0:
+        raise SystemExit(f"the entry failed with exit code {proc.returncode}")
+    # ru_maxrss: bytes on macOS, kilobytes on Linux
     peak = ru.ru_maxrss if sys.platform == "darwin" else ru.ru_maxrss * 1024
-    cpu = (ru.ru_utime - before.ru_utime) + (ru.ru_stime - before.ru_stime)
+    cpu = ru.ru_utime + ru.ru_stime
 
     data = imu_csv(a.input)
     rows = [l for l in data.decode(errors="replace").splitlines() if l.strip() and l.strip()[0].isdigit()]
