@@ -160,6 +160,10 @@ def vo_only_trajectory(t, events):
     return {"t": t, "p": p, "q": q, "valid": valid, "P_pos": np.full((N, 3, 3), np.nan)}
 
 
+# Declared room1 split (data/exposure.json): calibration segment and within-recording hold-out.
+SEGMENTS = {"calibration_0_60": (0.0, 60.0), "heldout_60_end": (60.0, 1e9)}
+
+
 # ---------------------------------------------------------------------------------------------- one run
 def run_system(name, cfg, uses_camera, uses_model, imu_t, gyro, acc, events, predictor=None):
     """Runs one system; returns (outputs, diagnostics). Timing covers the estimator only; the front-end
@@ -219,7 +223,7 @@ def evaluate_scenario(scn, systems, fz, streams, ref, rig, predictor=None, front
             cfg, cam, mdl = cfgs[sysname]
         try:
             out, diag = run_system(sysname, cfg, cam, mdl, streams.imu_t, g, a, fe["events"], predictor)
-            res, series = scoring.score(out, ref, outage_list)
+            res, series = scoring.score(out, ref, outage_list, segments=SEGMENTS)
             status = "ok" if "failure" not in res else "no_valid_estimate"
         except Exception as exc:                 # retained as a harness failure, never dropped
             import traceback

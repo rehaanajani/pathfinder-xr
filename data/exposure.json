@@ -1,0 +1,39 @@
+{
+ "schema": "pathfinder.exposure/1",
+ "frozen_utc": "2026-11-15",
+ "protocol": "pathfinder.vision-protocol/1",
+ "method": "Exposure = any use of a recording (or its reference) in code, tuning, selection, published results or earlier PRs, found by grepping all fetched branches (main, fix/issue-1-estimator-correctness, issue-1-fixes, issue-2-real-vo, outage-speed-limit, monado-headsets, saturation-fix, streaming-api) and the committed results. A recording is 'untouched' only if no branch references it.",
+ "recordings": [
+  {"id": "tumvi/room1", "dataset": "TUM-VI 512x512 16-bit EuRoC export", "device": "TUM-VI handheld rig (2x uEye global shutter 20 Hz, BMI160 200 Hz)",
+   "motion": "handheld walking in mocap room", "duration_s": 141.0, "frames": 2821, "imu_samples": 28122, "mocap_samples": 16541,
+   "camera_model": "equidistant (Kalibr pinhole-equi)", "reference": "mocap 120 Hz, IMU-frame poses (verified: rate rotation 0.02 deg, offset 0.08 ms)",
+   "reference_max_gap_s": 1.06, "archive_sha256": "20354392eab5cc82c9770ed29cf0130c5acce0db54a257571499008fb34c398f",
+   "license": "CC BY 4.0 (TUM-VI; statement not re-fetched in this session)",
+   "exposure": ["main: real camera-health validation and camera_health_learned_room1.json", "PR #5/#7/#8 real-VO evaluations",
+                "this branch: sync measurement, VO calibration (0-60 s), all vision development runs"],
+   "role": "development", "local": "extracted and verified"},
+  {"id": "tumvi/room2", "dataset": "TUM-VI 512x512 16-bit EuRoC export", "device": "TUM-VI handheld rig",
+   "exposure": ["main: camera_health_learned_room2.json", "PR #5/#7/#8 real-VO evaluations (VO noise calibration and test clips)"],
+   "role": "development (previously exposed; not an untouched test)", "local": "download incomplete (~2 MB/min link)"},
+  {"id": "tumvi/room3", "exposure": [], "role": "reserved: final confirmation (untouched)", "local": "not downloaded (bandwidth)"},
+  {"id": "tumvi/room4", "exposure": [], "role": "reserved: final confirmation (untouched)", "local": "not downloaded (bandwidth)"},
+  {"id": "tumvi/room5", "exposure": [], "role": "reserved: final confirmation (untouched)", "local": "not downloaded (bandwidth)"},
+  {"id": "tumvi/room6", "exposure": [], "role": "reserved: final confirmation (untouched)", "local": "not downloaded (bandwidth)"},
+  {"id": "tumvi/corridor,magistrale,outdoors,slides", "exposure": [],
+   "role": "not usable for full-trajectory scoring (mocap only at start/end); endpoint-only study possible", "local": "not downloaded"},
+  {"id": "monado/MOO05,MOO07,MOO08,MOO09,MOO11,MIO08,MIO09,MIO11", "dataset": "Monado SLAM datasets (Valve Index: equidistant; Samsung Odyssey+: radtan8)",
+   "exposure": ["PR #7 monado-headsets and PR #8 saturation-fix evaluations"], "role": "development / exposed (cross-device)",
+   "license": "not verified in this session", "local": "not downloaded"},
+  {"id": "tlio/train", "exposure": ["models-v1 training (284 sequences)"], "role": "training", "license": "CC BY-NC 4.0"},
+  {"id": "tlio/val", "exposure": ["models-v1 checkpoint selection", "issue #1 development (first six records)"], "role": "validation / development",
+   "license": "CC BY-NC 4.0", "local": "six of 35 records extracted"},
+  {"id": "tlio/test", "exposure": ["main evaluate.py benchmark (36 sequences, published summary.json)"], "role": "exposed (previously reported)",
+   "license": "CC BY-NC 4.0"},
+  {"id": "phone-sessions-v1 (Galaxy M36)", "exposure": ["streaming-api branch live/replay demo"], "role": "demo only; ARCore pose is not ground truth"}
+ ],
+ "room1_internal_split": {
+  "calibration": [0.0, 60.0],
+  "development_evaluation": "full recording [0, 141] s; metrics also reported for the 60-141 s segment",
+  "note": "The 60-141 s segment is a within-recording hold-out: same scene, device, session and person. It is not an independent test subject."
+ }
+}

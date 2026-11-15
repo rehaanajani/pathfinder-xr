@@ -113,7 +113,7 @@ def stats(x):
 
 
 def score(out, ref, faults=(), rec_bound=0.10, rec_hold=2.0, rpe_deltas=(1.0, 10.0), max_gap=0.05,
-          jump_window=2.0):
+          jump_window=2.0, segments=None):
     """All metrics for one estimator output (dict of arrays with t, p, q, P_pos, valid)."""
     t = out["t"]
     gp, gq, sup = reference_at(ref.t, ref.p, ref.q, t, max_gap)
@@ -161,6 +161,13 @@ def score(out, ref, faults=(), rec_bound=0.10, rec_hold=2.0, rpe_deltas=(1.0, 10
     path = float(np.nansum(np.linalg.norm(np.diff(gp[sc], axis=0), axis=1))) if len(sc) > 1 else 0.0
     res["path_length_m"] = path
     res["final_drift_pct_of_path"] = 100 * res["start_se3"]["final_err"] / path if path > 0 else None
+    # Declared time segments (s since the first sample), e.g. calibration vs within-recording hold-out.
+    # Same alignment as the full run: the segment inherits the drift accumulated before it.
+    res["segments"] = {}
+    for name, (s0, s1) in (segments or {}).items():
+        w = scored & (rel >= s0) & (rel < s1)
+        res["segments"][name] = {"ate_all": stats(err[w]), "valid_fraction": float(valid[w].mean()) if w.any() else None,
+                                 "rot_deg_all": stats(rotation_error_deg(qa[w], gq[w])) if w.any() else {"n": 0}}
     fr = []
     for f in faults:
         inside = scored & (rel >= f["start"]) & (rel < f["end"])
