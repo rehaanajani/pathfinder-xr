@@ -58,6 +58,8 @@ class MainActivity : Activity(), SensorEventListener, GLSurfaceView.Renderer {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Keep the screen on: if the phone sleeps, wireless debugging and the laptop link drop.
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         gl = GLSurfaceView(this).apply {
             preserveEGLContextOnPause = true
             setEGLContextClientVersion(2)

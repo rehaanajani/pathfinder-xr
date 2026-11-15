@@ -70,15 +70,20 @@ class Live:
             self.sim = bool(msg.get("sim"))
             self._drain()
         elif k == "ar":
+            if self.last_ar is not None and msg["t"] == self.last_ar["t"]:
+                return                                   # same camera frame re-sent by the app
             p = Y_UP_TO_Z_UP.apply(np.array(msg["p"], float))
             q = (Y_UP_TO_Z_UP * R.from_quat(msg["q"])).as_quat()
             tracking = msg["s"] == "TRACKING"
             self.last_ar = {"t": msg["t"], "tracking": tracking, "reason": msg["r"], "n": msg.get("n", 0)}
             if tracking:
                 self.ar_pos = p
-                if not self.trk:
+                if not self.trk and self.g and self.a:
                     self._start(p, q)
-                    self.next_t = msg["t"]
+                    # Camera frames and IMU samples use different phone clocks (measured: ARCore
+                    # ~6.6 s ahead on a Galaxy M36). Fixes are applied on arrival, so the 200 Hz grid
+                    # starts on the IMU clock.
+                    self.next_t = min(max(t for t, _ in self.g), max(t for t, _ in self.a))
                 health = 1.0 if msg["r"] == "NONE" else 0.3
                 for t in self.trk.values():
                     t.push_camera_fix(p, health)
