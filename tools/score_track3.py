@@ -57,7 +57,7 @@ def score(est_path, gt_path, truth=None, input_csv=None):
         i, jj = np.flatnonzero(ok), j[ok]
         d_est = pa[jj] - pa[i]
         d_gt = pgi[jj] - pgi[i]
-        res["rpe_1s_m"] = float(np.sqrt(np.mean(np.sum((d_est - d_gt) ** 2, 1))))
+        res["position_drift_1s_m"] = float(np.sqrt(np.mean(np.sum((d_est - d_gt) ** 2, 1))))
     cps = np.linspace(0, t_fail, 12)[1:-1]
     res["checkpoints_m"] = float(np.mean([err[np.argmin(abs(rel - c))] for c in cps]))
     blind = ~mission

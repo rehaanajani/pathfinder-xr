@@ -63,7 +63,7 @@ def main():
             res = score(est, gt, json.load(open(d / "truth.json")), d / "imu0" / "data.csv")
             res.update(data=spec, seed=seed)
             rows.append(res)
-    keys = ["ate_rmse_m", "checkpoints_m", "blind_mean_m", "dropout_m", "rpe_1s_m"]
+    keys = ["ate_rmse_m", "checkpoints_m", "blind_mean_m", "dropout_m", "position_drift_1s_m"]
     print(f"{'recording':28s}" + "".join(f"{k[:-2]:>14s}" for k in keys) + "   rows-ok")
     for r in rows:
         print(f"{r['data'] + ' s' + str(r['seed']):28s}" + "".join(f"{r.get(k, float('nan')):14.2f}" for k in keys)
