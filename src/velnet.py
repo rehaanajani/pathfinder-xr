@@ -12,6 +12,9 @@ log-std (3). Input: (n_in, window): each of the `window` slots is the mean of `d
 (so the window spans window * dec / rate_hz seconds) of 6 gravity-aligned IMU channels (bias-corrected gyro, specific
 force minus gravity), each multiplied by its scale, plus the fraction of healthy samples in the slot; a slot with
 no healthy sample is all zero.
+Version 3 (AirIO-style input, arxiv 2501.15659): 10 input channels per slot in the IMU body frame: bias-corrected
+gyro, specific force with gravity kept, the unit "up" direction in the body frame from the estimator's own
+orientation, each scaled, plus the healthy fraction; the 12 outputs are then in the body frame at the window end.
 The C++ entry reads the same file and does the same arithmetic.
 """
 import struct
@@ -62,9 +65,9 @@ def load_bin(path):
             "convs": convs, "fcs": fcs}
 
 
-def save_bin(path, window, dec, rate, scale, convs, fcs):
+def save_bin(path, window, dec, rate, scale, convs, fcs, version=2):
     with open(path, "wb") as f:
-        f.write(b"PFVN" + struct.pack("<iii", 2, window, dec) + struct.pack("<f", rate))
+        f.write(b"PFVN" + struct.pack("<iii", version, window, dec) + struct.pack("<f", rate))
         f.write(struct.pack("<i", len(scale) + 1) + np.asarray(scale, "<f4").tobytes())
         f.write(struct.pack("<i", len(convs)))
         for w, b, stride, pad in convs:
@@ -79,6 +82,7 @@ class VelNet:
     def __init__(self, path):
         m = load_bin(path)
         self.window, self.dec, self.rate, self.scale = m["window"], m["dec"], m["rate"], m["scale"]
+        self.version, self.n_in = m["version"], m["n_in"]
         self.convs, self.fcs = m["convs"], m["fcs"]
         self.n_params = sum(w.size + b.size for w, b, *_ in self.convs) + sum(w.size + b.size for w, b in self.fcs)
         self.x = np.zeros((m["n_in"], self.window), np.float32)
@@ -95,7 +99,7 @@ class VelNet:
         return z
 
     def predict(self, ring, start):
-        """ring: list of `window` slots (7-tuple or None), oldest slot at index `start`.
+        """ring: list of `window` slots (n_in-tuple or None), oldest slot at index `start`.
         Returns displacement (3), its std (3), end velocity (3), its std (3) as Python floats."""
         x = self.x
         x[:] = 0
@@ -104,7 +108,7 @@ class VelNet:
             s = ring[(start + j) % W]
             if s is not None:
                 x[:, j] = s
-        x[:6] *= self.scale[:, None]
+        x[:-1] *= self.scale[:, None]
         o = self.forward(x)
         sd = np.exp(np.clip(o[3:6], -7, 3))
         sv = np.exp(np.clip(o[9:12], -7, 3))

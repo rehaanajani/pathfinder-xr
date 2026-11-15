@@ -15,3 +15,4 @@ deck/*.pdf
 .claude/
 runs/
 src/pathfinder
+src/pathfinder.exe
