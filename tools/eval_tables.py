@@ -19,7 +19,7 @@ def evo_tables(tag="eval"):
         out.append(f"| {n} | {m('ours','evo_ape_se3'):.2f} | {m('ours','evo_ape_sim3'):.2f} | {m('ours','evo_rpe_1s'):.2f} | "
                    f"{m('still','evo_ape_se3'):.2f} | {m('still','evo_ape_sim3'):.2f} | {m('still','evo_rpe_1s'):.2f} |")
     mm = lambda lab, k: np.mean([q[lab][k] for q in r])
-    out.append(f"| **mean (33 runs)** | **{mm('ours','evo_ape_se3'):.2f}** | **{mm('ours','evo_ape_sim3'):.2f}** | **{mm('ours','evo_rpe_1s'):.2f}** | "
+    out.append(f"| **mean ({len(r)} runs)** | **{mm('ours','evo_ape_se3'):.2f}** | **{mm('ours','evo_ape_sim3'):.2f}** | **{mm('ours','evo_rpe_1s'):.2f}** | "
                f"**{mm('still','evo_ape_se3'):.2f}** | **{mm('still','evo_ape_sim3'):.2f}** | **{mm('still','evo_rpe_1s'):.2f}** |")
     t1 = "\n".join(out)
     out = ["| recording | seed | evo ATE -a | score_track3 ATE | diff | evo RPE | score_track3 RPE | diff |", "|---|---:|---:|---:|---:|---:|---:|---:|"]
@@ -39,8 +39,8 @@ def evo_tables(tag="eval"):
     return t1, t2, wins, r
 
 
-def blind_table():
-    r = json.load(open(R / "blind" / "blind.json"))
+def blind_table(tag="blind"):
+    r = json.load(open(R / tag / "blind.json"))
     out = ["| recording | kills | ours abs (m) | still abs (m) | hold abs (m) | ours moved-since-kill err (m) | still/hold moved-since-kill err (m) | kills ours worse than still (abs) | worse than hold (rel) |",
            "|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for n in dict.fromkeys(x["data"] for x in r):

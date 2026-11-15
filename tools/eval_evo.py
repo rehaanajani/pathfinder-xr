@@ -7,7 +7,7 @@ Per recording and seed: degrade with tools/degrade_imu.py, run src/pathfinder (C
 baseline (--v-max 0.0000001), then run
     evo_ape tum gt est -a        (SE(3) alignment)
     evo_ape tum gt est -as       (Sim(3) alignment)
-    evo_rpe tum gt est -d 200 -u f   (translation RPE over 200 frames = 1 s at EuRoC's 200 Hz)
+    evo_rpe tum gt est -d N -u f   (translation RPE over N frames = 1 s; N = ground-truth rate: EuRoC 200, TUM-VI 120)
 and tools/score_track3.score on the same files. Writes runs/track3/<tag>/results.json.
 """
 import argparse
@@ -48,6 +48,13 @@ def gt_tum(name, out):
     np.savetxt(out, rows, fmt="%.9f")
 
 
+def gt_rate(gt_file):
+    """Frames per second of the TUM ground-truth file: `evo` pairs poses by the ground-truth timestamps, so a 1 s RPE
+    window is this many matched frames (EuRoC 200, TUM-VI mocap 120)."""
+    t = np.loadtxt(gt_file, usecols=0)
+    return int(round(1.0 / np.median(np.diff(t))))
+
+
 def evo(cmd, *args):
     r = subprocess.run([str(EVO_BIN / cmd), "tum", *args, "--t_max_diff", "0.01", "--no_warnings"],
                        capture_output=True, text=True)
@@ -81,7 +88,7 @@ def run_one(job):
         res["rows_out"] = sum(1 for ln in open(est) if ln.strip() and not ln.startswith("#"))
         res["evo_ape_se3"], e1 = evo("evo_ape", str(gt), str(est), "-a")
         res["evo_ape_sim3"], e2 = evo("evo_ape", str(gt), str(est), "-as")
-        res["evo_rpe_1s"], e3 = evo("evo_rpe", str(gt), str(est), "-d", "200", "-u", "f")
+        res["evo_rpe_1s"], e3 = evo("evo_rpe", str(gt), str(est), "-d", str(gt_rate(gt)), "-u", "f")
         if e1 or e2 or e3:
             res["evo_err"] = e1 or e2 or e3
         sc = score(est, gt_csv, truth, csv)
