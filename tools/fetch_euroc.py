@@ -7,6 +7,7 @@ zips of the full sequences (~25 GB with images). Range requests let us read just
 two small CSVs per sequence (a few MB in total). Licence: see the dataset page (research use, cite the paper).
 """
 import argparse
+import time
 import io
 import sys
 import urllib.error
@@ -132,7 +133,13 @@ def main():
             if (out / seq / WANT[0]).exists() and (out / seq / WANT[1]).exists():
                 print("have", seq, flush=True)
                 continue
-            stream_member(url, outer, info, out / seq)
+            for k in range(5):                                   # dropped connections: retry this sequence
+                try:
+                    stream_member(url, outer, info, out / seq)
+                    break
+                except Exception as e:                           # noqa: BLE001
+                    print(f"{seq}: {type(e).__name__}, retry {k + 1}", file=sys.stderr, flush=True)
+                    time.sleep(20 * (k + 1))
 
 
 def stream_member(url, outer, info, dst_root):
