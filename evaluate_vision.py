@@ -36,7 +36,7 @@ from pathfinder.vision_eval import (IMU_FAULT_KINDS, Frozen, evaluate_scenario, 
                                     imu_noise_from_config)
 from pathfinder.vision_frontend import _src_hash  # noqa: E402
 
-PROTOCOL = "pathfinder.vision-protocol/1"
+PROTOCOL = "pathfinder.vision-protocol/2"
 SYSTEMS = ("vo_only", "imu_only", "conventional", "pathfinder", "pathfinder_no_gate", "pathfinder_uncal_cov",
            "pathfinder_no_adaptive_q", "pathfinder_no_health", "pathfinder_model", "pathfinder_model_no_selfcheck",
            "pathfinder_model_biascorr")

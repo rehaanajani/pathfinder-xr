@@ -1,6 +1,17 @@
-# Real-vision evaluation protocol `pathfinder.vision-protocol/1`
+# Real-vision evaluation protocol `pathfinder.vision-protocol/2`
 
-Registered 2026-11-15, **before** the first evaluation run of this protocol (`evaluate_vision.py`).
+**Version history.** v1 was registered 2026-11-15 and evaluated once
+(`results/vision/20261115T165121Z-vision-room1-aaac9f1/`, retained unchanged). That run exposed an
+integration defect: with an IMU fault around an image outage, the 6-DoF gate rejected every later
+healthy VO update and Path Finder diverged (1,159 m, 6,848 m, and three random schedules above
+300 m). v2 changes the estimator and front end and nothing else: persistent-rejection
+recovery (`vo_reanchor`, hold-out 2 s while anchored, 1 s after an outage) and a stale-frame check.
+It then re-runs calibration (`calibration/vo_room1_v2.json`) and the identical scenario/system
+matrix. The v2 choices were made after seeing v1 results on the **development** recording room1, so
+v1 → v2 is development iteration, not confirmation. The untouched recordings (room3–6) were not used
+by either version.
+
+Registered 2026-11-15 (v1 before its evaluation run; v2 as described above).
 Calibration/selection runs that preceded it are listed in §6. Any change to a frozen item below needs a
 new protocol version; analysis added after the evaluation run is labelled *exploratory*.
 
@@ -24,8 +35,8 @@ camera, no multi-IMU hardware.
 | Reserved final confirmation | TUM-VI room3–room6 | Untouched by every branch. **Not available**: the dataset server delivered 2–6 KB/s per connection in this session. They must be evaluated with this frozen protocol, without re-tuning, before any confirmatory claim. |
 | Not usable for ATE | TUM-VI corridor/magistrale/outdoors/slides | Mocap only at start/end |
 
-Conventions verified on development data by `tools/check_sync.py` (run `…-check-sync-room1-db7015b`):
-mocap poses are IMU-frame poses on the IMU clock (best offset 0.08 ms; body-rate rotation 0.02°), the
+Conventions verified on development data by `tools/check_sync.py` (run `20261115T170934Z-check-sync-room1-797eb67`; the evaluation recorded the earlier run `…164518Z-check-sync-room1-db7015b`, whose camera offset is identical and whose mocap method was later corrected):
+mocap poses are IMU-frame poses on the IMU clock (best offset 0.11 ms; increment rotation 0.05°), the
 mocap frame is gravity aligned (mean specific force 0.42° from +z), and camera timestamps match the IMU
 clock (best offset 0.17 ms). The camchain has **no** `timeshift_cam_imu`; that absence is recorded as an
 assumption. Rule: a measured camera offset is applied only if it exceeds 1 ms (not the case).
@@ -53,8 +64,8 @@ covariance-weighted Gauss–Newton, calibrated equidistant model). Vision-only b
 
 ## 4. Frozen parameters and how they were chosen
 
-Selected by `tools/calibrate_vo.py` on room1 0–60 s and stored in `calibration/vo_room1_v1.json`
-(front-end source hash checked by the evaluator):
+Selected by `tools/calibrate_vo.py` on room1 0–60 s and stored in `calibration/vo_room1_v2.json`
+(v1: `vo_room1_v1.json`; front-end source hash checked by the evaluator):
 
 1. for each `kf_every ∈ {1, 2, 4}`: covariance scale from {0.25 … 32} by **reference-free** rule
    `argmin |log(mean VO NIS / 6)|`;
@@ -94,8 +105,8 @@ augmentation (torch seed 0, TLIO data); image faults and combinations do not.
 
 ## 7. Runs belonging to this protocol
 
-* calibration: `calibration/vo_room1_v1.json` (source run named inside)
-* sync: `results/runs/20261115T164518Z-check-sync-room1-db7015b/sync.json`
+* calibration: `calibration/vo_room1_v2.json` (v1: `vo_room1_v1.json`; source runs named inside)
+* sync: `results/runs/20261115T170934Z-check-sync-room1-797eb67/sync.json` (evaluation input: `…164518Z-check-sync-room1-db7015b`)
 * evaluation and report: see `results/vision/README.md`
 
 Superseded attempts are retained in `results/runs/` and listed in `results/vision/README.md`

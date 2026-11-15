@@ -62,6 +62,7 @@ def main(argv=None):
     ap.add_argument("run")
     ap.add_argument("--profile", default=None)
     ap.add_argument("--sync", default=None)
+    ap.add_argument("--model-shift", default=None, help="run dir of tools/model_shift.py")
     ap.add_argument("--out", default=None)
     a = ap.parse_args(argv)
     run = Path(a.run)
@@ -131,6 +132,9 @@ def main(argv=None):
                                                   for sy in systems}
     if a.profile:
         T["runtime"]["profile"] = json.loads((Path(a.profile) / "profile.json").read_text())
+    if a.model_shift:
+        T["model_shift"] = json.loads((Path(a.model_shift) / "model_shift.json").read_text())
+        T["model_shift"]["run"] = Path(a.model_shift).name
     (out / "tables.json").write_text(json.dumps(T, indent=1))
 
     # ------------------------------------------------------------------ figures

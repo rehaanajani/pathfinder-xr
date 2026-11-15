@@ -49,7 +49,7 @@ def imu_noise_from_config(path) -> dict:
 @dataclass
 class Frozen:
     """Selected parameters. Changing any value requires a new protocol version (docs/PROTOCOL.md)."""
-    protocol: str = "pathfinder.vision-protocol/1"
+    protocol: str = "pathfinder.vision-protocol/2"
     imu_noise: dict = field(default_factory=dict)        # from the dataset's imu_config.yaml
     vo_cov_scale: float = 1.0                            # selected on the calibration segment
     camera_time_offset_s: float = 0.0                    # applied only if measured |offset| > 1 ms

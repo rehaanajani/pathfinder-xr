@@ -34,7 +34,7 @@ certified.
 * **Initialisation** buffers `ReferenceFreeInit.duration_s` (3 s). Those samples are replayed and
   reported `TRACK_INITIALIZING`/invalid.
 * **Front-end latency.** VO results for a frame stamped `t` exist only after processing
-  (p50 ≈ 33 ms, p99 ≈ 88 ms on the profiled laptop; see the vision report). `StreamingEstimator`
+  (measured per stage by `tools/profile_pipeline.py`; numbers in the current vision report). `StreamingEstimator`
   rejects measurements older than its state (`cam_late`), so a live system wraps it in `LaggedStream`.
   The wrapper holds IMU samples until `camera_done(t_frame)` covers them, or until they are
   `max_lag_s` (default 0.15 s) behind the newest IMU sample. Each output carries `output_lag_s`. With

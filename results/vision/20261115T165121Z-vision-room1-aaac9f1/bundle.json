@@ -1,0 +1,29 @@
+{
+ "schema": "pathfinder.result-bundle/1",
+ "source_run": "20261115T165121Z-vision-room1-aaac9f1",
+ "source_status": "complete",
+ "source_sha256": {
+  "manifest.json": "5bade0a874e7a9dba069178e5a0b41d8b6387f270e2c47b2f062dc3d20eefdcf",
+  "protocol.json": "62607a30c8ca693e2f30539fe4de18032a2c0dfd48c97c6e1a4a3fc515a5a09c",
+  "rows.jsonl": "e5a166b1f313ecf5b6427fbee1c973bdaa4d749b1cdd4825dd45ca9f433fb81d",
+  "summary.json": "d32f34289ead10af78870d02e80824be2b24c20b27b2ddacc4024a852dd2283b",
+  "status.json": "ab81819f2a27a764ddd2f340a0ad30ba301e9056ddb4141b475ff6f231195ff0"
+ },
+ "protocol": "pathfinder.vision-protocol/1",
+ "code": {
+  "commit": "aaac9f11672796520e61c53289249db0d05bcb55",
+  "dirty": false,
+  "diff_sha256": null,
+  "branch": "issue-2-3-real-vision-repro"
+ },
+ "generator": "tools/vision_report.py",
+ "generator_sha256": "0300dd0dd7373e7d8f477c09ce8e036ca964dd97853af1db199bffbe96cf873d",
+ "profile_run": null,
+ "files": {
+  "REPORT.md": "8f4ff12a430aa0a20a9a03223e23a12f9074e852b4c60df3e922910b91717f83",
+  "source_manifest.json": "5bade0a874e7a9dba069178e5a0b41d8b6387f270e2c47b2f062dc3d20eefdcf",
+  "source_protocol.json": "62607a30c8ca693e2f30539fe4de18032a2c0dfd48c97c6e1a4a3fc515a5a09c",
+  "tables.json": "6a31b4ef78567ae85a6c142835c23e02123a527a6241ee68dff536d94ba790df"
+ },
+ "rows_jsonl_note": "rows.jsonl (full per-run metrics + 10 Hz series) stays in the source run directory; tables.json carries every reported number"
+}
