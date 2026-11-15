@@ -177,7 +177,10 @@ class PathFinder:
         self.prev_raw = raw
         if self.frozen_run >= 3:                  # bit-identical repeats: dropout held at the last value
             return False
-        if norm3(a) > self.a.acc_max or norm3(g) > self.a.gyro_max:
+        na = norm3(a)
+        if na > self.a.acc_max or norm3(g) > self.a.gyro_max:
+            return False
+        if na < self.a.acc_min:                   # no gravity at all: a dead accelerometer, not motion
             return False
         return True
 
@@ -186,7 +189,8 @@ class PathFinder:
         ma = [sum(b[1][i] for b in buf) / n for i in range(3)]
         mg = [sum(b[0][i] for b in buf) / n for i in range(3)]
         # Gravity alignment: rotate the measured specific force (body) onto +z (world).
-        self.q = q_from_two(tuple(c / norm3(ma) for c in ma), (0.0, 0.0, 1.0))
+        if norm3(ma) > 1e-6:                      # (healthy samples always carry gravity; guard anyway)
+            self.q = q_from_two(tuple(c / norm3(ma) for c in ma), (0.0, 0.0, 1.0))
         var_g = sum(sum((b[0][i] - mg[i]) ** 2 for i in range(3)) for b in buf) / n
         if var_g < self.a.still_gyro_var and not self.bias_known:   # still at start: the mean gyro is its bias
             self.bg = mg
@@ -229,6 +233,14 @@ class PathFinder:
         return mg < self.a.zupt_gyro and ma < self.a.zupt_acc
 
     def step(self, t, g, a, ok):
+        """Advance to time t; if anything turns non-finite, keep the last finite state (never emit NaN)."""
+        saved = (self.q, list(self.p), list(self.v), list(self.bg), tuple(self.w_last), list(self.acc_res))
+        self._step(t, g, a, ok)
+        if not all(math.isfinite(c) for c in (*self.q, *self.p, *self.v, *self.bg, *self.w_last, *self.acc_res)):
+            self.q, self.p, self.v, self.bg, self.w_last, self.acc_res = saved
+            self.v = [0.0, 0.0, 0.0]
+
+    def _step(self, t, g, a, ok):
         """Advance to time t with reading (g, a); ok=False means dead-reckon through this sample."""
         A = self.a
         if self.t_prev is None:
@@ -483,6 +495,7 @@ def run(inp, out, a, rec=None):
                         pf.step(tt, gg, aa, oo)
                         emit(tt)
                         n_out += 1
+                        last_t = tt
                     pending = []
                     pf.init_buf = []
                 continue
@@ -569,6 +582,7 @@ def args(argv=None):
     ap.add_argument("--model-blind-tau", type=float, default=0.7,
                     help="s; velocity decay during dropouts / the blind 5 s when the model is active (0: --blind-vel-tau)")
     ap.add_argument("--acc-max", type=float, default=16 * G)
+    ap.add_argument("--acc-min", type=float, default=1.0, help="m/s^2; a weaker reading has no gravity: unhealthy")
     ap.add_argument("--gyro-max", type=float, default=35.0)
     ap.add_argument("--preset", choices=sorted(PRESETS), default=None,
                     help="default values of the options below that depend on it: 'physics' (original filter) or "

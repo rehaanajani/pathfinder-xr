@@ -57,6 +57,11 @@ Columns: ATE (SE(3)-aligned RMSE), checkpoints, blind 5 s, dropouts, RPE over 1 
 
 All runs wrote exactly one pose per input row.
 
+Re-scored after merging `track3-entry` (review fixes and the scorer's new 1 s drift pairs, c568c21): ATE,
+checkpoints, blind 5 s and dropouts are unchanged to two decimals for both networks; the "RPE 1 s" column above is
+the old definition. With the new 1 s drift: validation 0.92 (old network) vs **0.81** (AirIO), held-out 0.76 vs
+**0.71**.
+
 **Window level** (end-velocity RMSE on validation windows, m/s; what the network alone does):
 
 | | AirIO 1 s | AirIO 2 s | old world-frame model | predict zero |

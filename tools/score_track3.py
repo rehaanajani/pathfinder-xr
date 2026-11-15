@@ -3,7 +3,7 @@
     python tools/score_track3.py <estimated_trajectory.txt> <ground-truth csv> [--truth truth.json] [--input imu csv]
 
 Ground truth: EuRoC state_groundtruth_estimate0/data.csv or TUM-VI mocap0/data.csv (#t_ns, p xyz, q wxyz, ...).
-Reports (metres): ATE RMSE after SE(3) alignment (as `evo_ape -a`), translational RPE over 1 s, and the three
+Reports (metres): ATE RMSE after SE(3) alignment (as `evo_ape -a`), 1 s position drift (time-based pairs; not evo's pose RPE), and the three
 closeness parts of the brief: checkpoints (10 evenly spaced mission times), the blind 5 s after IMU failure, and
 inside dropouts. Alignment is fitted on the mission part only (before the failure), so the blind 5 s is scored as a
 genuine prediction. Also checks the output contract (one pose per input row, seconds, unit quaternions).
@@ -47,11 +47,16 @@ def score(est_path, gt_path, truth=None, input_csv=None):
     err = np.linalg.norm(pa - pgi, axis=1)
     R2, t2 = umeyama(pe, pgi)
     res["ate_rmse_m"] = float(np.sqrt(np.mean(np.sum((pe @ R2.T + t2 - pgi) ** 2, 1))))
-    # RPE: translation error over 1 s windows (frame-independent)
-    k = int(round(1.0 / np.median(np.diff(te))))
-    if len(te) > k:
-        d_est = pa[k:] - pa[:-k]
-        d_gt = pgi[k:] - pgi[:-k]
+    # 1 s drift: error of the displacement over each 1 s interval (pairs chosen by TIME, so missing rows do not
+    # stretch the interval). Position only, in the aligned world frame: NOT evo's pose RPE, which compares
+    # relative poses in the body frame and includes rotation. Use evo_rpe for that number.
+    j = np.searchsorted(te, te + 1.0)
+    ok = j < len(te)
+    ok[ok] &= np.abs(te[j[ok]] - te[ok] - 1.0) < 0.05
+    if ok.any():
+        i, jj = np.flatnonzero(ok), j[ok]
+        d_est = pa[jj] - pa[i]
+        d_gt = pgi[jj] - pgi[i]
         res["rpe_1s_m"] = float(np.sqrt(np.mean(np.sum((d_est - d_gt) ** 2, 1))))
     cps = np.linspace(0, t_fail, 12)[1:-1]
     res["checkpoints_m"] = float(np.mean([err[np.argmin(abs(rel - c))] for c in cps]))
