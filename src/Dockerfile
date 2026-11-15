@@ -17,6 +17,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends zlib1g python3 
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /src/pathfinder /app/pathfinder
-COPY main.py velnet.py velnet_weights.bin /app/
+COPY main.py velnet.py velnet_weights.bin velnet_weights_world.bin /app/
 ENTRYPOINT ["/app/pathfinder"]
 CMD ["--help"]
