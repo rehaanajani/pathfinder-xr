@@ -19,6 +19,9 @@ Pipeline (single pass over the samples, single thread, standard library only):
      bias drift can't run the position away.
   5. Dropouts and the final IMU failure: dead reckoning from the last trusted state — constant turn rate decaying
      to zero, velocity decaying with a time constant, never faster than the speed limit.
+  6. Optional (--model src/velnet_weights.bin, needs numpy): a small learned network reads the last 1 s of
+     gravity-aligned IMU and its velocity is used as a measurement; this also switches the filter to the
+     "learned" preset (see PRESETS and docs/LEARNED_VELOCITY.md). Without --model nothing changes.
 """
 
 import argparse
@@ -125,17 +128,33 @@ class PathFinder:
         self.prev_raw = None
         self.frozen_run = 0
         self.still_g, self.still_a = [], []       # short sliding window for the zero-velocity detector
+        self.still_w, self.still_s, self.still_ss = [], [0.0] * 6, [0.0] * 6
         self.bad_time = 0.0                       # seconds since the last trusted sample
+        self.good_time = 1e9                      # seconds of healthy data since the last dropout
+        self.bias_known = False                   # gyro bias already taken from a still stretch (prescan)
+        self.f_lp = None                          # low-passed specific force (body frame)
+        self.yaw_var = 0.0                        # rad^2, how far our heading may have drifted since the start
         self.dt_nom = None
         self.acc_res = [0.0, 0.0, 0.0]            # slow world-frame residual acceleration (bias + tilt leak)
+        # Learned velocity model (optional). The last `window` time slots of gravity-aligned IMU are kept in a
+        # ring; a slot is all-zero (valid flag 0) for unhealthy or missing samples, so the window is always on a
+        # uniform time grid and the network can be called again shortly after a dropout.
         self.net = None
+        self.rec = None                           # tools/train_velocity.py sets a list here to record slots
+        self.W, self.dec = a.model_window, a.model_dec
+        self.v_blind_tau = a.blind_vel_tau
         if a.model:
-            from collections import deque
             sys.path.insert(0, str(Path(__file__).resolve().parent))
             from velnet import VelNet
             self.net = VelNet(a.model)
-            self.hist = deque(maxlen=201)         # (gravity-aligned gyro+acc, position) per healthy sample
-            self.since = 0
+            self.W, self.dec = self.net.window, self.net.dec
+            if a.model_blind_tau > 0:
+                self.v_blind_tau = a.model_blind_tau
+        self.ring = None
+        self.ring_i = 0                           # next slot to write
+        self.ring_valid = 0                       # valid slots currently in the window
+        self.since = 0
+        self.net_ok = False                       # the network has produced a velocity since the last long gap
 
     # -- health of one reading
     def healthy(self, g, a):
@@ -163,14 +182,36 @@ class PathFinder:
         # Gravity alignment: rotate the measured specific force (body) onto +z (world).
         self.q = q_from_two(tuple(c / norm3(ma) for c in ma), (0.0, 0.0, 1.0))
         var_g = sum(sum((b[0][i] - mg[i]) ** 2 for i in range(3)) for b in buf) / n
-        if var_g < self.a.still_gyro_var:         # still at start: the mean gyro is its bias
+        if var_g < self.a.still_gyro_var and not self.bias_known:   # still at start: the mean gyro is its bias
             self.bg = mg
         self.initialised = True
 
     def zero_velocity(self, g, a):
+        A = self.a
+        w = A.zupt_window
+        if A.zupt_gyro_std > 0:
+            # Still = the readings barely change (per-axis standard deviation over the window). Unlike a test on
+            # the gyro magnitude this also works when the gyro has a large constant bias, and the window mean is
+            # then exactly that bias.
+            x = g + a
+            self.still_w.append(x)
+            for i in range(6):
+                self.still_s[i] += x[i]
+                self.still_ss[i] += x[i] * x[i]
+            if len(self.still_w) > w:
+                y = self.still_w.pop(0)
+                for i in range(6):
+                    self.still_s[i] -= y[i]
+                    self.still_ss[i] -= y[i] * y[i]
+            if len(self.still_w) < w:
+                return False
+            var = [max(0.0, self.still_ss[i] / w - (self.still_s[i] / w) ** 2) for i in range(6)]
+            if max(var[:3]) < A.zupt_gyro_std ** 2 and max(var[3:]) < A.zupt_acc_std ** 2:
+                self.still_gyro = (self.still_s[0] / w, self.still_s[1] / w, self.still_s[2] / w)
+                return True
+            return False
         self.still_g.append(norm3(g))
         self.still_a.append(norm3(a) - G)
-        w = self.a.zupt_window
         if len(self.still_g) > w:
             self.still_g.pop(0)
             self.still_a.pop(0)
@@ -178,6 +219,7 @@ class PathFinder:
             return False
         mg = sum(self.still_g) / w
         ma = sum(abs(x) for x in self.still_a) / w
+        self.still_gyro = g
         return mg < self.a.zupt_gyro and ma < self.a.zupt_acc
 
     def step(self, t, g, a, ok):
@@ -195,21 +237,41 @@ class PathFinder:
         gap = dt > 3 * self.dt_nom
         if ok and not gap:
             self.bad_time = 0.0
+            self.yaw_var += A.yaw_q * dt
             w = [g[0] - self.bg[0], g[1] - self.bg[1], g[2] - self.bg[2]]
             f = (a[0] - self.ba[0], a[1] - self.ba[1], a[2] - self.ba[2])
             # Gravity correction (Mahony complementary filter): when the specific force is close to 1 g, pull the
             # estimated "down" toward the measured one and learn the gyro bias from the disagreement.
             fn = norm3(f)
-            if fn > 1e-6 and A.kp > 0:
+            # Right after a dropout the tilt is stale (the head kept turning while we saw nothing): for a short
+            # while follow the accelerometer much faster, then settle back to the slow, smooth correction.
+            boost = A.kp_boost * math.exp(-self.good_time / A.kp_boost_tau) if A.kp_boost > 0 else 0.0
+            fl = f
+            if A.tilt_lp > 0:                     # smooth out vibration before using gravity as a reference
+                if self.f_lp is None or self.good_time < dt:
+                    self.f_lp = f                 # (re)start after a dropout
+                else:
+                    kl = min(1.0, dt / A.tilt_lp)
+                    self.f_lp = tuple(self.f_lp[i] + kl * (f[i] - self.f_lp[i]) for i in range(3))
+                fl = self.f_lp
+                fn = norm3(fl)
+            self.good_time += dt
+            if fn > 1e-6 and A.kp + boost > 0:
                 trust = max(0.0, 1.0 - abs(fn - G) / A.tilt_acc_tol)
+                if boost > 0:
+                    trust = max(trust, 1.0 - abs(fn - G) / (3.0 * A.tilt_acc_tol), 0.0)
                 if trust > 0:
                     up_b = qrot((self.q[0], -self.q[1], -self.q[2], -self.q[3]), (0.0, 0.0, 1.0))
-                    fu = (f[0] / fn, f[1] / fn, f[2] / fn)
+                    fu = (fl[0] / fn, fl[1] / fn, fl[2] / fn)
                     e = (fu[1] * up_b[2] - fu[2] * up_b[1], fu[2] * up_b[0] - fu[0] * up_b[2],
                          fu[0] * up_b[1] - fu[1] * up_b[0])
+                    tb = trust
+                    if A.ki_calm > 0:             # learn the gyro bias only in calm moments (slow turn, ~1 g):
+                        wn = norm3(w)             # fast hand motion would otherwise leak into the bias
+                        tb = max(0.0, 1.0 - abs(fn - G) / (A.tilt_acc_tol / 3.0)) * max(0.0, 1.0 - wn / A.ki_calm)
                     for i in range(3):
-                        w[i] += A.kp * trust * e[i]
-                        self.bg[i] -= A.ki * trust * e[i] * dt
+                        w[i] += (A.kp + boost) * trust * e[i]
+                        self.bg[i] -= A.ki * tb * e[i] * dt
             q_mid = qnorm(qmul(self.q, qexp((0.5 * w[0] * dt, 0.5 * w[1] * dt, 0.5 * w[2] * dt))))
             acc_w = qrot(q_mid, f)
             acc_w = [acc_w[0], acc_w[1], acc_w[2] - G]
@@ -224,65 +286,153 @@ class PathFinder:
                 self.p[i] += self.v[i] * dt + 0.5 * acc_w[i] * dt * dt
                 self.v[i] += acc_w[i] * dt
             self.w_last = w
-            if self.net is not None:
-                self.learned_update(g, a)
+            if self.net is not None or self.rec is not None:
+                if self.push_slot(t, w, f):
+                    self.learned_update()
             if self.zero_velocity(g, a):
                 k = min(1.0, dt / A.zupt_tau)
                 for i in range(3):
                     self.v[i] *= 1.0 - k
-                    self.bg[i] += A.bias_rate * dt * (g[i] - self.bg[i])
+                    self.bg[i] += min(1.0, A.bias_rate * dt) * (self.still_gyro[i] - self.bg[i])
             leak = A.leak
         else:
             # Dead reckoning (dropout or failed IMU): turn rate and velocity decay, position keeps moving.
             self.bad_time += dt
+            self.yaw_var += A.yaw_q_blind * dt
+            if self.bad_time > 0.25:
+                self.good_time = 0.0
             dk = math.exp(-dt / A.blind_turn_tau)
             self.w_last = tuple(c * dk for c in self.w_last)
             w = self.w_last
             self.q = qnorm(qmul(self.q, qexp((w[0] * dt, w[1] * dt, w[2] * dt))))
-            vk = math.exp(-dt / A.blind_vel_tau)
+            vk = math.exp(-dt / (self.v_blind_tau if self.net_ok else A.blind_vel_tau))
             for i in range(3):
                 self.p[i] += self.v[i] * dt
                 self.v[i] *= vk
             leak = 0.0
-            if self.net is not None:
-                self.hist.clear()                    # a window must be continuous, healthy data
+            if self.net is not None or self.rec is not None:
+                n = max(1, int(round(dt / self.dt_nom))) if self.dt_nom else 1
+                for j in range(min(n, self.W * self.dec)):   # one empty period per missing / unusable sample
+                    self.push_slot(t - int((n - 1 - j) * self.dt_nom * 1e9), None, None)
         # Drift control: soft speed limit and a small velocity leak (mean-reverting velocity).
         if leak > 0:
             k = min(1.0, leak * dt)
             for i in range(3):
                 self.v[i] *= 1.0 - k
+        if A.pos_tau > 0:                         # bounded-space prior: position slowly reverts to the start point
+            k = min(1.0, dt / A.pos_tau)
+            for i in range(3):
+                self.p[i] *= 1.0 - k
         sp = norm3(self.v)
         if sp > A.v_max:
             s = A.v_max / sp
             self.v = [c * s for c in self.v]
 
-    def learned_update(self, g, a):
-        """Every 0.1 s: the network predicts how far we moved in the last 1 s; correct p and v toward it."""
+    def push_slot(self, t, w, f):
+        """Feed one sample period to the network window (w, f = bias-corrected gyro and specific force, or None for
+        an unhealthy / missing sample). `dec` periods are averaged into one slot: gravity-aligned gyro, specific
+        force minus g, and the fraction of healthy samples; a slot with no healthy sample is empty (None)."""
+        W = self.W
+        if self.ring is None:
+            self.ring = [None] * W                # features per slot (None = empty)
+            self.ring_p = [(0.0, 0.0, 0.0)] * W   # position when the slot was written
+            self.bin = [0.0] * 6
+            self.bin_n = self.bin_k = 0
+            self.slots = 0
+        if w is not None:
+            gw, aw = qrot(self.q, w), qrot(self.q, f)
+            b = self.bin
+            b[0] += gw[0]; b[1] += gw[1]; b[2] += gw[2]
+            b[3] += aw[0]; b[4] += aw[1]; b[5] += aw[2] - G
+            self.bin_n += 1
+            self.since += 1
+        self.bin_k += 1
+        if self.bin_k < self.dec:
+            return False
+        feat = None
+        if self.bin_n:
+            n = self.bin_n
+            feat = (self.bin[0] / n, self.bin[1] / n, self.bin[2] / n, self.bin[3] / n, self.bin[4] / n,
+                    self.bin[5] / n, n / self.dec)
+        self.bin = [0.0] * 6
+        self.bin_n = self.bin_k = 0
+        if self.ring[self.ring_i] is not None:
+            self.ring_valid -= 1
+        if feat is not None:
+            self.ring_valid += 1
+        self.p_then = self.ring_p[self.ring_i]    # position W slots ago (start of the window)
+        self.ring[self.ring_i] = feat
+        self.ring_p[self.ring_i] = (self.p[0], self.p[1], self.p[2])
+        self.ring_i = (self.ring_i + 1) % W
+        self.slots += 1
+        if self.rec is not None:
+            self.rec.append((t, self.q, feat))
+        return feat is not None
+
+    def learned_update(self):
+        """Every `model_every` healthy samples the network reads the window and returns the displacement over it
+        and the velocity at its end (both in our gravity-aligned frame) with their standard deviations. They are
+        used as measurements: position is pulled toward (position one window ago + displacement), velocity toward
+        the predicted velocity, each weighted by the network's own confidence."""
         A = self.a
-        gw, aw = qrot(self.q, g), qrot(self.q, a)
-        self.hist.append((gw + aw, tuple(self.p)))
-        self.since += 1
-        if len(self.hist) < 201 or self.since < A.model_every:
+        if self.net is None or self.since < A.model_every:
             return
+        if self.slots < self.W or self.ring_valid < A.model_min_valid * self.W:
+            return
+        if self.dt_nom is None or abs(self.dt_nom * self.net.rate - 1.0) > 0.15:
+            return                                # trained for one sample rate only: fall back to physics
         self.since = 0
-        import numpy as np
-        win = np.array([h[0] for h in list(self.hist)[1:]], np.float32).T          # (6, 200)
-        d, std = self.net(win)
-        p_then = self.hist[0][1]
-        k = 0
+        d, sd, v, sv = self.net.predict(self.ring, self.ring_i)
+        # Heading is unobservable for an IMU: gyro drift and, above all, every dropout (the head keeps turning
+        # while we see nothing) rotate our frame by an unknown yaw. With a heading error of variance s2 the best
+        # estimate of a horizontal vector is the predicted one shrunk by E[cos] = exp(-s2 / 2).
+        k = math.exp(-0.5 * self.yaw_var)
+        d = [d[0] * k, d[1] * k, d[2]]
+        v = [v[0] * k, v[1] * k, v[2]]
         for i in range(3):
-            e = float(d[i]) - (self.p[i] - p_then[i])
-            gain = A.model_ref ** 2 / (A.model_ref ** 2 + float(std[i]) ** 2)
-            self.p[i] += A.model_pos_gain * gain * e
-            self.v[i] += A.model_vel_gain * gain * e
+            gp = A.model_pos_gain * A.model_ref ** 2 / (A.model_ref ** 2 + sd[i] ** 2)
+            gv = A.model_vel_gain * A.model_vref ** 2 / (A.model_vref ** 2 + sv[i] ** 2)
+            self.p[i] += gp * (self.p_then[i] + d[i] - self.p[i])
+            self.v[i] += gv * (v[i] - self.v[i])
+        self.net_ok = True
 
     def pose(self):
         w, x, y, z = self.q
         return self.p[0], self.p[1], self.p[2], x, y, z, w
 
 
-def run(inp, out, a):
+def prescan_bias(inp, a):
+    """First pass over the start of the file: gyro bias = mean gyro of the first still stretch (>= 0.5 s).
+
+    The gyro bias about the vertical cannot be seen from gravity, and a recording does not have to begin at rest
+    (EuRoC: the drone is carried around first, then put down). Left uncorrected the heading drifts by degrees per
+    second from the first sample on. Reads at most --prescan seconds, keeps a handful of numbers."""
     pf = PathFinder(a)
+    acc_sum, n_still, t0 = [0.0, 0.0, 0.0], 0, None
+    with open_csv(inp) as f:
+        for t, g, acc in parse_rows(f):
+            t0 = t if t0 is None else t0
+            if (t - t0) * 1e-9 > a.prescan:
+                break
+            if pf.healthy(g, acc) and pf.zero_velocity(g, acc):
+                for i in range(3):
+                    acc_sum[i] += pf.still_gyro[i]
+                n_still += 1
+            elif n_still >= 100:
+                break                              # the first still stretch has ended
+            else:
+                acc_sum, n_still = [0.0, 0.0, 0.0], 0
+    return [c / n_still for c in acc_sum] if n_still >= 100 else None
+
+
+def run(inp, out, a, rec=None):
+    pf = PathFinder(a)
+    if a.prescan > 0 and a.zupt_gyro_std > 0:
+        bias = prescan_bias(inp, a)
+        if bias is not None:
+            pf.bg = bias
+            pf.bias_known = True
+    pf.rec = rec                                   # optional slot recorder (training data preparation)
     n_out = 0
     last_t = None
     pending = []                                   # rows seen before initialisation
@@ -333,6 +483,16 @@ def run(inp, out, a):
     return n_out
 
 
+# Option defaults. "physics" is the filter as first submitted; "learned" was chosen on the validation recordings
+# (docs/LEARNED_VELOCITY.md) for use with the velocity network, whose input is rotated with this orientation.
+PRESETS = {
+    "physics": {"kp": 1.0, "ki": 0.02, "kp_boost": 0.0, "tilt_lp": 0.0, "ki_calm": 0.0, "zupt_gyro_std": 0.0, "bias_rate": 0.2,
+                "prescan": 0.0, "pos_tau": 0.0},
+    "learned": {"kp": 0.3, "ki": 0.1, "kp_boost": 10.0, "tilt_lp": 0.1, "ki_calm": 0.5, "zupt_gyro_std": 0.01, "bias_rate": 3.0,
+                "prescan": 60.0, "pos_tau": 3.0},
+}
+
+
 def args(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("input")
@@ -345,23 +505,51 @@ def args(argv=None):
     ap.add_argument("--zupt-gyro", type=float, default=0.04)
     ap.add_argument("--zupt-acc", type=float, default=0.15)
     ap.add_argument("--zupt-tau", type=float, default=0.05)
-    ap.add_argument("--bias-rate", type=float, default=0.2)
+    ap.add_argument("--zupt-gyro-std", type=float, default=None,
+                    help="rad/s; if > 0, 'still' means per-axis gyro std below this (and --zupt-acc-std)")
+    ap.add_argument("--zupt-acc-std", type=float, default=0.15)
+    ap.add_argument("--prescan", type=float, default=None,
+                    help="s; look this far ahead for the first still stretch to get the gyro bias (0 = off)")
+    ap.add_argument("--bias-rate", type=float, default=None, help="1/s; how fast gyro bias follows the still-period mean")
     ap.add_argument("--leak", type=float, default=1.0, help="velocity mean reversion rate (1/s) on healthy data")
-    ap.add_argument("--kp", type=float, default=1.0, help="gravity-correction gain (1/s)")
-    ap.add_argument("--ki", type=float, default=0.02, help="gyro-bias learning gain from gravity correction")
+    ap.add_argument("--kp", type=float, default=None, help="gravity-correction gain (1/s)")
+    ap.add_argument("--ki", type=float, default=None, help="gyro-bias learning gain from gravity correction")
+    ap.add_argument("--kp-boost", type=float, default=None, help="extra gravity-correction gain right after a dropout")
+    ap.add_argument("--ki-calm", type=float, default=None,
+                    help="rad/s; learn gyro bias from gravity only below this turn rate (0 = always)")
+    ap.add_argument("--tilt-lp", type=float, default=None,
+                    help="s; low-pass on the specific force used for gravity correction (0 = off)")
+    ap.add_argument("--kp-boost-tau", type=float, default=0.7, help="s; how fast that extra gain fades")
     ap.add_argument("--tilt-acc-tol", type=float, default=1.5, help="m/s^2 from 1 g where gravity is still trusted")
     ap.add_argument("--acc-res-tau", type=float, default=10.0, help="s; 0 disables residual-acceleration removal")
     ap.add_argument("--v-max", type=float, default=3.0)
+    ap.add_argument("--pos-tau", type=float, default=None,
+                    help="s; time constant of the pull of position back to the start point (0 = off)")
     ap.add_argument("--blind-vel-tau", type=float, default=1.5)
     ap.add_argument("--blind-turn-tau", type=float, default=0.5)
-    ap.add_argument("--model", default=None, help="weights.npz of the learned displacement network (numpy)")
-    ap.add_argument("--model-every", type=int, default=20, help="samples between network updates")
-    ap.add_argument("--model-ref", type=float, default=0.1, help="m; network std at which its gain is 0.5")
-    ap.add_argument("--model-pos-gain", type=float, default=0.3)
-    ap.add_argument("--model-vel-gain", type=float, default=0.5)
+    ap.add_argument("--model", default=None, help="weights.bin of the learned velocity network (src/velnet.py)")
+    ap.add_argument("--model-every", type=int, default=20, help="healthy samples between network updates")
+    ap.add_argument("--model-min-valid", type=float, default=0.25, help="fraction of the window that must be healthy")
+    ap.add_argument("--model-ref", type=float, default=0.1, help="m; displacement std at which the position gain halves")
+    ap.add_argument("--model-vref", type=float, default=1.0, help="m/s; velocity std at which the velocity gain halves")
+    ap.add_argument("--model-pos-gain", type=float, default=0.0)
+    ap.add_argument("--model-vel-gain", type=float, default=1.0)
+    ap.add_argument("--model-window", type=int, default=200, help=argparse.SUPPRESS)   # taken from the weights file;
+    ap.add_argument("--model-dec", type=int, default=1, help=argparse.SUPPRESS)        # only set when recording
+    ap.add_argument("--yaw-q", type=float, default=0.0, help="rad^2/s; heading uncertainty growth on healthy data")
+    ap.add_argument("--yaw-q-blind", type=float, default=2.0, help="rad^2/s; heading uncertainty growth in dropouts")
+    ap.add_argument("--model-blind-tau", type=float, default=0.7,
+                    help="s; velocity decay during dropouts / the blind 5 s when the model is active (0: --blind-vel-tau)")
     ap.add_argument("--acc-max", type=float, default=16 * G)
     ap.add_argument("--gyro-max", type=float, default=35.0)
-    return ap.parse_args(argv)
+    ap.add_argument("--preset", choices=sorted(PRESETS), default=None,
+                    help="default values of the options below that depend on it: 'physics' (original filter) or "
+                         "'learned' (retuned for the velocity network; the default when --model is given)")
+    a = ap.parse_args(argv)
+    for k, v in PRESETS[a.preset or ("learned" if a.model else "physics")].items():
+        if getattr(a, k) is None:
+            setattr(a, k, v)
+    return a
 
 
 def main(argv=None):
