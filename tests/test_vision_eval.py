@@ -54,11 +54,25 @@ def test_landmarks_anchor_on_left_ray_so_zero_motion_has_no_bias():
     rig_true, rig_cal = _rig(true), _rig()
     vo = StereoVO(rig_cal)
     a, b = _pair(rig_true, _pose(0))
-    ev = vo.step(0.0, a, b) + vo.step(0.05, a, b)
+    rng = np.random.default_rng(0)
+    noisy = lambda img: np.clip(img + rng.normal(0, 0.8, img.shape), 0, 255).astype(np.uint8)  # noqa: E731
+    ev = vo.step(0.0, a, b) + vo.step(0.05, noisy(a), noisy(b))      # same view, new sensor noise
     rel = [e for e in ev if e["kind"] == "rel"]
     assert len(rel) == 1
-    assert np.rad2deg(np.linalg.norm(Rot.from_matrix(rel[0]["dR"]).as_rotvec())) < 0.005
-    assert np.linalg.norm(rel[0]["dp"]) < 1e-4
+    assert np.rad2deg(np.linalg.norm(Rot.from_matrix(rel[0]["dR"]).as_rotvec())) < 0.01
+    assert np.linalg.norm(rel[0]["dp"]) < 5e-4
+
+
+def test_bit_identical_frame_is_stale_not_zero_motion():
+    rig = _rig()
+    vo = StereoVO(rig)
+    a, b = _pair(rig, _pose(0))
+    a1, b1 = _pair(rig, _pose(1))
+    assert [e["kind"] for e in vo.step(0.0, a, b)] == ["kf"]
+    assert vo.step(0.05, a.copy(), b.copy()) == []                    # frozen stream: dropped
+    assert vo.stats["stale"] == 1
+    kinds = [e["kind"] for e in vo.step(0.10, a1, b1)]
+    assert kinds == ["rel", "kf"]                                     # tracking resumes from the last real frame
 
 
 def test_keyframe_interval_solves_against_the_keyframe():

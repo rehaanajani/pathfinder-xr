@@ -417,7 +417,8 @@ class StreamingEstimator:
                 log.vo_keyframes += 1
             else:
                 kf, dp, dR, cov6, health = payload
-                f.relative_pose_update(("cam", kf), dp, dR, cov6, health, log, tc)
+                if f.relative_pose_update(("cam", kf), dp, dR, cov6, health, log, tc) == "reanchored":
+                    reasons |= REASONS["CAMERA_REANCHORED"]
         self._advance(t)
         if self.gap_flag:
             reasons |= REASONS["IMU_GAP"]

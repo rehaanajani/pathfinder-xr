@@ -174,3 +174,38 @@ def test_relative_mode_rejects_absolute_fixes_and_mixing():
     log = FilterLog()
     f = _random_state()
     assert f.relative_pose_update(("cam", 1), np.zeros(3), np.eye(3) * 2, np.eye(6), 1.0, log) == "invalid"
+
+
+def _bias_after_outage(seq, reanchor):
+    """Accelerometer bias step during a 5 s VO outage (as in the room1 'blackout + IMU bias' scenario),
+    with the small datasheet-style IMU noise used for TUM-VI, so the gate rejects VO after the outage."""
+    acc = seq.acc[0].copy()
+    acc[seq.t >= 12.0] += np.array([0.3, -0.2, 0.15])
+    ev = vo_fixture(seq, drop=[(12.0, 17.0)])
+    cfg = FilterConfig(vo_reanchor=reanchor, sigma_g=0.00016, sigma_a=0.0028, sigma_bg=2.2e-5, sigma_ba=8.6e-4)
+    return replay(seq.t, seq.gyro[0], acc, cfg, ReferenceFreeInit(), vision=ev)
+
+
+def test_persistent_healthy_vo_after_an_outage_reanchors_a_diverged_inertial_state():
+    seq = synthetic.head_walk(35, seed=6)
+    _, log, out = _bias_after_outage(seq, True)
+    _, log_off, out_off = _bias_after_outage(seq, False)
+    e, i0 = _start_frame_error(seq, out)
+    e_off, _ = _start_frame_error(seq, out_off)
+    assert log.vo_reanchored >= 1 and log_off.vo_reanchored == 0
+    first = min(t for t, kind, _ in log.events if kind == "vo_reanchored")
+    assert 17.0 < first < 19.5                         # after the outage: inertial state suspect after ~1 s
+    late = seq.t > 25
+    assert np.nanmax(e[late]) < 0.5 * np.nanmax(e_off[late])
+    assert log_off.vo_rejected > 10 * log.vo_rejected   # without recovery every later VO update is rejected
+    k = np.searchsorted(out["t"], first)
+    assert out["reasons"][k] & REASONS["CAMERA_REANCHORED"]
+
+
+def test_wrong_vo_while_anchored_is_held_out_not_reanchored():
+    # Shorter than vo_recover_after_jump_s (2 s): rejected, never re-anchored. A wrong but healthy-looking
+    # relative stream that persists beyond the hold-out IS eventually accepted: with one camera and one
+    # IMU that case is indistinguishable from an inertial fault (documented restriction).
+    seq = synthetic.head_walk(30, seed=7)
+    _, log, out = _run(seq, vo_fixture(seq, wrong=[(15.0, 16.8)]))
+    assert log.vo_reanchored == 0 and log.vo_rejected >= 30

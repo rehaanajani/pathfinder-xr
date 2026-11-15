@@ -44,6 +44,7 @@ class VOConfig:
     max_trans_m: float = 0.5     # ... and translations (5 m/s at 10 Hz); both per tracked frame
     kf_every: int = 1            # frames tracked against one keyframe before the next relative solve
     kf_min_track_ratio: float = 0.5   # ... or earlier, when fewer than this fraction of its tracks survive
+    stale_mad: float = 0.25      # mean |difference| (grey levels) below which a frame repeats the last one
 
 
 def _se3(R, t):
@@ -64,7 +65,9 @@ class StereoVO:
         #  landmarks at the keyframe, frames since the keyframe)
         self.prev = None
         self.kf_id = 0
-        self.stats = {"frames": 0, "rel": 0, "fail_track": 0, "fail_pnp": 0, "fail_stereo": 0, "fail_motion": 0}
+        self.stats = {"frames": 0, "rel": 0, "fail_track": 0, "fail_pnp": 0, "fail_stereo": 0, "fail_motion": 0,
+                      "stale": 0}
+        self.last_raw = None      # previous delivered left image (stale-frame check)
 
     # ------------------------------------------------------------------ tracking primitives
     def _klt(self, a, b, pts, guess=None):
@@ -221,6 +224,15 @@ class StereoVO:
         landmarks (no measurement is fused twice)."""
         cfg = self.cfg
         self.stats["frames"] += 1
+        # Stale-frame check (camera health from the images alone): a real sensor never delivers two
+        # bit-identical consecutive exposures, because shot and read noise change every pixel. A
+        # repeated frame (driver hang, frozen stream) would otherwise read as "no motion" with perfect
+        # tracks, a confidently wrong measurement. It is treated as a dropped frame.
+        last, self.last_raw = self.last_raw, img0
+        if last is not None and last.shape == img0.shape and                 float(np.mean(np.abs(img0.astype(np.int16) - last.astype(np.int16)))) < cfg.stale_mad:
+            self.stats["stale"] += 1
+            self.last_raw = last
+            return []
         events = []
         new_kf = self.prev is None
         if self.prev is not None:
