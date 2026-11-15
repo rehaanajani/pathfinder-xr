@@ -26,6 +26,7 @@ or without Docker: `make -C src && src/pathfinder <imu folder | zip | csv> -o es
 | Slides | [`deck/SRMIST_CaliforniaBurrito.pptx`](deck/SRMIST_CaliforniaBurrito.pptx) |
 
 Brief: [`docs/TRACK3_BRIEF.md`](docs/TRACK3_BRIEF.md). Status: [`docs/TRACK3_STATUS.md`](docs/TRACK3_STATUS.md).
+What we tried and what did not work: [`docs/RESEARCH_REVIEW.md`](docs/RESEARCH_REVIEW.md).
 
 ## The wider system (camera + several IMUs; not scored)
 
