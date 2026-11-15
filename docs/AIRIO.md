@@ -175,7 +175,15 @@ make -C src
 PF_ENTRY=cpp python tools/eval_track3.py --data euroc:MH_04_difficult euroc:V1_03_difficult --seeds 1 2 3 -- --model src/velnet_airio.bin
 ```
 
+## Gyro denoiser: not built
+
+Upper bound first: the same validation runs with the gyro's jamming (noise ramp and bias drift) removed entirely,
+accelerometer noise, dropouts and death unchanged (same seeds, so the same fault schedule): ATE / checkpoints /
+blind / dropouts **3.824 / 3.634 / 2.587 / 3.833** against 3.820 / 3.632 / 2.579 / 3.823 with the jammed gyro. A
+perfect gyro denoiser would not move the score (the seed spread is 0.02 m), so a Brossard-style denoiser was not
+built. Under our stand-in degradation the gravity correction and bias learning already absorb the gyro errors; the
+orientation error that matters comes from dropouts.
+
 ## Not done
 
-- Gyro denoiser in front of the orientation (Brossard et al.).
 - Final-submission retrain on all 17 recordings (cannot be validated without leakage).
