@@ -7,7 +7,7 @@ edited by hand, and superseded bundles are kept.
 | Bundle | Protocol | Status | Notes |
 |---|---|---|---|
 | `20261115T165121Z-vision-room1-aaac9f1/` | v1 | complete, **superseded** | Exposed divergence when an IMU fault and an image outage coincide (hard 6-DoF gate never recovered). Retained as the failed attempt that motivated v2. Figures were not rendered (matplotlib was not installed in the system interpreter). |
-| see `CURRENT` below | v2 | — | current development result |
+| `20261115T173827Z-vision-room1-c7acccf/` | v2 | complete, **current** | Persistent-rejection recovery + stale-frame check. Divergences removed, but there are new regressions (timestamp jitter 0.42 → 5.17 m; clean 0.303 → 0.328 m) and saturation+blackout is still worse than the conventional filter. Figures, profile and learned-model section included. Demo: `demo/vision_replay.html`. |
 
 ## Other runs of this work (local `results/runs/`, not committed)
 
@@ -20,3 +20,5 @@ edited by hand, and superseded bundles are kept.
 | `20261115T164518Z-check-sync-room1-db7015b` | sync input of v1/v2 evaluation | camera offset 0.17 ms (not applied, < 1 ms) |
 | `20261115T170934Z-check-sync-room1-797eb67` | corrected sync method | mocap offset 0.11 ms, rotation 0.05°, gravity 0.42° |
 | `20261115T171018Z-model-shift-797eb67` | learned-model calibration / shift | see the v2 report section "Learned model" |
+| `20261115T173222Z-calibrate-vo-room1-6e9cb45-dirty` | protocol v2 calibration | `calibration/vo_room1_v2.json`. The dirty flag comes from doc/protocol-constant edits made while it ran (diff hash recorded); the selection is identical to v1 |
+| `20261115T181641Z-profile-room1-51192ba` | causal laptop profile | measured while a test suite ran concurrently on 2 of 16 threads, so treat it as an upper bound |

@@ -154,8 +154,9 @@ def main(argv=None):
                 if not r or not r.get("series"):
                     continue
                 t, e = np.array(r["series"]["t"]), np.array(r["series"]["err"], float)
-                ax[0].plot(t, e, label=sy, color=colors.get(sy), lw=1.2)
-                if "nees" in r["series"] and sy != "vo_only":
+                if sy != "imu_only":           # diverges to hundreds of metres; reported in the tables
+                    ax[0].plot(t, e, label=sy, color=colors.get(sy), lw=1.2)
+                if "nees" in r["series"] and sy not in ("vo_only", "imu_only"):
                     ax[1].semilogy(t, np.array(r["series"]["nees"], float), color=colors.get(sy), lw=0.8)
             for f in by[(sc, "pathfinder")]["scenario_def"].get("image_faults", []):
                 for axx in ax:
