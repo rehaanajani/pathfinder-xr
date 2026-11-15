@@ -21,8 +21,8 @@ on the held-out set (MH_05, V2_03, room6, run once after the model was frozen) f
 3.28). Checkpoints and dropouts improve on both sets as well. Against stand still the margin grows from about 3 % to
 about 6 % on held-out and from 3 % to 8 % on validation. What gets worse: the blind 5 s on validation (2.58 vs
 2.54 m; better on held-out, 2.34 vs 2.36), the handheld TUM-VI rooms (room5 0.89 vs 0.83, room6 0.88 vs 0.84,
-still ahead of stand still), and robustness to an IMU mounted another way (below). Runtime 6.7 ms per second of IMU
-and about 5.2 MB peak in C++.
+still ahead of stand still), and robustness to an IMU mounted another way (below). Runtime 6.0 ms per second of IMU
+and about 5.2 MB peak in C++ (Windows working set; 5.0 MB of it with no network).
 
 ## Numbers
 
@@ -103,8 +103,9 @@ worse than the old input, which matches AirIO's own claim (body frame for drones
   heading.
 - Loss MSE + β-NLL (β = 0.5); AdamW, one-cycle to 2e-3, 20 epochs of 150k windows (GPU, about 6 s per epoch); best
   epoch by validation velocity error.
-- **Choice of the shipped seed**, fixed in advance: lowest validation ATE among three training seeds of the chosen
-  configuration (3.839 / 3.822 / **3.820**); it was also best on blind 5 s and room5.
+- **Choice of the shipped seed**: best of three training seeds on validation ATE (3.839 / 3.822 / **3.820**; mean
+  3.827), chosen after all three were scored; it was also best on blind 5 s and room5. The seed mean, not the best
+  seed, is the fair estimate of the configuration.
 
 ## What was tried and lost (validation only)
 
@@ -143,9 +144,12 @@ and 0.93 for stand still. With that perfect velocity, `--pos-tau` 3 s is still a
 
 | | per second of IMU | peak working set |
 |---|---:|---:|
-| no network (`--model none`) | 1.8 ms | — |
-| old world-frame network | 4.6 ms (7.1 ms before the loop change below) | 5.2 MB |
-| AirIO network | **6.7 ms** (11.7 ms before) | 5.2 MB |
+| no network (`--model none`) | 1.6 ms | 5.0 MB |
+| old world-frame network | 4.1 ms (7.1 ms before the loop change below) | 5.2 MB |
+| AirIO network | **6.0 ms** (11.7 ms before) | 5.2 MB |
+
+Final merged build, room5 and MH_04 (degraded). The Windows working set of the static build is 5.0 MB with no
+network at all; the networks add about 0.2 MB. The Linux / macOS figure for the old network was 2.2 MB.
 
 The convolution in `main.cpp` now pads once and puts the output position in the inner loop, so it vectorises; for
 every output the products are added in the same order as before, and the output is byte-identical to the previous
@@ -164,6 +168,7 @@ build for both weight files.
 ```
 python tools/fetch_euroc.py --out local_data/euroc --pause 30     # TUM-VI rooms: imu0 + mocap0 into local_data/tumvi
 python tools/train_airio.py prep --jobs 5
+python tools/make_rotated.py                                      # rotated-mount copies for the sweep
 bash tools/sweep_airio.sh r0_s2 --seed 2                         # train + export + validation scores
 cp runs/airio/r0_s2/velnet_body.bin src/velnet_airio.bin
 make -C src

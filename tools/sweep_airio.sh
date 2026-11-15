@@ -2,7 +2,7 @@
 # Train + export + score one configuration of tools/train_airio.py (validation only).
 #   bash tools/sweep_airio.sh <name> [train_airio.py train options]
 # Scores: MH_04 + V1_03 (validation), room5, and MH_04 + V1_03 with the IMU mounted 90 deg rotated
-# (local_data/rot, see docs/AIRIO.md). Results in runs/track3/<name>_{val,r5,rot}.json.
+# (local_data/rot, made by tools/make_rotated.py; see docs/AIRIO.md). Results in runs/track3/<name>_{val,r5,rot}.json.
 set -e
 cd "$(dirname "$0")/.."
 n=$1; shift

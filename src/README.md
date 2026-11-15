@@ -66,4 +66,8 @@ appends 5 s of predicted poses after the last row.
 | Peak RAM | 2.2 MB | 28 MB |
 | Time per second of IMU | 4 ms | 4.5 ms |
 
+These were measured with the earlier 27,020-parameter network. On a Windows laptop where that network takes 4.1 ms
+per second of IMU in C++, the AirIO network takes 6.0 ms, peak working set about 5.2 MB for both
+(`docs/AIRIO.md`); not yet re-measured on the M5.
+
 Options: `python3 src/main.py --help` lists them; the C++ entry accepts the same ones.
