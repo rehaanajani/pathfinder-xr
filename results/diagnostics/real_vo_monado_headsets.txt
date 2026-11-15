@@ -1,0 +1,15 @@
+Monado SLAM Dataset: real VR headsets (Samsung Odyssey+, Valve Index), real IMU + real stereo VO,
+Lighthouse ground truth (~1 cm). Clips: MOO05_inspect_easy 0-30 s; MOO05_inspect_easy 33-63 s; MOO05_inspect_easy 66-96 s; MOO07_mapping_easy 0-30 s; MOO08_mapping_hard 0-19 s; MIO08_mapping_hard 0-28 s
+Faults at 8 s for 8 s. VO noise calibrated per headset on separate short recordings. First use of these
+recordings: no setting was tuned on them. ATE (m), yaw + translation aligned, mean over clips.
+
+scenario                              vo_only   conventional      ours_1imu      ours_3imu  ours_1imu_net
+clean                                   0.662          0.841          0.573          0.587          0.492
+camera_blackout                         0.684          4.982          0.812          0.826          0.586
+camera_dark                             0.684          4.982          0.812          0.826          0.586
+camera_blur                             0.714          4.574          0.832          0.842          0.584
+dark_plus_imu_drift                     0.684         10.776          1.906          0.521          0.587
+blackout_plus_one_imu_bias              0.684         67.494          6.374          0.716          1.209
+blackout_plus_saturation_all            0.684         51.898          5.444          5.212         62.378
+
+ours_3imu adds 2 simulated IMU copies; ours_1imu_net uses the network trained on Meta's TLIO headset data.
