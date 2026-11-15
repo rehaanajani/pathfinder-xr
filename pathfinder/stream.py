@@ -125,6 +125,9 @@ class StreamingTracker:
         f, cfg = self.f, self.cfg
         P = f.P[6:9, 6:9].copy()
         std = float(np.sqrt(np.trace(P)))
+        if cfg.outage_std_rate > 0:
+            # Honest reporting in long outages: never claim less than rate x time blind per axis.
+            std = max(std, np.sqrt(3.0) * cfg.outage_std_rate * f.outage_time(self.k))
         t = self.k * self.dt
         last_vis = max(getattr(f, "last_good_cam_t", -1e9), getattr(f, "last_vo_t", -1e9))
         tracked = t - last_vis <= cfg.vis_gap_s

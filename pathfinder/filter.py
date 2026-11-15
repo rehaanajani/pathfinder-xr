@@ -92,6 +92,13 @@ class FilterConfig:
     v_limit_std: float = 0.3      # m/s, how firmly the limit is applied
     outage_v_std: float = 0.0     # m/s; 0 = off. Zero-velocity prior std at IMU confidence 1
     vis_gap_s: float = 0.5
+    # Long outages (phone test: 32 s blind -> 50 m off while claiming +-1.2 m):
+    outage_tighten_s: float = 0.0  # >0: after this long blind, tighten the zero-velocity prior ...
+    outage_tau_s: float = 3.0      # ... with this time constant ...
+    outage_v_floor: float = 0.3    # ... down to this std (m/s): someone who can't be seen mostly stays put
+    outage_std_rate: float = 0.0   # >0 (m/s per axis): during an outage the REPORTED position
+                                   # uncertainty is never below rate x time blind (reporting only:
+                                   # inflating the filter's own covariance hurt accuracy on validation)
     speed_limit_with_model: bool = False
     # Saturation guard: a clipped IMU reading sits flat at the top of its range. While that is seen
     # (from the data alone), keep the speed limit on even with the learned model, distrust the
@@ -252,6 +259,7 @@ class ESKF:
         Six degrees of freedom, so the visual rotation also corrects heading and gyro bias."""
         if key_prev not in self.clone_k:
             return False
+        self.release_outage_assumption(k)
         i = self.clone_k.index(key_prev)
         n = self.P.shape[0]
         o = 15 + 6 * i
@@ -340,10 +348,32 @@ class ESKF:
                 log.v_limited += 1
             if c.outage_v_std > 0:
                 std = c.outage_v_std * (0.25 + 0.75 * float(np.clip(imu_conf, 0, 1)))
+                t_out = t - last
+                if c.outage_tighten_s > 0 and t_out > c.outage_tighten_s:
+                    std = max(c.outage_v_floor, std * np.exp(-(t_out - c.outage_tighten_s) / c.outage_tau_s))
+                    self._assumed_still = True           # velocity is now an assumption, not a measurement
                 self._update(-self.v, H, np.eye(3) * std ** 2)
                 log.v_prior += 1
         finally:
             self.cfg.use_gate = gate
+
+    def release_outage_assumption(self, k):
+        """Back from a long outage: the velocity was held by the stand-still assumption, not measured.
+        Re-open its uncertainty so the returning visual data sets it at once."""
+        c = self.cfg
+        if c.outage_tighten_s <= 0:
+            return
+        if getattr(self, "_assumed_still", False):
+            self.P[3:6, 3:6] += np.eye(3) * c.v_max ** 2
+            self._assumed_still = False                  # once per outage, only if the prior was used
+
+    def outage_time(self, k):
+        """Seconds since the last accepted visual update (0 if none yet or still inside vis_gap_s)."""
+        last = max(getattr(self, "last_good_cam_t", -1e9), getattr(self, "last_vo_t", -1e9))
+        if last < -1e8:
+            return 0.0
+        t_out = self._t(k) - last
+        return t_out if t_out > self.cfg.vis_gap_s else 0.0
 
     def _t(self, k):
         return k * getattr(self, "dt", 1.0 / 200.0)
@@ -366,6 +396,8 @@ class ESKF:
         """
         c = self.cfg
         t = self._t(k)
+        if health >= c.recover_health:
+            self.release_outage_assumption(k)
         if c.use_health:
             if c.trust is not None:
                 # Calibrated on training data: measured fix error for this health level.
