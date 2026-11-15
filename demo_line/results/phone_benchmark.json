@@ -1,0 +1,78 @@
+{
+    "device": {
+        "model": "SM-M366B",
+        "soc": "Samsung s5e8835",
+        "android": "16",
+        "abi": "arm64-v8a"
+    },
+    "runs": [
+        {
+            "model": "dispnet_faults.onnx",
+            "threads": 1,
+            "runs": 2000,
+            "load_ms": 33.06,
+            "net_ms": {
+                "p50": 0.725,
+                "p95": 0.809,
+                "p99": 0.866,
+                "max": 1.741
+            },
+            "filter_ms_per_second_of_data": {
+                "p50": 0.585,
+                "p95": 0.598
+            },
+            "cpu_share_one_core_pct": 0.78
+        },
+        {
+            "model": "dispnet_faults.onnx",
+            "threads": 2,
+            "runs": 2000,
+            "load_ms": 12.31,
+            "net_ms": {
+                "p50": 0.54,
+                "p95": 0.601,
+                "p99": 0.631,
+                "max": 1.297
+            },
+            "filter_ms_per_second_of_data": {
+                "p50": 0.586,
+                "p95": 0.602
+            },
+            "cpu_share_one_core_pct": 0.6
+        },
+        {
+            "model": "dispnet_faults_int8.onnx",
+            "threads": 1,
+            "runs": 2000,
+            "load_ms": 19.25,
+            "net_ms": {
+                "p50": 0.442,
+                "p95": 0.477,
+                "p99": 0.494,
+                "max": 0.569
+            },
+            "filter_ms_per_second_of_data": {
+                "p50": 0.585,
+                "p95": 0.598
+            },
+            "cpu_share_one_core_pct": 0.5
+        },
+        {
+            "model": "dispnet_faults_int8.onnx",
+            "threads": 2,
+            "runs": 2000,
+            "load_ms": 19.96,
+            "net_ms": {
+                "p50": 0.43,
+                "p95": 0.49,
+                "p99": 0.531,
+                "max": 0.786
+            },
+            "filter_ms_per_second_of_data": {
+                "p50": 0.585,
+                "p95": 0.601
+            },
+            "cpu_share_one_core_pct": 0.49
+        }
+    ]
+}

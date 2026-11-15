@@ -30,6 +30,8 @@ What we tried and what did not work: [`docs/RESEARCH_REVIEW.md`](docs/RESEARCH_R
 
 ## The wider system (camera + several IMUs; not scored)
 
+The live phone demo, the real-VR-headset evaluation and the saturation / long-outage work live in [`demo_line/`](demo_line/README.md) with their own copy of the filter; the real-vision workstream (#26) is in the root `pathfinder/`.
+
 Everything below is the camera + multi-IMU tracker built before the official brief arrived. It is the material for the
 final demo. **Estimator implementation update:** see [issue #1 completion notes](docs/ISSUE1_COMPLETION.md) for the
 current reference-free API, model policy, input validation and validity semantics. The result tables below predate

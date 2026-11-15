@@ -1,0 +1,9 @@
+TUM-VI real stereo VO + real IMU, 4 non-overlapping 60 s clips, ATE (m). Before -> after the outage speed limit (setting chosen on the TLIO validation split, applied here once).
+scenario                        vo_only conventional         ours_1imu         ours_3imu
+clean                             0.196        0.163      0.174->0.174      0.174->0.174
+camera_blackout                   1.040        0.466      0.518->0.444      0.529->0.450
+camera_dark                       1.044        1.974      1.176->0.891      1.177->0.896
+camera_blur                       1.090        1.022      0.641->0.630      0.642->0.631
+dark_plus_imu_drift               1.044        2.104      2.019->2.031      2.505->0.788
+blackout_plus_one_imu_bias        1.040       18.222     14.340->5.598      0.625->0.476
+blackout_plus_saturation_all      1.040       20.054     16.218->3.443     16.177->3.429

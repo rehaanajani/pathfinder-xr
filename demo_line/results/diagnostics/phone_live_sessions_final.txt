@@ -1,0 +1,21 @@
+Real phone (Galaxy M36) sessions re-scored with the final settings (tighten after 3 s blind, velocity released when vision returns, honest reported uncertainty 0.15 m/s/axis).
+Error when ARCore came back after each outage >= 1 s. No ground truth on a phone: ARCore's pose after relocalising is the reference.
+
+== 20261115-153348.jsonl
+session 559 s of IMU; processed in 27.2 s (20.5x real time)
+
+camera-cover outages (>= 1 s): 2
+  1. 31.8 s  error when ARCore returned: standard 1732.58 m, ours 1.96 m (ours claimed +-8.26 m, valid=False)
+  2. 191.9 s  error when ARCore returned: standard 121037.92 m, ours 0.50 m (ours claimed +-49.86 m, valid=False)
+
+return to start (first vs last tracked pose): ARCore 3.76 m, ours 3.78 m, standard 3.77 m
+walked (ARCore path length): 63.9 m
+
+== 20261115-154553.jsonl
+session 194 s of IMU; processed in 9.8 s (19.8x real time)
+
+camera-cover outages (>= 1 s): 1
+  1. 61.3 s  error when ARCore returned: standard 4360.52 m, ours 0.60 m (ours claimed +-15.93 m, valid=False)
+
+return to start (first vs last tracked pose): ARCore 3.73 m, ours 3.73 m, standard 3.72 m
+walked (ARCore path length): 26.0 m

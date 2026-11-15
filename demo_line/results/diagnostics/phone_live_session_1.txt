@@ -1,0 +1,15 @@
+Live phone session, Galaxy M36 5G (Exynos 1380, Android 16), 15 Nov 2026, USB link, 20261115-153348.jsonl.
+Steps: walk; cover camera ~5 s (ARCore kept 'tracking' on its own IMU, Path Finder flagged a camera outage, back to ok in ~2 s);
+simulated IMU bias ON + cover; ARCore then lost tracking for 31.8 s (dark, then not enough detail) before relocalising.
+
+session 215 s of IMU; processed in 10.8 s (19.9x real time)
+
+camera-cover outages (>= 1 s): 1
+  1. 31.8 s  error when ARCore returned: standard 1732.58 m, ours 49.83 m (ours claimed +-1.21 m)
+
+return to start (first vs last tracked pose): ARCore 4.65 m, ours 4.68 m, standard 4.74 m
+walked (ARCore path length): 53.9 m
+
+Reading: over a 32 s total visual outage with a biased IMU, the standard tracker ran away (1.7 km), ours stayed 35x closer
+but 50 m off while claiming +-1.2 m: its uncertainty is far too optimistic on long outages, and 32 s blind is beyond what
+IMU-only tracking can hold. Return-to-start is not meaningful here (ARCore itself moved 4.9 m after relocalising).
