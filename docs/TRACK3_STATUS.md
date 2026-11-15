@@ -26,7 +26,7 @@ stand still on held-out EuRoC and TUM-VI is the target; Debadrita's entry does i
 
 | Gap | Status |
 |---|---|
-| Held-out accuracy, C++ entry | Re-scored with the C++ build (15 Nov): ATE 3.19 / checkpoints 2.93 / blind 2.36 / dropouts 3.27 m vs stand still 3.28 / 3.03 / 2.38 / 3.27; identical to the Python numbers. Every filter setting tested since; none moves it (`docs/RESEARCH_REVIEW.md`). Next lever: the network (Debadrita) |
+| Held-out accuracy, C++ entry | Re-scored with the C++ build (15 Nov): ATE 3.19 / checkpoints 2.93 / blind 2.36 / dropouts 3.27 m vs stand still 3.28 / 3.03 / 2.38 / 3.27; identical to the Python numbers. Next lever: the network (Debadrita) |
 | 5 s prediction after IMU death (20 pts) | Done: dead reckoning from the last trusted state; `--extend-blind` when the file just ends. Held-out blind 5 s: 2.36 m with the network vs 2.38 m stand still (Debadrita) |
 | No ground truth, unknown gravity | Done: gravity and gyro bias from the data itself; Mayank's test with the IMU rotated 90° passes |
 | Exact I/O, one pose per row, through dropouts | Done: 23 contract tests (NaN, inf, frozen, gaps, duplicates, truncated files, header variants) pass |
