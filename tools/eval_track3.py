@@ -14,7 +14,9 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA = Path.home() / "Desktop" / "pathfinder-xr" / "local_data"
+import os  # noqa: E402
+DATA = Path(os.environ["PFX_DATA"]) if os.environ.get("PFX_DATA") else (
+    ROOT / "local_data" if (ROOT / "local_data").exists() else Path.home() / "Desktop" / "pathfinder-xr" / "local_data")
 sys.path.insert(0, str(ROOT / "tools"))
 from score_track3 import score  # noqa: E402
 

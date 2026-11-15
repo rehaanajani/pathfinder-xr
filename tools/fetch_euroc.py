@@ -23,17 +23,30 @@ PARTS = {"machine_hall": "7b2419c1-62b5-4714-b7f8-485e5fe3e5fe",
 WANT = ("mav0/imu0/data.csv", "mav0/state_groundtruth_estimate0/data.csv", "mav0/imu0/sensor.yaml")
 
 
+PAUSE = 0.0          # seconds between requests (--pause); the repository rate-limits bursts with HTTP 429
+_last = [0.0]
+
+
+def throttle():
+    import time
+    wait = _last[0] + PAUSE - time.time()
+    if wait > 0:
+        time.sleep(wait)
+    _last[0] = time.time()
+
+
 def _get(req, tries=8):
     """GET with backoff: the repository answers 429 when hit with many requests."""
     import time
     for k in range(tries):
         try:
+            throttle()
             with urllib.request.urlopen(req, timeout=180) as r:
                 return r.read()
         except urllib.error.HTTPError as e:
             if e.code != 429 or k == tries - 1:
                 raise
-            wait = 30 * (k + 1)
+            wait = 240
             print(f"429 from server, waiting {wait}s", file=sys.stderr, flush=True)
             time.sleep(wait)
 
@@ -48,14 +61,15 @@ class HTTPRange(io.RawIOBase):
             for k in range(8):
                 req = urllib.request.Request(url, headers={"User-Agent": UA, "Range": "bytes=0-0"})
                 try:
+                    throttle()
                     with urllib.request.urlopen(req, timeout=60) as r:
                         size = int(r.headers["Content-Range"].split("/")[1])
                     break
                 except urllib.error.HTTPError as e:
                     if e.code != 429:
                         raise
-                    print(f"429 from server, waiting {30 * (k + 1)}s", file=sys.stderr, flush=True)
-                    time.sleep(30 * (k + 1))
+                    print(f"429 from server, waiting 240s", file=sys.stderr, flush=True)
+                    time.sleep(240)
         self.size = size
         self.cache = (0, b"")
 
@@ -112,7 +126,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="local_data/euroc")
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--pause", type=float, default=0.0, help="seconds between requests (try 60 if you get 429s)")
     a = ap.parse_args()
+    global PAUSE
+    PAUSE = a.pause
     out = Path(a.out)
     for part, bid in PARTS.items():
         url = BASE.format(bid)
@@ -152,13 +169,14 @@ def stream_member(url, outer, info, dst_root):
     import time
     for k in range(8):
         try:
+            throttle()
             resp = urllib.request.urlopen(req, timeout=300)
             break
         except urllib.error.HTTPError as e:
             if e.code != 429:
                 raise
-            print(f"429 from server, waiting {30 * (k + 1)}s", file=sys.stderr, flush=True)
-            time.sleep(30 * (k + 1))
+            print(f"429 from server, waiting 240s", file=sys.stderr, flush=True)
+            time.sleep(240)
 
     def chunks():
         d = zlib.decompressobj(-15) if info.compress_type == zipfile.ZIP_DEFLATED else None
