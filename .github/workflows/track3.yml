@@ -1,9 +1,9 @@
 name: track3-entry
 on:
   push:
-    paths: ["src/**", "tests/stress/test_main_contract.py", ".github/workflows/track3.yml"]
+    paths: ["src/**", "tests/stress/**", ".github/workflows/track3.yml"]
   pull_request:
-    paths: ["src/**", "tests/stress/test_main_contract.py", ".github/workflows/track3.yml"]
+    paths: ["src/**", "tests/stress/**", ".github/workflows/track3.yml"]
 jobs:
   entry:
     runs-on: ubuntu-latest
@@ -14,10 +14,10 @@ jobs:
       - run: pip install numpy scipy pytest
       - name: Build the C++ entry
         run: make -C src
-      - name: Contract tests, C++ (one pose per row, bad rows, 8 MB, 20 ms/s)
-        run: PF_ENTRY=cpp python -m pytest -q tests/stress/test_main_contract.py
-      - name: Contract tests, Python (all but the RAM budget)
-        run: python -m pytest -q tests/stress/test_main_contract.py -k "not peak_ram"
+      - name: Contract, review-fix and mount-guard tests, C++ (one pose per row, bad rows, 8 MB, 20 ms/s)
+        run: PF_ENTRY=cpp python -m pytest -q tests/stress/test_main_contract.py tests/stress/test_review_fixes.py tests/stress/test_mount_guard.py
+      - name: Same tests, Python reference (the 8 MB budget applies to C++ only)
+        run: python -m pytest -q tests/stress/test_main_contract.py tests/stress/test_review_fixes.py tests/stress/test_mount_guard.py
   docker:
     runs-on: ubuntu-latest
     steps:
@@ -35,3 +35,11 @@ jobs:
           open('data/imu0/data.csv','w').write(chr(10).join(rows)+chr(10))"
           docker run --rm -v "$PWD/data:/data" pathfinder /data -o /data/estimated_trajectory.txt
           test "$(grep -vc '^#' data/estimated_trajectory.txt)" = 4000
+      - name: The mount guard works inside the image (IMU flipped upside down)
+        run: |
+          mkdir -p flip/imu0
+          sed 's/,9.81$/,-9.81/' data/imu0/data.csv > flip/imu0/data.csv
+          docker run --rm -v "$PWD/flip:/data" pathfinder /data -o /data/est.txt 2> flip/err.txt
+          cat flip/err.txt
+          grep -q "using velnet_weights_world.bin" flip/err.txt
+          test "$(grep -vc '^#' flip/est.txt)" = 4000
