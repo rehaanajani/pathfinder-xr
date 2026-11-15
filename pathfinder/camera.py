@@ -60,7 +60,7 @@ def degrade(img: np.ndarray, brightness: float, blur_px: float, rng) -> np.ndarr
 def visual_fixes(t: np.ndarray, p_true: np.ndarray, sched: dict, seed: int = 0) -> dict:
     """Position fixes at CAM_RATE with a measured health score per frame."""
     rng = np.random.default_rng(seed + 77)
-    step = max(int(round((1 / CAM_RATE) / np.median(np.diff(t)))), 1)
+    step = frame_step(t)
     idx = np.arange(0, len(t), step)
     n = len(idx)
     keys = {k: v for k, v in sched.items()}
@@ -86,8 +86,15 @@ def visual_fixes(t: np.ndarray, p_true: np.ndarray, sched: dict, seed: int = 0) 
     return {"idx": idx, "fix": fix, "health": health}
 
 
+def frame_step(t: np.ndarray) -> int:
+    """IMU samples per camera frame (1 for a single-sample sequence, #19)."""
+    if len(t) < 2:
+        return 1
+    return max(int(round((1 / CAM_RATE) / np.median(np.diff(t)))), 1)
+
+
 def frame_times(t: np.ndarray) -> np.ndarray:
-    step = max(int(round((1 / CAM_RATE) / np.median(np.diff(t)))), 1)
+    step = frame_step(t)
     return t[::step]
 
 

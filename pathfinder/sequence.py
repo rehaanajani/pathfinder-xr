@@ -27,6 +27,8 @@ class Sequence:
 
     @property
     def dt(self) -> float:
+        if len(self.t) < 2:                              # one sample: no spacing to measure (#19)
+            return 1.0 / float(self.meta.get("rate", 200.0))
         return float(np.median(np.diff(self.t)))
 
     @property
