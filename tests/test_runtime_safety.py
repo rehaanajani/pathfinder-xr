@@ -90,7 +90,7 @@ def test_buffered_inputs_are_owned_not_aliased_to_callers():
     e.add_camera(.1, fix, 1.)
     e.add_imu(0., gyro, acc)
     fix[:] = gyro[:] = acc[:] = 99.
-    assert e.pending[0][1][0] == .1
+    assert e.pending[0][1] == "fix" and e.pending[0][2][0][0] == .1   # (t, kind, (fix, health))
     np.testing.assert_array_equal(e.held[0], np.zeros(3))
     m = ImuMonitor(1)
     g, a = np.zeros((1, 3)), np.array([[0., 0., 9.81]])

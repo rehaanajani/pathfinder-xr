@@ -185,7 +185,7 @@ def solve_alignment(t, gyro, acc, cam_t, cam_fix, cam_std, cfg: ReferenceFreeIni
 
 class StreamingEstimator:
     def __init__(self, cfg: FilterConfig | None = None, init=None, predictor=None,
-                 expect_camera: bool = True):
+                 expect_camera: bool = True, camera_mode: str = "fix"):
         self.cfg = deepcopy(cfg) if cfg is not None else FilterConfig()
         self.init = deepcopy(init) if init is not None else ReferenceFreeInit()
         self.cfg.__post_init__()
@@ -201,11 +201,14 @@ class StreamingEstimator:
                 raise ValueError("initialization requires enough fixes and wait time")
             if not 0 <= self.init.min_health <= 1:
                 raise ValueError("initializer min_health must be in [0, 1]")
+        if camera_mode not in ("fix", "relative"):
+            raise ValueError("camera_mode must be 'fix' (absolute fixes) or 'relative' (visual odometry)")
+        self.camera_mode = camera_mode
         self.predictor = predictor
         self.expect_camera = expect_camera
         self.log = FilterLog()
         self.f: ESKF | None = None
-        self.pending: list = []                 # camera events (t, fix, health), sorted by t
+        self.pending: list = []                 # camera events (t, kind, payload), sorted by t (stable)
         self.cur_t = None
         self.held = None                        # (gyro, acc, conf, q_add_g, q_add_a) for propagation
         self.k = 0
@@ -227,10 +230,39 @@ class StreamingEstimator:
                 or not np.isfinite(health) or not 0 <= health <= 1):
             self.log.cam_invalid += 1
             return
+        if self.camera_mode != "fix":
+            raise ValueError("absolute camera fixes are not accepted in relative (visual odometry) mode")
+        self._queue(float(t), "fix", (fix.copy(), float(health)))
+
+    def add_camera_keyframe(self, t, kf_id: int):
+        """A visual keyframe at camera time t (IMU clock): clone the pose so later relative
+        measurements have an anchor. Emitted at visual start-up and after every tracking restart."""
+        if self.camera_mode != "relative":
+            raise ValueError("keyframes require camera_mode='relative'")
+        if not np.isfinite(t):
+            self.log.cam_invalid += 1
+            return
+        self._queue(float(t), "kf", int(kf_id))
+
+    def add_camera_relative(self, t, kf_id: int, dp, dR, cov6, health: float = 1.0):
+        """Vision-only relative motion: IMU pose at t in the IMU frame of keyframe ``kf_id``.
+
+        dp (3,) m, dR (3, 3) rotation, cov6 (6, 6) covariance of [dp, dtheta]. Must come from images
+        only (no IMU fusion, no reference poses), otherwise IMU information is counted twice."""
+        if self.camera_mode != "relative":
+            raise ValueError("relative measurements require camera_mode='relative'")
+        dp, dR, cov6 = (np.array(x, dtype=float, copy=True) for x in (dp, dR, cov6))
+        if (not np.isfinite(t) or dp.shape != (3,) or dR.shape != (3, 3) or cov6.shape != (6, 6)
+                or not np.isfinite(health) or not 0 <= health <= 1):
+            self.log.cam_invalid += 1
+            return
+        self._queue(float(t), "rel", (int(kf_id), dp, dR, cov6, float(health)))
+
+    def _queue(self, t, kind, payload):
         if self.cur_t is not None and self.f is not None and t <= self.cur_t:
             self.log.cam_late += 1                 # older than the state: cannot be applied causally
             return
-        ev = (float(t), fix.copy(), float(health))
+        ev = (t, kind, payload)
         i = len(self.pending)
         while i > 0 and self.pending[i - 1][0] > ev[0]:
             i -= 1
@@ -289,16 +321,17 @@ class StreamingEstimator:
                 return []
         g = np.where(fin[:, None], g, 0.0)
         a = np.where(fin[:, None], a, np.nanmean(a[fin], 0) if fin.any() else np.array([0, 0, GRAVITY]))
-        cams = [e for e in self.pending if t0 <= e[0] <= tl and np.all(np.isfinite(e[1])) and e[2] >= ini.min_health]
+        cams = [e for e in self.pending if e[1] == "fix" and t0 <= e[0] <= tl and e[2][1] >= ini.min_health]
         sol = None
+        relative = self.camera_mode == "relative"
         if len(cams) >= ini.min_fixes:
             ct = np.array([e[0] for e in cams])
-            cf = np.array([e[1] for e in cams])
-            cstd = np.array([self._cam_std(e[2]) for e in cams])
+            cf = np.array([e[2][0] for e in cams])
+            cstd = np.array([self._cam_std(e[2][1]) for e in cams])
             sol = solve_alignment(ts, g, a, ct, cf, cstd, ini)
             if not sol.get("ok"):
                 sol = None
-        if sol is None and self.expect_camera and tl - t0 < ini.max_wait_s:
+        if sol is None and self.expect_camera and not relative and tl - t0 < ini.max_wait_s:
             return []                                    # keep waiting for usable fixes
         if sol is not None:
             self.f = ESKF(self.cfg, sol["p0"], sol["v0"], sol["R0"].as_quat(), P0=sol["P0"])
@@ -313,7 +346,10 @@ class StreamingEstimator:
             R0 = _gravity_tilt(f0)
             P0 = np.zeros((15, 15))
             P0[0:2, 0:2] = np.eye(2) * np.deg2rad(3.0) ** 2
-            P0[2, 2] = np.pi ** 2
+            # Visual odometry observes motion relative to the start, not absolute heading: the output
+            # frame is the start frame (yaw gauge fixed at 0), as in any odometry system. Without a
+            # camera, heading is unknown and carries the full prior.
+            P0[2, 2] = np.deg2rad(0.1) ** 2 if relative else np.pi ** 2
             P0[3:6, 3:6] = np.eye(3) * ini.fallback_vel_std ** 2
             P0[6:9, 6:9] = np.eye(3) * 1e-6
             P0[9:12, 9:12] = np.eye(3) * 1e-4
@@ -321,9 +357,11 @@ class StreamingEstimator:
             self.f = ESKF(self.cfg, np.zeros(3), np.zeros(3), R0.as_quat(), P0=P0)
             self.base_reasons |= (REASONS["HEADING_ARBITRARY"] | REASONS["VELOCITY_ASSUMED_ZERO"]
                                   | REASONS["POSITION_FRAME_ARBITRARY"])
-            self.log.events.append((tl, "init_imu_only", "no usable camera fixes"))
-        # Fixes used by the alignment are consumed: replaying them would count them twice.
-        self.pending = [e for e in self.pending if e[0] > tl]
+            self.log.events.append((tl, "init_gravity_start_frame" if relative else "init_imu_only",
+                                    "odometry frame = start pose" if relative else "no usable camera fixes"))
+        # Fixes used by the alignment are consumed: replaying them would count them twice. Visual
+        # keyframes and relative measurements are replayed with the buffered IMU samples.
+        self.pending = [e for e in self.pending if e[0] > tl or e[1] != "fix"]
         boot, self.boot = self.boot, []
         self.cur_t = boot[0][0]
         out = []
@@ -366,13 +404,20 @@ class StreamingEstimator:
         reasons = self.base_reasons
         self.gap_flag = False
         while self.pending and self.pending[0][0] <= t:
-            tc, fix, health = self.pending.pop(0)
-            if (not first and tc <= self.cur_t) or (first and tc < t):
+            tc, kind, payload = self.pending.pop(0)
+            if (not first and tc < self.cur_t) or (first and tc < t) or (kind == "fix" and not first and tc == self.cur_t):
                 log.cam_late += 1
                 continue
             self._advance(tc)
-            if f.camera_update(fix, health, log, tc) == "reanchored":
-                reasons |= REASONS["CAMERA_REANCHORED"]
+            if kind == "fix":
+                if f.camera_update(payload[0], payload[1], log, tc) == "reanchored":
+                    reasons |= REASONS["CAMERA_REANCHORED"]
+            elif kind == "kf":
+                f.add_clone(("cam", payload), c.vo_max_clones)
+                log.vo_keyframes += 1
+            else:
+                kf, dp, dR, cov6, health = payload
+                f.relative_pose_update(("cam", kf), dp, dR, cov6, health, log, tc)
         self._advance(t)
         if self.gap_flag:
             reasons |= REASONS["IMU_GAP"]
@@ -499,11 +544,15 @@ def stack_outputs(rows: list) -> dict:
     return {k: np.array([r[k] for r in rows]) for k in OUTPUT_FIELDS}
 
 
-def replay(t, gyro, acc, cfg: FilterConfig, init, cam=None, predictor=None, imu_quality=None, imu_conf=None):
+def replay(t, gyro, acc, cfg: FilterConfig, init, cam=None, predictor=None, imu_quality=None, imu_conf=None,
+           vision=None):
     """Feed recorded arrays through ``StreamingEstimator`` in timestamp order.
 
     cam: dict with ``t``, ``fix`` (M, 3), ``health`` (M,) or None. Each camera event is added just
     before the first IMU sample at or after its timestamp, as a live system would see it.
+    vision: visual-odometry events instead of fixes (``camera_mode='relative'``): a list of dicts
+    ``{"t", "kind": "kf", "kf"}`` or ``{"t", "kind": "rel", "kf", "dp", "dR", "cov", "health"}`` on the
+    IMU clock, in emission order. Mutually exclusive with ``cam``.
     Returns (positions (N, 3) with NaN where invalid-at-init, FilterLog, stacked outputs).
     """
     t = np.asarray(t, float)
@@ -513,7 +562,15 @@ def replay(t, gyro, acc, cfg: FilterConfig, init, cam=None, predictor=None, imu_
     N = len(t)
     if gyro.shape != (N, 3) or acc.shape != (N, 3):
         raise ValueError(f"gyro and acc must be (N={N}, 3)")
-    est = StreamingEstimator(cfg, init, predictor, expect_camera=cam is not None)
+    if cam is not None and vision is not None:
+        raise ValueError("pass either absolute camera fixes or visual-odometry events, not both")
+    est = StreamingEstimator(cfg, init, predictor, expect_camera=cam is not None or vision is not None,
+                             camera_mode="relative" if vision is not None else "fix")
+    vis = list(vision) if vision is not None else []
+    vt = np.array([e["t"] for e in vis], float)
+    if np.any(np.diff(vt) < 0) or not np.isfinite(vt).all():
+        raise ValueError("visual events must be finite and in non-decreasing time order")
+    vi = 0
     rows = []
     ci = 0
     ct = np.asarray(cam["t"], float) if cam is not None else np.zeros(0)
@@ -532,6 +589,13 @@ def replay(t, gyro, acc, cfg: FilterConfig, init, cam=None, predictor=None, imu_
             j = order[ci]
             est.add_camera(ct[j], cam["fix"][j], cam["health"][j])
             ci += 1
+        while vi < len(vis) and vt[vi] <= t[i]:
+            e = vis[vi]
+            if e["kind"] == "kf":
+                est.add_camera_keyframe(e["t"], e["kf"])
+            else:
+                est.add_camera_relative(e["t"], e["kf"], e["dp"], e["dR"], e["cov"], e.get("health", 1.0))
+            vi += 1
         qg = qa = 0.0
         st = None
         if imu_quality is not None:
