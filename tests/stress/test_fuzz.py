@@ -40,7 +40,6 @@ def test_fuzz_single():
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason="rehaanajani/pathfinder-xr#16, 3 of 600 cases")
 def test_fuzz_600_cases():
     with Pool(min(8, os.cpu_count() or 1)) as pool:
         res = pool.map(_one, range(N_SLOW))

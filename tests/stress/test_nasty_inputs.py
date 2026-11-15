@@ -34,7 +34,6 @@ def walk():
 # ---- non-finite values -------------------------------------------------------------------------
 @pytest.mark.parametrize("val", [np.nan, np.inf, -np.inf])
 @pytest.mark.parametrize("where", ["gyro", "acc"])
-@pytest.mark.xfail(strict=True, reason="rehaanajani/pathfinder-xr#13")
 def test_nonfinite_imu_sample_does_not_crash_stream(walk, val, where):
     s, g, a, fixes = walk
     g, a = g.copy(), a.copy()
@@ -44,7 +43,6 @@ def test_nonfinite_imu_sample_does_not_crash_stream(walk, val, where):
 
 
 @pytest.mark.parametrize("n_imus", [1, 2])
-@pytest.mark.xfail(strict=True, reason="rehaanajani/pathfinder-xr#13")
 def test_nan_burst_in_one_or_two_imus_through_pipeline(n_imus):
     def mut(b):
         b.gyro[0, 1000:1100] = np.nan
@@ -67,7 +65,6 @@ def test_nan_burst_with_three_or_more_imus_is_handled(n_imus):
     assert err.max() < 0.5
 
 
-@pytest.mark.xfail(strict=True, reason="rehaanajani/pathfinder-xr#13")
 def test_huge_imu_values_do_not_crash(walk):
     s, g, a, fixes = walk
     g, a = g.copy(), a.copy()
@@ -76,7 +73,6 @@ def test_huge_imu_values_do_not_crash(walk):
     assert np.isfinite(outs[-1]["position"]).all()
 
 
-@pytest.mark.xfail(strict=True, reason="rehaanajani/pathfinder-xr#14")
 def test_nan_camera_health_does_not_crash(walk):
     s, g, a, _ = walk
     fixes = [(k, s.p[k], np.nan) for k in range(0, len(s.t), 20)]
@@ -84,7 +80,6 @@ def test_nan_camera_health_does_not_crash(walk):
     assert all(np.isfinite(o["position"]).all() for o in outs)
 
 
-@pytest.mark.xfail(strict=True, reason="rehaanajani/pathfinder-xr#14")
 def test_inf_camera_fix_does_not_crash(walk):
     s, g, a, _ = walk
     fixes = [(k, np.array([np.inf, 0, 0]), 1.0) for k in range(100, len(s.t), 20)]
@@ -101,7 +96,6 @@ def test_out_of_range_health_is_survivable(walk, health):
 
 
 # ---- degenerate IMU data -----------------------------------------------------------------------
-@pytest.mark.xfail(strict=True, reason="rehaanajani/pathfinder-xr#15")
 def test_all_zero_imu_is_not_reported_valid_when_wrong(walk):
     """A dead IMU (all zeros) with no camera: the walker moves ~1.2 m/s, the tracker thinks gravity
     is gone. It must not claim a trustworthy position."""
@@ -132,7 +126,6 @@ def test_two_sample_run():
     assert not check_invariants(r)
 
 
-@pytest.mark.xfail(strict=True, reason="rehaanajani/pathfinder-xr#19")
 def test_single_sample_sequence_through_prepare():
     from pathfinder.pipeline import prepare
     s = head_walk(1.0, n_imus=1, seed=1).slice(0, 1)
@@ -177,7 +170,6 @@ def test_camera_jump_100m_mid_run_is_held_out(walk):
     assert not any(o["valid"] for o, e in zip(outs[held], err[held]) if e > 3.0)
 
 
-@pytest.mark.xfail(strict=True, reason="rehaanajani/pathfinder-xr#17")
 def test_stream_equals_run_at_nominal_rate():
     """Fuzz case 10: stream built with the nominal 1/rate instead of the offline median dt."""
     from fuzz import random_case
@@ -185,7 +177,6 @@ def test_stream_equals_run_at_nominal_rate():
     assert r["max_diff"] <= 1e-9
 
 
-@pytest.mark.xfail(strict=True, reason="rehaanajani/pathfinder-xr#16")
 def test_saturation_mask_is_causal_in_first_two_seconds():
     """mask(x)[i] must not depend on samples after i (offline run vs streaming)."""
     from pathfinder.filter import saturation_mask
@@ -208,7 +199,6 @@ def test_identical_camera_fixes_are_not_trusted_forever(walk):
 
 
 # ---- never-had-vision ------------------------------------------------------------------------------
-@pytest.mark.xfail(strict=True, reason="rehaanajani/pathfinder-xr#15")
 def test_no_camera_ever_still_widens_uncertainty(walk):
     """No fix has ever arrived: the honest-uncertainty floor (0.15 m/s/axis) must still apply."""
     s, g, a, _ = walk

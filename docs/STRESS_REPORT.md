@@ -21,6 +21,18 @@ Tests that expose a bug are `xfail(strict=True)` with the issue number, so they 
 
 Fuzz equality (`stream == run`, 1e-9) holds only under a **matched dt** (`rate = 1/seq.dt`); at the nominal rate it fails (#17). The harness uses matched dt and says so.
 
+**All seven are fixed on branch `stress-fixes`** (their tests no longer carry `xfail`):
+
+| Issue | Fix |
+|---|---|
+| #13 | `filter.ImuCleaner`, shared by `run` and the stream: a non-finite, all-zero or out-of-range sample is replaced by the last good one (or the filter coasts if there was none) and counts with zero confidence; `vote()` drops non-finite IMUs; the stream reports `valid=False`, `reason="imu_dropout"` for 0.5 s after a bad reading |
+| #14 | `push_camera_fix` drops non-finite fixes and health and clips health to [0, 1]; `camera_update` refuses them too; the queue is cleared before the updates run |
+| #15 | `outage_time` counts from the tracker start when no visual fix was ever accepted |
+| #16 | stream raw window 403 samples; `saturation_mask` pads with zeros instead of reflecting, so it is causal |
+| #17 | time comparisons against `vis_gap_s` / `outage_gap_s` / hold-outs tolerate 1e-6 s |
+| #18 | `well_formed()` / `parse_lines()` in the live server: malformed or cut lines are counted and skipped |
+| #19 | README says 30 s; one-sample sequences get a frame step of 1 |
+
 ## What held up
 
 * **Fuzz, 600 random cases** (1-6 IMUs, up to 5 overlapping faults including at t = 0 and the last sample, camera drop 0-100%): no exception, finite output, covariance symmetric and PSD (1e-9 relative), faster than real time. The only violations are the 3 saturation cases (#16). 60 more cases with the real learned model running: clean.

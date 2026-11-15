@@ -23,7 +23,7 @@ This system **finds which sensor is lying, stops trusting it, and keeps tracking
    IMU data and predicts how far the head moved **and how sure it is**. It is trained on broken IMU data too,
    so it reports more doubt when its input is bad.
 4. **An adaptive error-state Kalman filter** blends everything by trust. A soft chi-square gate caps any reading
-   that disagrees, a camera that suddenly jumps is held out for up to 10 s, and after an outage the filter
+   that disagrees, a camera that suddenly jumps is held out for up to 30 s, and after an outage the filter
    re-anchors within 1 s. When healthy camera frames keep disagreeing with the IMU, the IMU's process noise is
    raised (adaptive Kalman filtering), so drifting IMUs are corrected faster.
 5. **A self-check on the learned model.** While the camera is healthy, the filter compares the network's predictions

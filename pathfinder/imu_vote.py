@@ -54,8 +54,11 @@ def vote(gyro: np.ndarray, acc: np.ndarray, cfg: VoteConfig = VoteConfig(),
     fused_a = np.zeros((N, 3))
     for w in range(nw):
         s = slice(w * W, min((w + 1) * W, N))
-        g, a = gyro[:, s], acc[:, s]
+        g, a = gyro[:, s].copy(), acc[:, s].copy()
         wts = np.ones(K)
+        # Non-finite readings: that IMU is out for this window, and its values must not reach the sums.
+        fin = np.array([np.isfinite(g[k]).all() and np.isfinite(a[k]).all() for k in range(K)])
+        g[~fin], a[~fin] = 0.0, 0.0
         moving = np.array([g[k].std(0).max() for k in range(K)])
         for k in range(K):
             why = []
@@ -69,13 +72,15 @@ def vote(gyro: np.ndarray, acc: np.ndarray, cfg: VoteConfig = VoteConfig(),
                 r = max(_hf(g[k]) / baseline_hf[k, 0], _hf(a[k]) / baseline_hf[k, 1])
                 if r > cfg.noise_ratio:
                     why.append("noisy")
+            if not fin[k]:
+                why = ["nonfinite"]
             if why:
                 wts[k] = 0.0
                 reasons[k, w] = "+".join(sorted(set(why)))
         if K >= 2:
             ok = wts > 0
             if ok.sum() < 2:
-                ok[:] = True
+                ok[:] = fin if fin.any() else True
             # Element-wise median of the IMUs still in play: with 3+ it outvotes one liar.
             ref_g = np.median(g[ok], axis=0)
             ref_a = np.median(a[ok], axis=0)
@@ -95,10 +100,12 @@ def vote(gyro: np.ndarray, acc: np.ndarray, cfg: VoteConfig = VoteConfig(),
             wts[:] = 0.5
         weights[:, w] = wts
         tot = wts.sum()
-        if tot < 1e-9:
+        if not fin.any():
+            fused_g[s] = fused_a[s] = np.nan               # nothing usable: the filter holds its last sample
+        elif tot < 1e-9:
             # Every IMU looks bad: fall back to the median and let the filter's covariance grow.
-            fused_g[s] = np.median(g, axis=0)
-            fused_a[s] = np.median(a, axis=0)
+            fused_g[s] = np.median(g[fin], axis=0)
+            fused_a[s] = np.median(a[fin], axis=0)
         else:
             fused_g[s] = np.tensordot(wts / tot, g, 1)
             fused_a[s] = np.tensordot(wts / tot, a, 1)

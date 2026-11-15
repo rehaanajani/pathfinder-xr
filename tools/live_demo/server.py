@@ -64,6 +64,10 @@ class Live:
                     "ours": StreamingTracker(ours, p, q, predictor=self.predictor)}
 
     def line(self, msg):
+        """One message from the phone. Malformed ones are counted in ``bad_lines`` and skipped (#18)."""
+        if not well_formed(msg):
+            self.bad_lines = getattr(self, "bad_lines", 0) + 1
+            return
         k = msg["k"]
         self.counts[k] = self.counts.get(k, 0) + 1
         if k in ("g", "a"):
@@ -76,7 +80,7 @@ class Live:
             p = Y_UP_TO_Z_UP.apply(np.array(msg["p"], float))
             q = (Y_UP_TO_Z_UP * R.from_quat(msg["q"])).as_quat()
             tracking = msg["s"] == "TRACKING"
-            self.last_ar = {"t": msg["t"], "tracking": tracking, "reason": msg["r"], "n": msg.get("n", 0)}
+            self.last_ar = {"t": msg["t"], "tracking": tracking, "reason": msg.get("r", ""), "n": msg.get("n", 0)}
             if tracking:
                 self.ar_pos = p
                 if not self.trk and self.g and self.a:
@@ -188,6 +192,38 @@ class Web(BaseHTTPRequestHandler):
         self.wfile.write(PAGE.encode())
 
 
+def _num(x):
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and np.isfinite(x)
+
+
+def _vec(x, n):
+    return isinstance(x, (list, tuple)) and len(x) == n and all(_num(c) for c in x)
+
+
+def well_formed(msg):
+    """Shape check of one phone message: {"k": "g"|"a", "t", "v": [3]} or {"k": "ar", "t", "s", "p": [3], "q": [4]}."""
+    if not isinstance(msg, dict) or not _num(msg.get("t")):
+        return False
+    k = msg.get("k")
+    if k in ("g", "a"):
+        return _vec(msg.get("v"), 3)
+    if k == "ar":
+        return isinstance(msg.get("s"), str) and _vec(msg.get("p"), 3) and _vec(msg.get("q"), 4)
+    return False
+
+
+def parse_lines(text):
+    """JSON lines of a recorded session; lines that are not valid JSON (a cut last line) are skipped."""
+    out = []
+    for ln in text.splitlines():
+        if ln.strip():
+            try:
+                out.append(json.loads(ln))
+            except ValueError:
+                pass
+    return out
+
+
 def serve_phone(live, record):
     srv = socket.socket()
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -208,12 +244,19 @@ def serve_phone(live, record):
                 *lines, buf = buf.split(b"\n")
                 for ln in lines:
                     if ln.strip():
-                        rec.write(ln.decode() + "\n")
-                        live.line(json.loads(ln))
+                        try:
+                            msg = json.loads(ln)
+                        except ValueError:               # cut or garbled line: skip it, keep tracking
+                            live.bad_lines = getattr(live, "bad_lines", 0) + 1
+                            continue
+                        rec.write(ln.decode(errors="replace") + "\n")
+                        live.line(msg)
 
 
 def replay(live, path, speed=1.0):
-    lines = [json.loads(l) for l in Path(path).read_text().splitlines() if l.strip()]
+    lines = [m for m in parse_lines(Path(path).read_text()) if well_formed(m)]
+    if not lines:
+        return
     t0, w0 = lines[0]["t"], time.time()
     for m in lines:
         delay = (m["t"] - t0) / 1e9 / speed - (time.time() - w0)

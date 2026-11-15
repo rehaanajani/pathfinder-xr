@@ -21,7 +21,7 @@ import tools.live_demo.server as S  # noqa: E402
 
 
 def main(path):
-    lines = [json.loads(l) for l in Path(path).read_text().splitlines() if l.strip()]
+    lines = [m for m in S.parse_lines(Path(path).read_text()) if S.well_formed(m)]
     imu_t = [m["t"] for m in lines if m["k"] in ("g", "a")]
     dur = (max(imu_t) - min(imu_t)) / 1e9
     live = S.Live()

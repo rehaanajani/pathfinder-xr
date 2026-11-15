@@ -45,7 +45,8 @@ def saturation_mask(gyro, acc, rate=200.0, flat_tol=1e-6, top=0.95, win_s=2.0):
     w = max(1, int(win_s * rate))
     from scipy.ndimage import maximum_filter1d
     a = np.abs(x)
-    runmax = maximum_filter1d(a, size=w, axis=0, origin=(w - 1) // 2)   # trailing window
+    # trailing window; zero padding (not reflect) so the first 2 s never see later samples (causal, #16)
+    runmax = maximum_filter1d(a, size=w, axis=0, origin=(w - 1) // 2, mode="constant", cval=0.0)
     near_top = a >= top * np.maximum(runmax, 1e-9)
     # Dropped packets repeat the whole sample (all six axes frozen); clipping freezes only the
     # clipped axes while the others keep moving. Only the latter counts as saturation.
@@ -54,6 +55,31 @@ def saturation_mask(gyro, acc, rate=200.0, flat_tol=1e-6, top=0.95, win_s=2.0):
     run3 = np.zeros(n, bool)
     run3[2:] = hit[2:] & hit[1:-1] & hit[:-2]
     return run3
+
+
+IMU_GYRO_MAX = 100.0      # rad/s; beyond any consumer IMU's range: the reading is garbage
+IMU_ACC_MAX = 1000.0      # m/s^2 (~100 g)
+T_EPS = 1e-6              # s; time comparisons tolerate float noise so offline dt and 1/rate agree (#17)
+
+
+class ImuCleaner:
+    """One IMU sample at a time: non-finite, all-zero or impossibly large readings are replaced by the
+    last good sample (zeros if there was none yet) and flagged. Used by both ``run`` and the streaming
+    tracker, so the two stay identical on bad input (#13)."""
+
+    def __init__(self):
+        self.last = None
+
+    def __call__(self, gyro, acc):
+        g, a = np.asarray(gyro, float), np.asarray(acc, float)
+        ok = bool(np.isfinite(g).all() and np.isfinite(a).all() and (g.any() or a.any())
+                  and np.linalg.norm(g) <= IMU_GYRO_MAX and np.linalg.norm(a) <= IMU_ACC_MAX)
+        if ok:
+            self.last = (g, a)
+            return g, a, True, True
+        if self.last is not None:
+            return self.last[0], self.last[1], False, True
+        return np.zeros(3), np.zeros(3), False, False
 
 
 def skew(v):
@@ -189,6 +215,16 @@ class ESKF:
         if P.shape[0] > 15:                       # clones are static; only cross terms move
             P[:15, 15:] = F @ P[:15, 15:]
             P[15:, :15] = P[:15, 15:].T
+
+    def propagate_sample(self, gyro, acc, dt, imu_conf, ok, held):
+        """Propagate with a cleaned sample: a bad one counts with zero confidence; with no good sample
+        ever, coast (keep velocity and orientation, grow the uncertainty)."""
+        if ok:
+            self.propagate(gyro, acc, dt, imu_conf)
+        elif held:
+            self.propagate(gyro, acc, dt, 0.0)
+        else:
+            self.propagate(self.bg.copy(), self.ba + self.R.as_matrix().T @ -G, dt, 0.0)
 
     def _update(self, y, H, Rmeas, gate=None):
         n = self.P.shape[0]
@@ -336,7 +372,7 @@ class ESKF:
         c = self.cfg
         t = self._t(k)
         last = max(getattr(self, "last_good_cam_t", -1e9), getattr(self, "last_vo_t", -1e9))
-        if t - last <= c.vis_gap_s:
+        if t - last <= c.vis_gap_s + T_EPS:
             return
         n = self.P.shape[0]
         H = np.zeros((3, n)); H[:, 3:6] = np.eye(3)
@@ -368,19 +404,19 @@ class ESKF:
             self._assumed_still = False                  # once per outage, only if the prior was used
 
     def outage_time(self, k):
-        """Seconds since the last accepted visual update (0 if none yet or still inside vis_gap_s)."""
+        """Seconds since the last accepted visual update, or since the start if there was none (0 inside vis_gap_s)."""
         last = max(getattr(self, "last_good_cam_t", -1e9), getattr(self, "last_vo_t", -1e9))
-        if last < -1e8:
-            return 0.0
+        if last < -1e8:                                  # no visual fix yet: blind since the start (#15)
+            last = self._t(getattr(self, "k_start", 0))
         t_out = self._t(k) - last
-        return t_out if t_out > self.cfg.vis_gap_s else 0.0
+        return t_out if t_out > self.cfg.vis_gap_s + T_EPS else 0.0
 
     def _t(self, k):
         return k * getattr(self, "dt", 1.0 / 200.0)
 
     def _anchored(self, k):
         """A healthy camera fix was accepted recently, so our state is pinned to the world."""
-        return self._t(k) - getattr(self, "last_good_cam_t", -1e9) <= self.cfg.outage_gap_s
+        return self._t(k) - getattr(self, "last_good_cam_t", -1e9) <= self.cfg.outage_gap_s + T_EPS
 
     def camera_update(self, fix, health, log: FilterLog, k: int = 0):
         """Camera position fix with a small state machine (see ``self.cam_state``):
@@ -396,6 +432,10 @@ class ESKF:
         """
         c = self.cfg
         t = self._t(k)
+        if not (np.isfinite(fix).all() and np.isfinite(health)):     # #14: never let NaN/inf in
+            log.cam_skipped += 1
+            return
+        health = float(np.clip(health, 0.0, 1.0))
         if health >= c.recover_health:
             self.release_outage_assumption(k)
         if c.use_health:
@@ -445,7 +485,7 @@ class ESKF:
 
         # Healthy frame that disagrees with us. Why?
         if state == "tracking":
-            outage = t - getattr(self, "last_good_cam_t", -1e9) > c.outage_gap_s
+            outage = t - getattr(self, "last_good_cam_t", -1e9) > c.outage_gap_s + T_EPS
             self.cam_state = state = "recovering" if outage else "suspect"
             self.streak, self.streak_t0 = [], t
         self.streak.append(y.copy())
@@ -458,7 +498,7 @@ class ESKF:
             wait = c.max_holdout_s                   # suspect: no update, no noise inflation
         Y = np.array(self.streak)
         steady = np.linalg.norm(Y.std(0)) < c.steady_ratio * max(np.linalg.norm(Y.mean(0)), 1e-6)
-        if t - self.streak_t0 >= wait and len(Y) >= c.min_recover_frames and steady:
+        if t - self.streak_t0 >= wait - T_EPS and len(Y) >= c.min_recover_frames and steady:
             # Re-anchor: open our position uncertainty to the size of the disagreement, then take the
             # camera fix with the gate off.
             yy = fix - self.p
@@ -506,7 +546,14 @@ def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = 
     dt = seq.dt
     f = ESKF(cfg, seq.p[start], seq.v[start], seq.q[start])
     f.dt = seq.dt
+    f.k_start = start
     log = FilterLog()
+    # Bad samples (#13): replaced by the last good one, propagated with zero confidence.
+    gyro, acc = np.array(gyro, float), np.array(acc, float)
+    clean = ImuCleaner()
+    imu_ok, imu_held = np.ones(N, bool), np.ones(N, bool)
+    for k in range(N):
+        gyro[k], acc[k], imu_ok[k], imu_held[k] = clean(gyro[k], acc[k])
     cam_at = {} if cam is None else {int(i): j for j, i in enumerate(cam["idx"])}
     disp_at = {} if disp is None or callable(disp) else {int(i): j for j, i in enumerate(disp["idx"])}
     predictor = disp if callable(disp) else None
@@ -534,8 +581,7 @@ def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = 
         log.p_cov.append(f.P[6:9, 6:9].copy())
         if k in cam_at:
             j = cam_at[k]
-            if not np.any(np.isnan(cam["fix"][j])):
-                f.camera_update(cam["fix"][j], cam["health"][j], log, k)
+            f.camera_update(cam["fix"][j], cam["health"][j], log, k)
         if k in disp_at:
             j = disp_at[k]
             k0 = k - disp["window"]
@@ -575,6 +621,6 @@ def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = 
             c = 1.0 if imu_conf is None else float(imu_conf[k])
             if sat_recent[k]:
                 c = min(c, cfg.sat_imu_conf)
-            f.propagate(gyro[k], acc[k], dt, c)
+            f.propagate_sample(gyro[k], acc[k], dt, c, imu_ok[k], imu_held[k])
     out[:start] = seq.p[:start]
     return out, log

@@ -63,7 +63,7 @@ def test_camera_alternating_good_and_wrong_every_200ms():
 
 
 # 3 -- one-axis saturation ------------------------------------------------------------------------------
-@pytest.mark.parametrize("all_imus", [False, pytest.param(True, marks=pytest.mark.xfail(strict=True, reason="rehaanajani/pathfinder-xr#16"))])
+@pytest.mark.parametrize("all_imus", [False, True])
 def test_one_axis_saturation(all_imus):
     def mut(b):
         idx = range(b.n_imus) if all_imus else [0]
