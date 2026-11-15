@@ -75,7 +75,7 @@ struct Opt {
     double blind_vel_tau = 1.5, blind_turn_tau = 0.5;
     int model_every = 20; double model_min_valid = 0.25, model_ref = 0.1, model_vref = 1.0;
     double model_pos_gain = 0.0, model_vel_gain = 1.0; int model_window = 200, model_dec = 1;
-    double yaw_q = 0.0, yaw_q_blind = 2.0, model_blind_tau = 0.7, acc_max = 16 * G, gyro_max = 35.0;
+    double yaw_q = 0.0, yaw_q_blind = 2.0, model_blind_tau = 0.7, acc_max = 16 * G, gyro_max = 35.0, acc_min = 1.0;
 };
 
 static void usage_exit(const char* msg) {
@@ -105,7 +105,7 @@ static void parse_args(int argc, char** argv, Opt& a) {
         {"model-pos-gain", &a.model_pos_gain, nullptr, nullptr}, {"model-vel-gain", &a.model_vel_gain, nullptr, nullptr},
         {"model-window", nullptr, &a.model_window, nullptr}, {"model-dec", nullptr, &a.model_dec, nullptr},
         {"yaw-q", &a.yaw_q, nullptr, nullptr}, {"yaw-q-blind", &a.yaw_q_blind, nullptr, nullptr},
-        {"model-blind-tau", &a.model_blind_tau, nullptr, nullptr}, {"acc-max", &a.acc_max, nullptr, nullptr},
+        {"model-blind-tau", &a.model_blind_tau, nullptr, nullptr}, {"acc-max", &a.acc_max, nullptr, nullptr}, {"acc-min", &a.acc_min, nullptr, nullptr},
         {"gyro-max", &a.gyro_max, nullptr, nullptr},
     };
     bool have_input = false;
@@ -211,14 +211,20 @@ static void open_zip_member(Source& src, const char* path) {
     for (long i = tail - 22; i >= 0; i--) if (le32(&buf[i]) == 0x06054b50) { e = i; break; }
     if (e < 0) { std::fprintf(stderr, "%s: not a zip file\n", path); std::exit(1); }
     uint32_t cd_size = le32(&buf[e + 12]), cd_off = le32(&buf[e + 16]);
-    std::vector<unsigned char> cd(cd_size);
-    std::fseek(f, cd_off, SEEK_SET);
-    if (std::fread(cd.data(), 1, cd_size, f) != cd_size) { std::fprintf(stderr, "bad zip directory\n"); std::exit(1); }
+    std::vector<unsigned char>().swap(buf);
     const std::string want = "imu0/data.csv";
-    for (size_t p = 0; p + 46 <= cd.size() && le32(&cd[p]) == 0x02014b50;) {
-        uint16_t method = le16(&cd[p + 10]), nlen = le16(&cd[p + 28]), xlen = le16(&cd[p + 30]), clen = le16(&cd[p + 32]);
-        uint32_t csize = le32(&cd[p + 20]), loff = le32(&cd[p + 42]);
-        std::string name((char*)&cd[p + 46], nlen);
+    // Walk the central directory one entry at a time: memory stays constant however many files the zip holds.
+    long pos = cd_off, end = (long)cd_off + (long)cd_size;
+    std::string name;
+    while (pos + 46 <= end) {
+        unsigned char h[46];
+        std::fseek(f, pos, SEEK_SET);
+        if (std::fread(h, 1, 46, f) != 46 || le32(h) != 0x02014b50) break;
+        uint16_t method = le16(h + 10), nlen = le16(h + 28), xlen = le16(h + 30), clen = le16(h + 32);
+        uint32_t csize = le32(h + 20), loff = le32(h + 42);
+        name.resize(nlen);
+        if (nlen && std::fread(&name[0], 1, nlen, f) != nlen) break;
+        pos += 46 + nlen + xlen + clen;
         if (name.size() >= want.size() && name.compare(name.size() - want.size(), want.size(), want) == 0) {
             unsigned char lh[30];
             std::fseek(f, loff, SEEK_SET);
@@ -229,7 +235,6 @@ static void open_zip_member(Source& src, const char* path) {
             else if (method != 0) { std::fprintf(stderr, "unsupported zip compression %d\n", method); std::exit(1); }
             return;
         }
-        p += 46 + nlen + xlen + clen;
     }
     std::fprintf(stderr, "no imu0/data.csv in %s\n", path);
     std::exit(1);
@@ -466,7 +471,9 @@ struct PathFinder {
         frozen_run = same ? frozen_run + 1 : 0;
         std::memcpy(prev_raw, vals, sizeof vals); have_prev_raw = true;
         if (frozen_run >= 3) return false;
-        if (norm3(a) > A.acc_max || norm3(g) > A.gyro_max) return false;
+        double na = norm3(a);
+        if (na > A.acc_max || norm3(g) > A.gyro_max) return false;
+        if (na < A.acc_min) return false;       // no gravity at all: a dead accelerometer, not motion
         return true;
     }
 
@@ -479,7 +486,7 @@ struct PathFinder {
             ma[i] = sa / n; mg[i] = sg / n;
         }
         double nm = norm3(ma);
-        q = q_from_two({{ma[0] / nm, ma[1] / nm, ma[2] / nm}}, {{0.0, 0.0, 1.0}});
+        if (nm > 1e-6) q = q_from_two({{ma[0] / nm, ma[1] / nm, ma[2] / nm}}, {{0.0, 0.0, 1.0}});
         double var = 0;
         for (auto& b : init_buf) {
             double s = 0;
@@ -523,7 +530,18 @@ struct PathFinder {
         return sg / w < A.zupt_gyro && sa / w < A.zupt_acc;
     }
 
+    // Advance to time t; if anything turns non-finite, keep the last finite state (never emit NaN).
     void step(long long t, const V3& g, const V3& a, bool ok) {
+        Q q0 = q; V3 p0 = p, v0 = v, bg0 = bg, w0 = w_last, r0 = acc_res;
+        step_(t, g, a, ok);
+        bool fin = std::isfinite(q.w) && std::isfinite(q.x) && std::isfinite(q.y) && std::isfinite(q.z);
+        for (int i = 0; i < 3; i++)
+            fin = fin && std::isfinite(p[i]) && std::isfinite(v[i]) && std::isfinite(bg[i]) &&
+                  std::isfinite(w_last[i]) && std::isfinite(acc_res[i]);
+        if (!fin) { q = q0; p = p0; v = {{0, 0, 0}}; bg = bg0; w_last = w0; acc_res = r0; (void)v0; }
+    }
+
+    void step_(long long t, const V3& g, const V3& a, bool ok) {
         if (!have_t_prev) { t_prev = t; have_t_prev = true; return; }
         double dt = (double)(t - t_prev) * 1e-9;
         t_prev = t;
@@ -766,7 +784,7 @@ int main(int argc, char** argv) {
             if ((int)pf.init_buf.size() >= a.init_samples || (int)pending.size() >= 4 * a.init_samples) {
                 if (!pf.init_buf.empty()) pf.init_from();
                 else pf.initialised = true;
-                replay(false);
+                replay(true);
                 pf.init_buf.clear();
                 pf.init_buf.shrink_to_fit();
                 pending.shrink_to_fit();
