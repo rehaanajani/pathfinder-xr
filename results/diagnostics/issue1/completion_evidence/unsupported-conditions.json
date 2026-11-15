@@ -1,0 +1,222 @@
+{
+  "data": "synthetic head_walk, simulated co-located IMUs",
+  "rows": [
+    {
+      "seed": 0,
+      "case": "two_different_biases",
+      "imus": 5,
+      "state_fraction": {
+        "warmup": 0.0,
+        "nominal": 0.0,
+        "single_unverified": 0.0,
+        "isolated": 1.0,
+        "unisolated": 0.0,
+        "common_mode": 0.0,
+        "lost": 0.0
+      },
+      "healthy_sensor_exclusion_fraction": 0.0,
+      "gyro_fusion_rmse": 0.0010974594672821345,
+      "acc_fusion_rmse": 0.010853652102523195,
+      "supported": false
+    },
+    {
+      "seed": 0,
+      "case": "faulty_majority_agrees",
+      "imus": 3,
+      "state_fraction": {
+        "warmup": 0.0,
+        "nominal": 0.0,
+        "single_unverified": 0.0,
+        "isolated": 1.0,
+        "unisolated": 0.0,
+        "common_mode": 0.0,
+        "lost": 0.0
+      },
+      "healthy_sensor_exclusion_fraction": 1.0,
+      "gyro_fusion_rmse": 0.04622048182857558,
+      "acc_fusion_rmse": 0.46202955339927737,
+      "supported": false
+    },
+    {
+      "seed": 0,
+      "case": "clock_offset_2ms",
+      "imus": 3,
+      "state_fraction": {
+        "warmup": 0.0,
+        "nominal": 1.0,
+        "single_unverified": 0.0,
+        "isolated": 0.0,
+        "unisolated": 0.0,
+        "common_mode": 0.0,
+        "lost": 0.0
+      },
+      "healthy_sensor_exclusion_fraction": 0.0,
+      "gyro_fusion_rmse": 0.0015935048248152332,
+      "acc_fusion_rmse": 0.01633950460263068,
+      "supported": false
+    },
+    {
+      "seed": 0,
+      "case": "clock_offset_20ms",
+      "imus": 3,
+      "state_fraction": {
+        "warmup": 0.0,
+        "nominal": 0.9995835068721366,
+        "single_unverified": 0.0,
+        "isolated": 0.00041649312786339027,
+        "unisolated": 0.0,
+        "common_mode": 0.0,
+        "lost": 0.0
+      },
+      "healthy_sensor_exclusion_fraction": 0.0,
+      "gyro_fusion_rmse": 0.014545647617943403,
+      "acc_fusion_rmse": 0.14112867587507935,
+      "supported": false
+    },
+    {
+      "seed": 1,
+      "case": "two_different_biases",
+      "imus": 5,
+      "state_fraction": {
+        "warmup": 0.0,
+        "nominal": 0.0,
+        "single_unverified": 0.0,
+        "isolated": 1.0,
+        "unisolated": 0.0,
+        "common_mode": 0.0,
+        "lost": 0.0
+      },
+      "healthy_sensor_exclusion_fraction": 0.0,
+      "gyro_fusion_rmse": 0.0010856304973853503,
+      "acc_fusion_rmse": 0.010982061413312403,
+      "supported": false
+    },
+    {
+      "seed": 1,
+      "case": "faulty_majority_agrees",
+      "imus": 3,
+      "state_fraction": {
+        "warmup": 0.0,
+        "nominal": 0.0,
+        "single_unverified": 0.0,
+        "isolated": 1.0,
+        "unisolated": 0.0,
+        "common_mode": 0.0,
+        "lost": 0.0
+      },
+      "healthy_sensor_exclusion_fraction": 1.0,
+      "gyro_fusion_rmse": 0.04624252251417126,
+      "acc_fusion_rmse": 0.4623119419363686,
+      "supported": false
+    },
+    {
+      "seed": 1,
+      "case": "clock_offset_2ms",
+      "imus": 3,
+      "state_fraction": {
+        "warmup": 0.0,
+        "nominal": 0.7580174927113703,
+        "single_unverified": 0.0,
+        "isolated": 0.24198250728862974,
+        "unisolated": 0.0,
+        "common_mode": 0.0,
+        "lost": 0.0
+      },
+      "healthy_sensor_exclusion_fraction": 0.0,
+      "gyro_fusion_rmse": 0.0014890989763650256,
+      "acc_fusion_rmse": 0.014495106618679459,
+      "supported": false
+    },
+    {
+      "seed": 1,
+      "case": "clock_offset_20ms",
+      "imus": 3,
+      "state_fraction": {
+        "warmup": 0.0,
+        "nominal": 0.7246980424822991,
+        "single_unverified": 0.0,
+        "isolated": 0.275301957517701,
+        "unisolated": 0.0,
+        "common_mode": 0.0,
+        "lost": 0.0
+      },
+      "healthy_sensor_exclusion_fraction": 0.0,
+      "gyro_fusion_rmse": 0.012490458230757479,
+      "acc_fusion_rmse": 0.11965281581807587,
+      "supported": false
+    },
+    {
+      "seed": 2,
+      "case": "two_different_biases",
+      "imus": 5,
+      "state_fraction": {
+        "warmup": 0.0,
+        "nominal": 0.0,
+        "single_unverified": 0.0,
+        "isolated": 1.0,
+        "unisolated": 0.0,
+        "common_mode": 0.0,
+        "lost": 0.0
+      },
+      "healthy_sensor_exclusion_fraction": 0.0,
+      "gyro_fusion_rmse": 0.0011089209919233152,
+      "acc_fusion_rmse": 0.010914034879095022,
+      "supported": false
+    },
+    {
+      "seed": 2,
+      "case": "faulty_majority_agrees",
+      "imus": 3,
+      "state_fraction": {
+        "warmup": 0.0,
+        "nominal": 0.0,
+        "single_unverified": 0.0,
+        "isolated": 1.0,
+        "unisolated": 0.0,
+        "common_mode": 0.0,
+        "lost": 0.0
+      },
+      "healthy_sensor_exclusion_fraction": 1.0,
+      "gyro_fusion_rmse": 0.046177596197938986,
+      "acc_fusion_rmse": 0.4620529154130834,
+      "supported": false
+    },
+    {
+      "seed": 2,
+      "case": "clock_offset_2ms",
+      "imus": 3,
+      "state_fraction": {
+        "warmup": 0.0,
+        "nominal": 1.0,
+        "single_unverified": 0.0,
+        "isolated": 0.0,
+        "unisolated": 0.0,
+        "common_mode": 0.0,
+        "lost": 0.0
+      },
+      "healthy_sensor_exclusion_fraction": 0.0,
+      "gyro_fusion_rmse": 0.001593811982121687,
+      "acc_fusion_rmse": 0.016368608134622542,
+      "supported": false
+    },
+    {
+      "seed": 2,
+      "case": "clock_offset_20ms",
+      "imus": 3,
+      "state_fraction": {
+        "warmup": 0.0,
+        "nominal": 0.9995835068721366,
+        "single_unverified": 0.0,
+        "isolated": 0.00041649312786339027,
+        "unisolated": 0.0,
+        "common_mode": 0.0,
+        "lost": 0.0
+      },
+      "healthy_sensor_exclusion_fraction": 0.0,
+      "gyro_fusion_rmse": 0.014577336484142773,
+      "acc_fusion_rmse": 0.14129590957851135,
+      "supported": false
+    }
+  ],
+  "conclusion": "Multiple/colluding faults and inter-sensor time offsets are outside the supported single-fault/synchronized-input contract."
+}

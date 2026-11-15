@@ -110,6 +110,7 @@ class FilterConfig:
     model_doubt_scale: float = 10.0 # self-check scale above which the model is "distrusted" (see model_distrusted)
     model_max_scale: float | None = 10.0  # withhold a measured-inconsistent model without a healthy camera
     model_covariance_validated: bool = False  # requires held-out calibration evidence for this model/domain
+    model_during_visual_tracking: bool = False  # research override: correlated learned updates while camera anchors pose
     use_health: bool = True       # off = naive fusion that trusts every frame equally
     trust: tuple | None = None    # (health, std_m) table from camera.calibrate_trust
     cloning: bool = False         # TLIO-style stochastic cloning of past (rotation, position)
@@ -444,6 +445,12 @@ class ESKF:
     def _model_cov(self, cov, t, log):
         """Covariance actually used for a learned update, or None if the update is withheld."""
         c = self.cfg
+        if self._anchored(t) and not c.model_during_visual_tracking:
+            # The camera already observes translation. Use these windows to check the model,
+            # without counting its IMU-derived prediction as independent position evidence.
+            log.disp_skipped += 1
+            log.disp_withheld += 1
+            return None
         if self.episode is not None and self.episode.origin == "jump" and self.model_distrusted():
             # Camera and state disagree and the camera is being held out. If the self-check has
             # already measured the network as inconsistent, its updates would be the only thing

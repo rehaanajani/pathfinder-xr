@@ -45,7 +45,7 @@ def init():
 
 
 def job(task):
-    sid, seed, name = task
+    sid, seed, name, modes = task
     s = D.load(sid)
     clip = 60.
     start = int(min(30., max(0., s.t[-1] - clip - 1)) * 200)
@@ -54,10 +54,10 @@ def job(task):
     fg, fa, info = pipeline.fuse_imus(bad)
     cfg = pipeline.ours_cfg()
     rows = []
-    for mode in MODES:
+    for mode in modes:
         config = cfg
         if mode == "legacy_unrestricted":
-            config = replace(cfg, model_max_scale=None)
+            config = replace(cfg, model_max_scale=None, model_during_visual_tracking=True)
         elif mode == "cloning_x1600":
             config = replace(cfg, cloning=True, disp_cov_scale=1600.)
         p, log, out = run(s, fg, fa, None, cam, None if mode == "no_model" else PREDICTOR,
@@ -81,6 +81,7 @@ def main():
     ap.add_argument("--seqs", type=int, default=6)
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--modes", nargs="+", choices=MODES, default=list(MODES))
     args = ap.parse_args()
     if args.out.exists():
         raise SystemExit("refusing to overwrite existing evidence")
@@ -95,14 +96,14 @@ def main():
                 "dataset_sha256": {sid: fingerprint(D.ROOT / sid / "imu0_resampled.npy") for sid in ids},
                 "config": asdict(pipeline.ours_cfg()),
                 "scope": "development comparison; thresholds not selected on test; no final generalization claim"}
-    tasks = [(sid, i, sc) for i, sid in enumerate(ids) for sc in NAMES]
+    tasks = [(sid, i, sc, args.modes) for i, sid in enumerate(ids) for sc in NAMES]
     rows = []
     with ProcessPoolExecutor(args.workers, initializer=init) as ex:
         for result in ex.map(job, tasks):
             rows.extend(result)
     summary = {sc: {mode: {"mean_ate_m": float(np.mean([r["ate_m"] for r in rows if r["scenario"] == sc and r["mode"] == mode])),
                           "median_ate_m": float(np.median([r["ate_m"] for r in rows if r["scenario"] == sc and r["mode"] == mode]))}
-                    for mode in MODES} for sc in NAMES}
+                    for mode in args.modes} for sc in NAMES}
     args.out.parent.mkdir(parents=True, exist_ok=True)
     def encode(v):
         return v.tolist() if isinstance(v, np.ndarray) else float(v)

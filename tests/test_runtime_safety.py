@@ -1,7 +1,5 @@
 """Regressions for the issue #1 completion pass; no dataset or trained network required."""
 
-from dataclasses import replace
-
 import numpy as np
 import pytest
 
@@ -45,6 +43,17 @@ def test_default_withholds_known_inconsistent_model_during_outage():
     before = f.P.copy()
     f.displacement_update(np.ones(3), np.eye(3) * .01, np.zeros(3), np.eye(3), log, 10.)
     assert log.disp_used == 0 and log.disp_withheld == 1
+    np.testing.assert_array_equal(f.P, before)
+
+
+def test_healthy_visual_tracking_checks_model_without_fusing_correlated_prediction():
+    f = ESKF(pipeline.ours_cfg(), np.zeros(3), np.zeros(3), [0., 0., 0., 1.])
+    f.last_good_t = 0.
+    before = f.P.copy()
+    log = FilterLog()
+    f.displacement_update(np.ones(3), np.eye(3) * .001, np.zeros(3), np.eye(3) * .001, log, .1)
+    assert log.disp_used == 0 and log.disp_withheld == 1
+    assert f.model_scale > 1.  # passive self-check remains active
     np.testing.assert_array_equal(f.P, before)
 
 
