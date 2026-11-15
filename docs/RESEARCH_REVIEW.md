@@ -37,6 +37,8 @@ Validation mean, metres (ATE / checkpoints / blind 5 s / dropouts):
 | Shrink the output 0.5-0.9x (Meta AI's idea) | 4.07-4.11 | | | |
 | Blind 5 s: velocity decay 0.3-3 s, turn-rate decay 0.1-2 s | 4.06 | 3.96 | 2.54-2.56 | 3.84 |
 | Pull back to start 5 s instead of 3 s | 4.00 | 3.92 | 2.44 | 3.80 |
+| Gravity-correction trust 0.3-3 m/s², gain 0.1-1, low-pass 0.5 s (Gemini: drone banking fools it) | 4.06-4.07 | 3.96-3.97 | 2.52-2.55 | 3.83-3.87 |
+| Separate, stronger pull for height (0.3-10 s) | 4.05-4.07 | 3.93-3.97 | 2.55-2.57 | 3.84-3.87 |
 
 - **"Remove the brakes" is wrong for us.** All three said the pull-to-start, leak and speed limit fight the
   network. Removing the pull makes everything worse (4.06 -> 4.96 m); the others do nothing, because the network's
@@ -45,6 +47,12 @@ Validation mean, metres (ATE / checkpoints / blind 5 s / dropouts):
 - **The blind 5 s cannot be fixed after the fact**: its error is the position error already accumulated when the
   IMU dies (Mayank found the same). Better tracking before the failure is the only lever.
 - `--pos-tau 5` is 1-2 % better on validation: within tuning noise; not changed.
+
+Why nothing moves (from Gemini's derivation, consistent with these numbers): after SE(3) alignment,
+ATE² = σ_true² + σ_est² − 2ρσ_trueσ_est, where σ is a trajectory's spread around its centroid and ρ how well the
+shapes match. Standing still scores exactly σ_true. The pull to start keeps σ_est small, so ATE can only beat standing
+still in proportion to ρ, the shape match, and ρ comes from the network. Settings that do not change the network's
+output cannot change ρ.
 
 ## What we will do
 
