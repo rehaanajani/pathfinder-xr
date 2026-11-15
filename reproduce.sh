@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Everything in one command: environment, data, models, tests, benchmark, report.
 #
-#   bash reproduce.sh               # uses our trained models from the GitHub release if present,
-#                                   # otherwise trains them (~25 min on an Apple M-series / any GPU)
+#   bash reproduce.sh               # downloads and SHA-256-verifies the released models (fails if it cannot;
+#                                   # it never retrains silently)
 #   bash reproduce.sh --synthetic   # no download: synthetic head walks, ~3 min
-#   bash reproduce.sh --train       # always retrain both models
+#   bash reproduce.sh --train       # intentionally retrain both models (new model identity, see train.py)
+# Real-vision (TUM-VI) workflow: docs/REPRODUCIBILITY.md.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -16,7 +17,8 @@ done
 if [ ! -d .venv ]; then
   if command -v uv >/dev/null; then uv venv -q --python 3.11 .venv; else python3 -m venv .venv; fi
 fi
-PY=.venv/bin/python
+# Windows venvs put the interpreter in Scripts/, POSIX venvs in bin/.
+if [ -x .venv/Scripts/python.exe ]; then PY=.venv/Scripts/python.exe; else PY=.venv/bin/python; fi
 if command -v uv >/dev/null; then uv pip install -q --python $PY -r requirements.txt; else $PY -m pip install -q -r requirements.txt; fi
 
 echo "== tests"
@@ -31,21 +33,18 @@ fi
 if [ ! -f local_data/tlio_golden/test_list.txt ]; then
   echo "== downloading the TLIO headset dataset (Meta, CC BY-NC 4.0, 3.8 GB zip, 8.5 GB unpacked)"
   mkdir -p local_data
-  .venv/bin/gdown 14YKW7PsozjHo_EdxivKvumsQB7JMw1eg -O local_data/tlio_golden.zip
+  $PY -m gdown 14YKW7PsozjHo_EdxivKvumsQB7JMw1eg -O local_data/tlio_golden.zip
   unzip -q local_data/tlio_golden.zip -d local_data && rm local_data/tlio_golden.zip
 fi
 
-REL=https://github.com/rehaanajani/pathfinder-xr/releases/download/models-v1
-for aug in faults tlio; do
-  if [ "$TRAIN" = 0 ] && [ ! -f models/dispnet_$aug/best.pt ]; then
-    mkdir -p models/dispnet_$aug
-    curl -fsSL "$REL/dispnet_$aug.pt" -o models/dispnet_$aug/best.pt || rm -f models/dispnet_$aug/best.pt
-  fi
-  if [ "$TRAIN" = 1 ] || [ ! -f models/dispnet_$aug/best.pt ]; then
-    echo "== training dispnet_$aug"
+if [ "$TRAIN" = 1 ]; then
+  for aug in faults tlio; do
+    echo "== training dispnet_$aug (intentional retraining: results are a new model identity)"
     $PY train.py --aug $aug --epochs 10
-  fi
-done
+  done
+else
+  $PY tools/fetch_models.py          # exits non-zero on any missing/mismatched checkpoint
+fi
 
 echo "== benchmark"
 $PY evaluate.py --seqs 36 --clip 60

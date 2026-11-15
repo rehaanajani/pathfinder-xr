@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pathfinder-xr"
+version = "0.2.0.dev0"
+description = "Fault-aware visual-inertial pose estimation research code (Path Finder)"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+# No project license is declared: the owners have not selected one (issue #3 D). Third-party data
+# and model licences are listed in docs/RELEASE.md.
+dependencies = [
+    "numpy>=1.26,<3",
+    "scipy>=1.11,<2",
+]
+
+[project.optional-dependencies]
+vision = ["opencv-python-headless>=4.9,<5", "PyYAML>=6,<7"]
+model = ["torch>=2.2,<3"]
+plots = ["matplotlib>=3.8,<4"]
+export = ["onnx>=1.16", "onnxruntime>=1.18"]
+data = ["gdown>=5.0"]
+dev = ["pytest>=8,<9"]
+
+[tool.setuptools]
+packages = ["pathfinder"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

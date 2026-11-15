@@ -35,6 +35,20 @@ final demo. **Estimator implementation update:** see [issue #1 completion notes]
 current reference-free API, model policy, input validation and validity semantics. The result tables below predate
 that implementation; they are historical research evidence, not revalidated measurements of the current defaults.
 
+**Real-vision update (issues #2/#3):** Path Finder now runs on motion estimated from **real stereo images**
+(`pathfinder/stereo_vo.py`), fused through clone-based relative-pose updates with the **real** IMU. It has been
+evaluated on TUM-VI room1 under a frozen protocol ([docs/PROTOCOL.md](docs/PROTOCOL.md)), with
+the report and figures in [results/vision/](results/vision/README.md) and a labelled prerecorded replay in
+[demo/vision_replay.html](demo/vision_replay.html). room1 is a *development* recording that earlier work already
+used. That evaluation has no untouched final test and runs no established external VIO baseline, and the
+VO covariance is not validated, so relative-mode poses are reported `valid=False` by contract. The tables, deck
+and video further down still describe the earlier simulated-camera benchmark and have **not** been regenerated
+from the new bundle. Setup and reproduction: [docs/REPRODUCE.md](docs/REPRODUCE.md); runtime contract:
+[docs/STREAMING.md](docs/STREAMING.md); releases/licences: [docs/RELEASE.md](docs/RELEASE.md).
+According to the team's restatement of the official brief (`docs/TRACK3_BRIEF.md` on the `track3-entry` branch, PR #12),
+the **scored Track 3 task is IMU-only**. This vision work is supporting/innovation material and is not the scored entry; see
+[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
+
 > Design robust trajectory-estimation techniques capable of maintaining reliable tracking and navigation
 > when sensor measurements become degraded or unreliable.
 

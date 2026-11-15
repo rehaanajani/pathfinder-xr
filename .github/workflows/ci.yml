@@ -1,0 +1,45 @@
+name: ci
+
+# Unit/regression tests, the synthetic end-to-end smoke pipeline and repository checks on the pinned
+# lock. No dataset download, no training, no model checkpoint and no paid service: tests that would
+# need them are not part of this workflow (see docs/REPRODUCIBILITY.md for the offline commands).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    env:
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      PYTHONHASHSEED: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install the pinned, hash-checked lock
+        run: python -m pip install --require-hashes -r requirements/core-dev-py313.lock
+      - name: Repository checks (compile, schemas, secrets, runtime isolation)
+        run: python tools/check_repo.py
+      - name: Unit, regression and synthetic end-to-end smoke tests
+        run: python -m pytest -q -p no:cacheprovider
+      - name: Smoke evaluation into an isolated run directory
+        run: python tools/smoke_eval.py --out ci-runs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-run-${{ matrix.os }}
+          path: ci-runs/
+          retention-days: 14

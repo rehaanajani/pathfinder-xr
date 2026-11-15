@@ -61,6 +61,7 @@ from . import GRAVITY
 
 G = np.array([0.0, 0.0, -GRAVITY])
 CHI2_3DOF_999 = 16.27
+CHI2_6DOF_999 = 22.458
 
 CAM_NONE, CAM_NOMINAL, CAM_DEGRADED, CAM_OUTAGE, CAM_SUSPECT, CAM_RECOVERING = range(6)
 CAM_STATE_NAMES = ("none", "nominal", "degraded", "outage", "suspect_jump", "recovering")
@@ -132,12 +133,38 @@ class FilterConfig:
     gap_sigma_a: float = 2.0         # ... m/s^2/sqrt(Hz)
     max_valid_pos_std: float = 1.0   # largest position std (m, worst axis) still reported as valid
     disp_rate_tol: float = 0.05      # learned window skipped if its sample spacing deviates more
+    vo_cov_scale: float = 1.0        # calibration of the visual front end's claimed relative-pose covariance
+    vo_gate: float = CHI2_6DOF_999   # hard chi-square gate on the 6-DoF relative-pose innovation
+    vo_max_clones: int = 3           # camera keyframe clones kept in the state
+    # The front end's covariance (PnP information x residual scale x vo_cov_scale) has been fitted on
+    # development data only. Like the learned model's, it certifies nothing until held-out coverage
+    # evidence exists: relative-mode outputs are COVARIANCE_UNRELIABLE / invalid unless asserted.
+    vo_covariance_validated: bool = False
+    # Recovery from persistent VO rejection (relative mode). Healthy VO that keeps failing the gate means
+    # either the camera is wrong (frozen/desynchronised frames) or the inertial state has diverged (IMU
+    # bias or saturation during an outage). After an outage the inertial state is the suspect after
+    # recover_after_s of consecutive healthy rejections; while VO was anchored a disagreement is first
+    # treated as a camera fault and held out for vo_recover_after_jump_s (shorter than the absolute-fix
+    # hold-out: a rejected relative stream lets inertial drift grow without bound). Then velocity,
+    # attitude and bias covariance are inflated and VO is applied ungated for recover_after_s (reported).
+    vo_reanchor: bool = True
+    vo_recover_after_jump_s: float = 2.0  # hold-out for a disagreement that starts while VO is anchored
+    vo_reanchor_vel_std: float = 1.0      # m/s added to the velocity std
+    vo_reanchor_att_deg: float = 5.0
+    vo_reanchor_bg_std: float = 0.05      # rad/s
+    vo_reanchor_ba_std: float = 0.5       # m/s^2
+    # TLIO training windows are offline bias-compensated; raw-IMU devices (e.g. TUM-VI) are not. When
+    # true, the learned model sees IMU samples minus the filter's current bias estimate. Off by default
+    # (issue #1 behaviour on the bias-compensated TLIO data).
+    model_input_bias_corrected: bool = False
 
     def __post_init__(self):
         positive = ("fix_std", "gate", "max_imu_gap_s", "max_valid_pos_std", "disp_cov_scale",
                     "outage_gap_s", "recover_after_s", "recover_after_jump_s", "model_doubt_scale",
-                    "max_jump_holdout_s", "episode_end_lr", "jump_cover", "outage_envelope")
-        nonnegative = ("sigma_g", "sigma_a", "sigma_bg", "sigma_ba", "gap_sigma_g", "gap_sigma_a",
+                    "vo_reanchor_vel_std", "vo_recover_after_jump_s", "vo_reanchor_bg_std", "vo_reanchor_ba_std",
+                    "max_jump_holdout_s", "episode_end_lr", "jump_cover", "outage_envelope", "vo_cov_scale",
+                    "vo_gate")
+        nonnegative = ("vo_reanchor_att_deg", "sigma_g", "sigma_a", "sigma_bg", "sigma_ba", "gap_sigma_g", "gap_sigma_a",
                        "bias_q_gain", "anchor_min_s", "provisional_factor", "soft_power", "disp_rate_tol")
         for name in positive + nonnegative:
             value = getattr(self, name)
@@ -155,6 +182,8 @@ class FilterConfig:
         if (self.gate_mode not in ("soft", "hard") or not np.isfinite(self.q_max) or self.q_max < 1
                 or not np.isfinite(self.low_conf_inflate) or self.low_conf_inflate < 1):
             raise ValueError("invalid gating or process-noise configuration")
+        if int(self.vo_max_clones) != self.vo_max_clones or self.vo_max_clones < 1:
+            raise ValueError("vo_max_clones must be a positive integer")
         if self.min_episode_fixes < 3 or self.max_episode_fixes < self.min_episode_fixes + 2:
             raise ValueError("episode buffer is too short for the consistency fit")
         if self.max_jump_holdout_s < self.recover_after_jump_s:
@@ -182,6 +211,12 @@ class FilterLog:
     disp_skipped: int = 0
     disp_withheld: int = 0                      # skipped by the optional activation policy
     disp_std: list = field(default_factory=list)
+    vo_used: int = 0                            # accepted relative-pose (visual odometry) updates
+    vo_rejected: int = 0                        # failed the 6-DoF gate
+    vo_no_anchor: int = 0                       # relative measurement whose keyframe clone is not in the state
+    vo_keyframes: int = 0
+    vo_reanchored: int = 0                      # inertial state re-anchored to persistent healthy VO
+    vo_nis: list = field(default_factory=list)  # (t, nis, accepted) per relative update
     model_scale: list = field(default_factory=list)
     q_scale: list = field(default_factory=list)  # adaptive process-noise scale per output sample
     events: list = field(default_factory=list)  # (t, kind, detail) for re-anchors and episodes
@@ -268,6 +303,9 @@ class ESKF:
         self.last_used_healthy = False
         self.episode: _Episode | None = None
         self.good_since = None
+        self.vo_rej_t0 = None             # start of the current run of healthy VO rejections
+        self.vo_rej_hold = 0.0
+        self.vo_bypass_until = -np.inf    # end of the re-anchoring window
         self.provisional_until = -np.inf
         self._nis_b = 0.0
         self.diverged = False
@@ -380,12 +418,109 @@ class ESKF:
         self.clone_k.append(k)
         self.clone_p.append(self.p.copy())
         self.clone_R.append(self.R)
-        while len(self.clone_k) > max_clones:
-            keep = np.r_[0:15, 21:self.P.shape[0]]
-            self.P = self.P[np.ix_(keep, keep)]
-            self.clone_k.pop(0)
-            self.clone_p.pop(0)
-            self.clone_R.pop(0)
+        # Clones of one kind are pruned independently: int keys are learned-displacement window
+        # starts, ("cam", id) keys are camera keyframes. Mixing them must not evict the other kind.
+        kind = type(k)
+        while sum(type(c) is kind for c in self.clone_k) > max_clones:
+            self.drop_clone(next(i for i, c in enumerate(self.clone_k) if type(c) is kind))
+
+    def drop_clone(self, i: int):
+        o = 15 + 6 * i
+        keep = np.r_[0:o, o + 6:self.P.shape[0]]
+        self.P = self.P[np.ix_(keep, keep)]
+        self.clone_k.pop(i)
+        self.clone_p.pop(i)
+        self.clone_R.pop(i)
+
+    def relative_pose_measurement(self, key):
+        """h and H for the IMU pose now relative to the clone ``key``, expressed in the clone's frame.
+
+        translation  h_t = R_i^T (p - p_i)   dh_t = R_i^T dp - R_i^T dp_i + [h_t]x dtheta_i
+        rotation     h_R = R_i^T R          residual r = Log(h_R^T z_R) ~ dtheta - h_R^T dtheta_i
+        (right perturbations R = R_hat Exp(dtheta) for the current state and every clone)."""
+        i = self.clone_k.index(key)
+        n = self.P.shape[0]
+        o = 15 + 6 * i
+        Ri = self.clone_R[i].as_matrix()
+        h_t = Ri.T @ (self.p - self.clone_p[i])
+        h_R = Ri.T @ self.R.as_matrix()
+        H = np.zeros((6, n))
+        H[0:3, 6:9] = Ri.T
+        H[0:3, o + 3:o + 6] = -Ri.T
+        H[0:3, o:o + 3] = skew(h_t)
+        H[3:6, 0:3] = np.eye(3)
+        H[3:6, o:o + 3] = -h_R.T
+        return h_t, h_R, H
+
+    def relative_pose_update(self, key, dp, dR, cov6, health, log: FilterLog, t: float = 0.0):
+        """Visual odometry between a camera keyframe clone and now (vision-only relative motion).
+
+        dp (3,) metres and dR (3x3) are the IMU pose now in the keyframe's IMU frame, cov6 the front
+        end's covariance of [dp, dtheta] (rotation as a right perturbation of dR). Returns
+        "no_anchor", "skipped", "invalid", "accepted", "rejected" or "reanchored". A relative measurement does not observe
+        absolute position or heading, so it never re-anchors the world frame."""
+        if key not in self.clone_k:
+            log.vo_no_anchor += 1
+            return "no_anchor"
+        if self.cfg.use_health and not health >= self.cfg.min_health:
+            log.cam_skipped += 1               # front end reports essentially nothing usable
+            return "skipped"
+        dR = np.asarray(dR, float)
+        cov6 = np.asarray(cov6, float) * self.cfg.vo_cov_scale
+        if (np.shape(dp) != (3,) or not np.all(np.isfinite(dp)) or dR.shape != (3, 3) or not np.isfinite(dR).all()
+                or not np.allclose(dR @ dR.T, np.eye(3), atol=1e-6) or not valid_covariance(cov6, 6)):
+            log.cam_invalid += 1
+            return "invalid"
+        h_t, h_R, H = self.relative_pose_measurement(key)
+        y = np.r_[np.asarray(dp, float) - h_t, Rot.from_matrix(h_R.T @ dR).as_rotvec()]
+        S = H @ self.P @ H.T + cov6
+        S = 0.5 * (S + S.T)
+        nis = float(y @ np.linalg.solve(S, y))
+        result = "accepted"
+        c = self.cfg
+        if c.use_gate and nis > c.vo_gate and t <= self.vo_bypass_until:
+            result = "reanchored"               # inside the re-anchoring window: applied without the gate
+        elif c.use_gate and nis > c.vo_gate:
+            if not (c.vo_reanchor and health >= c.recover_health):
+                log.vo_rejected += 1
+                log.vo_nis.append((t, nis, False))
+                return "rejected"
+            if self.vo_rej_t0 is None:
+                anchored = (t - self.last_good_t <= c.outage_gap_s and self.good_since is not None
+                            and self.last_good_t - self.good_since >= c.anchor_min_s - 1e-9)
+                self.vo_rej_t0, self.vo_rej_hold = t, (c.vo_recover_after_jump_s if anchored else c.recover_after_s)
+            log.vo_rejected += 1
+            log.vo_nis.append((t, nis, False))
+            if t - self.vo_rej_t0 >= self.vo_rej_hold:
+                # Persistent healthy VO outlasted the hold-out: the inertial state is the suspect. Inflate what
+                # the IMU alone could have corrupted (velocity, attitude, biases). This measurement's relative
+                # position was propagated with the old covariance, so it is not applied; the following
+                # measurements (relative to the next keyframe clone, which carries the inflated covariance)
+                # are applied without the gate for recover_after_s. Frozen frames, the main *camera* fault
+                # that looks like healthy VO, are removed earlier by the front end's stale-frame check.
+                infl = np.zeros(self.P.shape[0])
+                infl[0:3] = np.deg2rad(c.vo_reanchor_att_deg) ** 2
+                infl[3:6] = c.vo_reanchor_vel_std ** 2
+                infl[9:12] = c.vo_reanchor_bg_std ** 2
+                infl[12:15] = c.vo_reanchor_ba_std ** 2
+                self.P = self.P + np.diag(infl)
+                self.vo_bypass_until = t + c.recover_after_s
+                log.vo_reanchored += 1
+                log.events.append((t, "vo_reanchored", f"held {t - self.vo_rej_t0:.2f}s nis {nis:.1f}"))
+                self.vo_rej_t0 = None
+                return "reanchored"
+            return "rejected"
+        self.vo_rej_t0 = None
+        self._update(y, H, cov6, mode="off")
+        log.vo_used += 1
+        log.vo_nis.append((t, nis, True))
+        self.last_used_t = t
+        self.last_used_healthy = health >= self.cfg.recover_health
+        if self.last_used_healthy:
+            if self.good_since is None or t - self.last_good_t > self.cfg.outage_gap_s:
+                self.good_since = t
+            self.last_good_t = t
+        return result
 
     def clone_yaw(self, k0):
         """Yaw-only rotation (world <- local gravity-aligned frame) of the clone taken at sample k0."""

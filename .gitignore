@@ -16,3 +16,5 @@ deck/*.pdf
 runs/
 src/pathfinder
 src/pathfinder.exe
+!models/MODELS.json
+fresh-setup/
