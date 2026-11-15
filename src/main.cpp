@@ -338,7 +338,8 @@ struct VelNet {
     std::vector<float> scale;
     std::vector<Conv> convs;
     std::vector<Dense> fcs;
-    std::vector<float> x, y;        // activation buffers, reused
+    std::vector<float> x, y, xp;    // activation buffers, reused
+    std::vector<double> acc;
 
     bool load(const std::string& path) {
         FILE* f = std::fopen(path.c_str(), "rb");
@@ -377,21 +378,30 @@ struct VelNet {
         x = in;
         for (const Conv& c : convs) {
             int lout = (L + 2 * c.pad - c.k) / c.stride + 1;
+            // Zero-padded copy of the input, then accumulate with the output position innermost (vectorises).
+            // For every output the products are summed in the same order (ci, then k) as a direct loop would.
+            int Lp = L + 2 * c.pad;
+            xp.assign((size_t)c.cin * Lp, 0.0f);
+            for (int ci = 0; ci < c.cin; ci++)
+                std::memcpy(&xp[(size_t)ci * Lp + c.pad], &x[(size_t)ci * L], sizeof(float) * L);
+            acc.resize(lout);
             y.assign((size_t)c.cout * lout, 0.0f);
             for (int co = 0; co < c.cout; co++) {
                 const float* wc = &c.w[(size_t)co * c.cin * c.k];
-                for (int l = 0; l < lout; l++) {
-                    double s = 0;
-                    int base = l * c.stride - c.pad;
-                    for (int ci = 0; ci < c.cin; ci++) {
-                        const float* xr = &x[(size_t)ci * L];
-                        const float* wr = wc + (size_t)ci * c.k;
-                        for (int k = 0; k < c.k; k++) {
-                            int j = base + k;
-                            if (j >= 0 && j < L) s += (double)wr[k] * xr[j];
-                        }
+                std::fill(acc.begin(), acc.end(), 0.0);
+                double* ac = acc.data();
+                for (int ci = 0; ci < c.cin; ci++) {
+                    const float* xr = &xp[(size_t)ci * Lp];
+                    const float* wr = wc + (size_t)ci * c.k;
+                    for (int k = 0; k < c.k; k++) {
+                        double w = wr[k];
+                        const float* src = xr + k;
+                        if (c.stride == 2) for (int l = 0; l < lout; l++) ac[l] += w * src[2 * l];
+                        else for (int l = 0; l < lout; l++) ac[l] += w * src[l * c.stride];
                     }
-                    float v = (float)s + c.b[co];
+                }
+                for (int l = 0; l < lout; l++) {
+                    float v = (float)ac[l] + c.b[co];
                     y[(size_t)co * lout + l] = v > 0 ? v : 0.0f;
                 }
             }

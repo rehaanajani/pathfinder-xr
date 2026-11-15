@@ -208,6 +208,19 @@ def batch(data, sel, W, train, a, torch):
             Rt = small_rot(B, math.radians(a.tilt_aug), torch, dev)
             u = torch.einsum("bij,bwj->bwi", Rt, x[..., 6:9])
             x = torch.cat([x[..., :6], u, x[..., 9:]], -1)
+        if a.rot_aug > 0:   # the IMU mounted another way: one random rotation of every body-frame vector
+            q = torch.randn(B, 4, device=dev)
+            q = q / q.norm(dim=1, keepdim=True)
+            w_, x_, y_, z_ = q.unbind(1)
+            Rr = torch.stack([1 - 2 * (y_ * y_ + z_ * z_), 2 * (x_ * y_ - z_ * w_), 2 * (x_ * z_ + y_ * w_),
+                              2 * (x_ * y_ + z_ * w_), 1 - 2 * (x_ * x_ + z_ * z_), 2 * (y_ * z_ - x_ * w_),
+                              2 * (x_ * z_ - y_ * w_), 2 * (y_ * z_ + x_ * w_), 1 - 2 * (x_ * x_ + y_ * y_)], 1).view(B, 3, 3)
+            keep = torch.rand(B, device=dev) >= a.rot_aug
+            Rr[keep] = torch.eye(3, device=dev)
+            rot = lambda u: torch.einsum("bij,bwj->bwi", Rr, u)  # noqa: E731
+            x = torch.cat([rot(x[..., 0:3]), rot(x[..., 3:6]), rot(x[..., 6:9]), x[..., 9:]], -1)
+            d = torch.einsum("bij,bj->bi", Rr, d)
+            v = torch.einsum("bij,bj->bi", Rr, v)
         cut = torch.where(torch.rand(B, device=dev) < 0.1,
                           torch.randint(0, int(W * (1 - MIN_VALID)), (B,), device=dev),
                           torch.zeros(B, dtype=torch.long, device=dev))
@@ -314,6 +327,7 @@ def main():
     t.add_argument("--wd", type=float, default=1e-4); t.add_argument("--disp-weight", type=float, default=1.0)
     t.add_argument("--tilt-aug", type=float, default=2.0, help="deg, std of the random tilt error of the up channel")
     t.add_argument("--mirror", type=int, default=1)
+    t.add_argument("--rot-aug", type=float, default=0.0, help="fraction of windows given a random IMU mounting")
     t.add_argument("--val-stride", type=int, default=3); t.add_argument("--cpu", action="store_true")
     t.add_argument("--seed", type=int, default=0); t.add_argument("--out", default="runs/airio/a")
     e = sub.add_parser("export")
