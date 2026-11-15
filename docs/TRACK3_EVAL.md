@@ -64,7 +64,7 @@ evo_rpe tum gt.txt est.txt -d 200 -u f --t_max_diff 0.01   # translation RPE ove
 1 s). `evo_ape -a` aligns on the whole trajectory, including the blind 5 s, as the brief's tool would. All 33 + 33 runs
 exited 0 and wrote one pose per input row (`rows_out == rows_in`, timestamps equal, unit quaternions).
 
-Mean of 3 seeds (m). The seeds differ by at most 0.40 m on any metric; raw per-seed numbers are in `docs/track3_eval_results.json`.
+Mean of 3 seeds (m). The seeds differ by at most 0.40 m on any metric; raw per-seed numbers are in `docs/track3_eval_results.json` (blind study: `docs/track3_blind_results.json`).
 
 | recording | evo ATE -a (ours) | ATE -as (ours) | evo RPE 1 s (ours) | ATE -a (still) | ATE -as (still) | RPE 1 s (still) |
 |---|---:|---:|---:|---:|---:|---:|
