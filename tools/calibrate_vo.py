@@ -21,7 +21,9 @@ calibration; the loader checks the front-end source hash.
 
 import argparse
 import json
+import os
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -61,6 +63,39 @@ def gyro_rotation_check(s, events, t_lo, t_hi):
             "expected_mean": 3.0}
 
 
+def _one_kf(args):
+    """Front end at one keyframe interval, then every covariance scale (worker process)."""
+    seq, kf_every, segment, noise = args
+    s = D.load_streams(seq)
+    ref = D.load_reference(seq)
+    rig = RigCalibration.from_kalibr(s.calib_path)
+    lo, hi = s.imu_t[0] + segment[0], s.imu_t[0] + segment[1]
+    m = (s.imu_t >= lo) & (s.imu_t <= hi)
+    n_frames = int(np.searchsorted(s.frame_t, hi, side="right"))
+    fe = run_frontend(s.frame_t, s.frame_paths, rig, s.imu_t[0], cfg=VOConfig(kf_every=kf_every),
+                      index_sha=D.index_sha256(seq), frame_range=(0, n_frames))
+    ev = [e for e in fe["events"] if lo <= e["t"] <= hi]
+    rows = []
+    for scale in GRID:
+        fz = Frozen(imu_noise=noise, vo_cov_scale=scale)
+        cfg, _, _ = system_configs(fz)["pathfinder"]
+        out, diag = run_system("pathfinder", cfg, True, False, s.imu_t[m], s.gyro[m], s.acc[m], ev)
+        res, _ = scoring.score(out, ref)
+        rows.append({"scale": scale, "vo_nis_mean": diag["vo_nis_mean"], "vo_nis_median": diag["vo_nis_median"],
+                     "vo_used": diag["vo_used"], "vo_rejected": diag["vo_rejected"],
+                     "ate_rmse_m": res.get("start_se3", {}).get("ate_all", {}).get("rmse"),
+                     "rot_rmse_deg": res.get("start_se3", {}).get("rot_deg_all", {}).get("rmse"),
+                     "nees_all": res.get("nees", {}).get("all")})
+    best = min(rows, key=lambda r: abs(np.log(r["vo_nis_mean"] / 6.0)) if r["vo_nis_mean"] else np.inf)
+    vo_out = run_system("vo_only", None, True, False, s.imu_t[m], s.gyro[m], s.acc[m], ev)[0]
+    vo_res, _ = scoring.score(vo_out, ref)
+    return {"kf_every": kf_every, "selected_scale": best["scale"], "candidates": rows,
+            "selected_ate_rmse_m": best["ate_rmse_m"], "frontend_key": fe["key"], "frontend_stats": fe["stats"],
+            "vo_only_ate_rmse_m": vo_res.get("start_se3", {}).get("ate_all", {}).get("rmse"),
+            "vo_only_rot_rmse_deg": vo_res.get("start_se3", {}).get("rot_deg_all", {}).get("rmse"),
+            "gyro_rotation_check": gyro_rotation_check(s, ev, lo, hi)}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--seq", default="room1")
@@ -72,41 +107,17 @@ def main(argv=None):
     ref = D.load_reference(a.seq)
     rig = RigCalibration.from_kalibr(s.calib_path)
     noise = imu_noise_from_config(s.dir / "dso" / "imu_config.yaml")
-    lo, hi = s.imu_t[0] + a.segment[0], s.imu_t[0] + a.segment[1]
-    m = (s.imu_t >= lo) & (s.imu_t <= hi)
-    n_frames = int(np.searchsorted(s.frame_t, hi, side="right"))
     kw = {"root": Path(a.out)} if a.out else {}
     inputs = {"imu": s.dir / "mav0/imu0/data.csv", "cam_index": s.dir / "mav0/cam0/data.csv",
               "camchain": s.calib_path, "imu_config": s.dir / "dso/imu_config.yaml",
               "mocap_diagnostic_and_kf_selection": s.dir / "mav0/mocap0/data.csv"}
-    with run_bundle(f"calibrate-vo-{a.seq}", vars(a), inputs, protocol="calibration") as run:
-        per_kf = []
-        for kf_every in KF_GRID:
-            vcfg = VOConfig(kf_every=kf_every)
-            fe = run_frontend(s.frame_t, s.frame_paths, rig, s.imu_t[0], cfg=vcfg, index_sha=D.index_sha256(a.seq),
-                              frame_range=(0, n_frames))
-            ev = [e for e in fe["events"] if lo <= e["t"] <= hi]
-            rows = []
-            for scale in GRID:
-                fz = Frozen(imu_noise=noise, vo_cov_scale=scale)
-                cfg, _, _ = system_configs(fz)["pathfinder"]
-                out, diag = run_system("pathfinder", cfg, True, False, s.imu_t[m], s.gyro[m], s.acc[m], ev)
-                res, _ = scoring.score(out, ref)
-                rows.append({"scale": scale, "vo_nis_mean": diag["vo_nis_mean"], "vo_nis_median": diag["vo_nis_median"],
-                             "vo_used": diag["vo_used"], "vo_rejected": diag["vo_rejected"],
-                             "ate_rmse_m": res.get("start_se3", {}).get("ate_all", {}).get("rmse"),
-                             "rot_rmse_deg": res.get("start_se3", {}).get("rot_deg_all", {}).get("rmse"),
-                             "nees_all": res.get("nees", {}).get("all")})
-                print(kf_every, rows[-1])
-            best = min(rows, key=lambda r: abs(np.log(r["vo_nis_mean"] / 6.0)) if r["vo_nis_mean"] else np.inf)
-            vo_out = run_system("vo_only", None, True, False, s.imu_t[m], s.gyro[m], s.acc[m], ev)[0]
-            vo_res, _ = scoring.score(vo_out, ref)
-            per_kf.append({"kf_every": kf_every, "selected_scale": best["scale"], "candidates": rows,
-                           "selected_ate_rmse_m": best["ate_rmse_m"], "frontend_key": fe["key"],
-                           "frontend_stats": fe["stats"],
-                           "vo_only_ate_rmse_m": vo_res.get("start_se3", {}).get("ate_all", {}).get("rmse"),
-                           "vo_only_rot_rmse_deg": vo_res.get("start_se3", {}).get("rot_deg_all", {}).get("rmse"),
-                           "gyro_rotation_check": gyro_rotation_check(s, ev, lo, hi)})
+    with run_bundle(f"calibrate-vo-{a.seq}", vars(a), inputs, protocol="calibration", **kw) as run:
+        src_hash = _src_hash()                 # computed once, from the code this run executes
+        with ProcessPoolExecutor(max_workers=min(len(KF_GRID), os.cpu_count() or 1)) as pool:
+            per_kf = list(pool.map(_one_kf, [(a.seq, kf, tuple(a.segment), noise) for kf in KF_GRID]))
+        for r in per_kf:
+            for c in r["candidates"]:
+                print(r["kf_every"], c)
         chosen = min(per_kf, key=lambda r: r["selected_ate_rmse_m"] if r["selected_ate_rmse_m"] is not None else np.inf)
         best = {"scale": chosen["selected_scale"]}
         result = {"schema": SCHEMA, "sequence": a.seq, "segment_s": list(a.segment),
@@ -116,7 +127,7 @@ def main(argv=None):
                   "grid": list(GRID), "kf_grid": list(KF_GRID), "selected_vo_cov_scale": best["scale"],
                   "selected_kf_every": chosen["kf_every"], "per_kf_every": per_kf,
                   "imu_noise": noise, "imu_noise_source": "dataset dso/imu_config.yaml (inflated by the dataset authors)",
-                  "frontend_src_sha256": _src_hash(),
+                  "frontend_src_sha256": src_hash,
                   "calibration_sha256": rig.meta["sha256"], "imu_config_sha256": sha256_file(s.dir / "dso/imu_config.yaml"),
                   "run": str(run.path.name),
                   "limits": "Single development recording; covariance validity is NOT asserted "

@@ -53,10 +53,11 @@ def load_pair(left: Path, right: Path):
 
 
 def _src_hash() -> str:
+    """SHA-256 of the front-end sources with line endings normalised (a Windows CRLF checkout and a
+    Linux checkout of the same commit hash identically)."""
     h = hashlib.sha256()
-    for mod in (stereo_vo, camera_model, image_faults):
-        h.update(Path(mod.__file__).read_bytes())
-    h.update(Path(__file__).read_bytes())
+    for path in (stereo_vo.__file__, camera_model.__file__, image_faults.__file__, __file__):
+        h.update(Path(path).read_bytes().replace(b"\r\n", b"\n"))
     return h.hexdigest()
 
 

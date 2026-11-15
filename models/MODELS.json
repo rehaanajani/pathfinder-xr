@@ -1,0 +1,23 @@
+{
+ "schema": "pathfinder.models/1",
+ "release": {"repo": "rehaanajani/pathfinder-xr", "tag": "models-v1"},
+ "note": "Checksums of the published release assets (GitHub asset digests, re-verified locally 2026-11-15). The fetch tool refuses any file whose SHA-256 differs; it never retrains.",
+ "models": {
+  "dispnet_faults": {"asset": "dispnet_faults.pt", "path": "models/dispnet_faults/best.pt", "bytes": 1528393,
+                     "sha256": "611e97fdad4ac7735a3086179e059edb772f6d93d13a40c3b88b8d4bfec3eba3",
+                     "format": "torch state dict {width, state}; loaded with torch.load(weights_only=True)",
+                     "training": "TLIO golden train split (284 sequences), fault augmentation, 10 epochs (release notes)",
+                     "data_license": "TLIO dataset: CC BY-NC 4.0 (non-commercial)"},
+  "dispnet_tlio": {"asset": "dispnet_tlio.pt", "path": "models/dispnet_tlio/best.pt", "bytes": 1528393,
+                   "sha256": "371e68eaf5da8a905a5401a9ebc8528f2e272dad64df033db5593a6cbfbd5955",
+                   "format": "torch state dict {width, state}; loaded with torch.load(weights_only=True)",
+                   "training": "TLIO golden train split, TLIO-style augmentation only (ablation)",
+                   "data_license": "TLIO dataset: CC BY-NC 4.0 (non-commercial)"},
+  "dispnet_faults_onnx": {"asset": "dispnet_faults.onnx", "path": "models/dispnet_faults/model.onnx", "bytes": 1502353,
+                          "sha256": "8dc169db4f95aa894b6e6c433f3448caa75e7d2e86fc48d7520d90388fd505d1",
+                          "format": "ONNX FP32 export of dispnet_faults", "optional": true},
+  "dispnet_faults_int8_onnx": {"asset": "dispnet_faults_int8.onnx", "path": "models/dispnet_faults/model_int8.onnx", "bytes": 403259,
+                               "sha256": "c54a19a9f2a0b095bd569094495e7f0afd2961d0428f8770d27c769410a1cc13",
+                               "format": "ONNX INT8 quantised export (parity/accuracy not re-validated in this release)", "optional": true}
+ }
+}

@@ -151,7 +151,8 @@ def score(out, ref, faults=(), rec_bound=0.10, rec_hold=2.0, rpe_deltas=(1.0, 10
         res[f"rpe_{d:g}s"] = {"trans_m": stats(et), "rot_deg": stats(er)}
     nees = nees_pos(pa - gp, out["P_pos"], A)
     res["nees"] = {"valid": coverage(nees[valid & scored]), "all": coverage(nees[scored]),
-                   "mean_valid": float(np.nanmean(nees[valid & scored])) if (valid & scored).any() else None}
+                   "mean_valid": float(np.mean(nv)) if len(nv := nees[valid & scored & np.isfinite(nees)]) else None,
+                   "n_finite": int(np.isfinite(nees[scored]).sum())}
     false_valid = valid & scored & (nees > chi2.ppf(0.997, 3))
     res["valid_outside_99.7"] = int(false_valid.sum())
     rel = t - t[0]
