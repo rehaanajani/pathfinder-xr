@@ -61,6 +61,11 @@ tables remain in `ESTIMATOR.md`. They must not be relabelled as measurements of 
 
 ## Verification and evidence
 
+**Final suite: 95 passed in 287.57 s.** The preceding pre-fallback-policy suite passed 94 tests.
+Both logs are preserved under `results/diagnostics/issue1/completion_evidence/`; final runtime
+source hashes were checked against the fallback validation manifest. No runtime edits followed
+that validation run. `git diff --check` and Python compilation also passed.
+
 Run `python -m pytest -q` from the repository root. The additional
 `tests/test_runtime_safety.py` regressions use no external dataset or trained model. Existing
 camera-state tests exercise `pipeline.ours_cfg()`; oracle inputs are diagnostic-only fixtures.
