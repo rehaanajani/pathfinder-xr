@@ -9,6 +9,8 @@
 #   ./demo.sh headset    benchmark on 12 real headset recordings from Meta (about 4 min)
 #   ./demo.sh camera     real cameras + real IMU on TUM-VI, with dark/blur/blackout (about 3 min)
 #   ./demo.sh phone      speed test on a USB-connected Android phone (about 3 min)
+#   ./demo.sh live       LIVE: phone as the headset's sensors; cover the camera / shake it (browser view)
+#   ./demo.sh replay F   replay a saved live session (runs/live/*.jsonl) without a phone
 #
 # Results go to runs/demo_* so the committed results are never overwritten.
 set -uo pipefail
@@ -75,7 +77,14 @@ case "${1:-}" in
     [ -f runs/phone/bench ] || bash tools/phone_bench/build.sh
     bash tools/phone_bench/run_on_phone.sh && cat results/phone_benchmark.json
     ;;
+  live)
+    bash tools/live_demo/run.sh "${@:2}"
+    ;;
+  replay)
+    (sleep 2; open_file http://localhost:8080) &
+    $PY tools/live_demo/server.py --replay "$2"
+    ;;
   *)
-    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
     ;;
 esac
