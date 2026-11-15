@@ -32,8 +32,10 @@ def ours_cfg():
     from dataclasses import replace
     # Outage speed limit + weak zero-velocity prior (2 m/s): chosen on the validation split for runs
     # without the learned model; it switches itself off when the model runs (results/diagnostics).
+    # Saturation guard: chosen on the validation split (saturation 2.00 -> 0.93 m without the model,
+    # no change elsewhere).
     return replace(FilterConfig(trust=TRUST, adaptive_q=True, bias_q_gain=10.0, speed_limit=True,
-                                outage_v_std=2.0), **OURS_OVERRIDES)
+                                outage_v_std=2.0, saturation_guard=True), **OURS_OVERRIDES)
 
 
 ALL = ("imu_only", "naive_fusion", "tlio_style", "ours_no_model", "ours_tlio_model", "ours")
