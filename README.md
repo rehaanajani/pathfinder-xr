@@ -18,6 +18,9 @@ VO covariance is not validated, so relative-mode poses are reported `valid=False
 and video further down still describe the earlier simulated-camera benchmark and have **not** been regenerated
 from the new bundle. Setup and reproduction: [docs/REPRODUCE.md](docs/REPRODUCE.md); runtime contract:
 [docs/STREAMING.md](docs/STREAMING.md); releases/licences: [docs/RELEASE.md](docs/RELEASE.md).
+According to the team's restatement of the official brief (`docs/TRACK3_BRIEF.md` on the `track3-entry` branch, PR #12),
+the **scored Track 3 task is IMU-only**. This vision work is supporting/innovation material and is not the scored entry; see
+[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
 
 > Design robust trajectory-estimation techniques capable of maintaining reliable tracking and navigation
 > when sensor measurements become degraded or unreliable.

@@ -8,8 +8,7 @@ healthy VO update and Path Finder diverged (1,159 m, 6,848 m, and three random s
 recovery (`vo_reanchor`, hold-out 2 s while anchored, 1 s after an outage) and a stale-frame check.
 It then re-runs calibration (`calibration/vo_room1_v2.json`) and the identical scenario/system
 matrix. The v2 choices were made after seeing v1 results on the **development** recording room1, so
-v1 → v2 is development iteration, not confirmation. The untouched recordings (room3–6) were not used
-by either version.
+v1 → v2 is development iteration, not confirmation. Neither version used room3–6 (which are exposed by other workstreams anyway; see §2).
 
 Registered 2026-11-15 (v1 before its evaluation run; v2 as described above).
 Calibration/selection runs that preceded it are listed in §6. Any change to a frozen item below needs a
@@ -32,7 +31,8 @@ camera, no multi-IMU hardware.
 | Calibration | TUM-VI room1, 0–60 s | VO covariance scale and keyframe interval selection (§4) |
 | Development evaluation | TUM-VI room1, full 141 s | Previously exposed (main health model, PR #5/#7/#8). Reported for the full run **and** the 60–141 s within-recording hold-out. Not independent. |
 | Development (not run here) | TUM-VI room2, Monado MOO/MIO | Exposed by earlier PRs; room2 download incomplete |
-| Reserved final confirmation | TUM-VI room3–room6 | Untouched by every branch. **Not available**: the dataset server delivered 2–6 KB/s per connection in this session. They must be evaluated with this frozen protocol, without re-tuning, before any confirmatory claim. |
+| Exposed by other workstreams | TUM-VI room3–room6, all EuRoC sequences | **Correction (same day):** the first version of this protocol reserved room3–6 as untouched. A re-inventory of all remote branches found them used by the IMU-only Track 3 work (velocity network: room1–4 train, room5 validation, **room6 held-out test**; EuRoC MH/V for train/val/test and evo evaluation). No TUM-VI room or EuRoC recording is untouched. room6 must not be used for vision development because it is another workstream's test set. |
+| Final confirmation | **none available** | Needs a stereo-inertial recording with reference that no branch has used (a new team recording or an external dataset), registered before download. Until then, every result here is development evidence. |
 | Not usable for ATE | TUM-VI corridor/magistrale/outdoors/slides | Mocap only at start/end |
 
 Conventions verified on development data by `tools/check_sync.py` (run `20261115T170934Z-check-sync-room1-797eb67`; the evaluation recorded the earlier run `…164518Z-check-sync-room1-db7015b`, whose camera offset is identical and whose mocap method was later corrected):
@@ -101,7 +101,7 @@ augmentation (torch seed 0, TLIO data); image faults and combinations do not.
   Unsupported reference intervals (gaps > 50 ms) are excluded and counted, never interpolated.
 * **Validity:** VO covariance is fitted on development data, so `vo_covariance_validated=False`; every
   relative-mode output is `valid=False` with `COVARIANCE_UNRELIABLE`. This is not changed to improve
-  appearance. Validity can only be asserted after held-out coverage evidence (room3–6).
+  appearance. Validity can only be asserted after held-out coverage evidence on an unused recording.
 
 ## 7. Runs belonging to this protocol
 
