@@ -54,6 +54,9 @@ appends 5 s of predicted poses after the last row.
    body-frame displacement and velocity with their uncertainty; rotated into the world frame, these correct the
    filter, weighted by that uncertainty. On by default; `--model velnet_weights_world.bin` is the previous
    gravity-aligned network, `--model none --preset physics` the physics-only filter.
+   **Mount guard:** the body-frame network learned the training IMUs' axes, so if gravity at start-up points more
+   than 25° away from every training mount (a rotated IMU), the entry switches to `velnet_weights_world.bin` and says
+   so on stderr (`--mount-guard-deg 0` turns it off; `docs/MOUNT_GUARD.md`). Keep both weight files next to the binary.
 5. **Dropouts and IMU death**: dead reckoning from the last trusted state, with turn rate and velocity decaying.
 
 `main.py` is the commented reference; `main.cpp` is a line-by-line port (exact match without the network, within
@@ -63,11 +66,11 @@ appends 5 s of predicted poses after the last row.
 
 | | C++ | Python |
 |---|---:|---:|
-| Peak RAM | 2.2 MB | 28 MB |
-| Time per second of IMU | 4 ms | 4.5 ms |
+| Peak RAM | 2.2-2.3 MB | 41 MB |
+| Time per second of IMU | 2.0 ms | 5.7 ms |
 
-These were measured with the earlier 27,020-parameter network. On a Windows laptop where that network takes 4.1 ms
-per second of IMU in C++, the AirIO network takes 6.0 ms, peak working set about 5.2 MB for both
-(`docs/AIRIO.md`); not yet re-measured on the M5.
+C++ re-measured on 16 Nov with the AirIO network on degraded MH_05 and TUM-VI room6. On a Windows laptop the C++
+entry takes 6.0 ms per second of IMU with a 5.2 MB peak working set, most of it the Windows static runtime
+(`docs/AIRIO.md`); Docker on Linux 3.2 MB (`docs/TRACK3_EVAL.md`).
 
 Options: `python3 src/main.py --help` lists them; the C++ entry accepts the same ones.

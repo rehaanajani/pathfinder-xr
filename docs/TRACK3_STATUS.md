@@ -1,4 +1,4 @@
-# Where everything is (15 Nov 2026)
+# Where everything is (16 Nov 2026)
 
 ## What we are trying to achieve
 
@@ -6,68 +6,48 @@ Samsung scores one thing: a program that reads a degraded IMU file (`imu0/data.c
 `estimated_trajectory.txt` (TUM format, one pose per input row), estimates the path through the mission, keeps
 predicting for 5 s after the IMU dies, and stays inside **8 MB peak RAM and 20 ms per second of IMU on one thread**.
 100 points: memory 20, runtime 20, checkpoints 30, blind 5 s 20, dropouts 10. Ranked with `evo` (ATE + RPE).
+The honest bar for accuracy: an IMU alone drifts without bound, so "stand still at the start" is hard to beat.
 
-Everything else we built (camera health, visual odometry, real headsets, the phone demo) is **not scored**. It is
-material for the slides, the video and the final demo (27 Nov) to show depth.
+## One branch holds everything: `track3-entry` (PR #12 into `main`)
 
-The honest bar for accuracy: an IMU-only estimate in a small room is hard to make better than "stand still". Beating
-stand still on held-out EuRoC and TUM-VI is the target; Debadrita's entry does it, by about 3 %.
+| Folder | What | Merged from |
+|---|---|---|
+| `src/` | **The scored entry.** `main.cpp` (submitted, C++17 + zlib), `main.py` (same logic, readable), the AirIO-style network `velnet_weights.bin` (42,716 params) and the gravity-aligned fallback `velnet_weights_world.bin` (27,020) used by the mount guard, Dockerfile | #12, #22, #27, #28 |
+| `tests/stress/` | Output contract (24), review fixes, mount guard: 38 tests on the C++ entry | #21, #23, #28 |
+| `tools/` | degradation stand-in, scorer, evo scorer, blind-5 s study, bundle script, trainers, fetchers | #12, #22, #25, #27 |
+| `pathfinder/`, `tests/` | Nikhil's redesigned estimator (#10) and the real-vision / reproducibility workstream (#26) | #10, #26 |
+| `demo_line/` | The camera + multi-IMU demo line kept whole with its **own copy** of `pathfinder/`: live phone demo, real VR headsets, saturation and long-outage work, Mayank's stress suite with its fixes, final benchmark. Run from inside the folder | #4-#11, #20, #24 |
 
-## Two lines of work in the repo
+Not scored: everything outside `src/`. It is the material for the slides, the video and the final demo (27 Nov).
 
-| Line | Branches / PRs | Built on | State |
-|---|---|---|---|
-| **Scored entry** | `track3-entry` (#12), with Debadrita's #22 and Mayank's #23 (and #21, superseded by #23) merged in | current `main` | **Aligned.** One self-contained `src/main.py` (stdlib + numpy for the network), no dependency on `pathfinder/`. 23/24 contract tests pass |
-| **Demo / innovation** | #4 → #5 → #6 → #7 → #8 → #9 → #11 → `final-benchmark`, plus Mayank's #20 on top of #11 | `main` from before Nikhil's #10 | 19 commits behind `main`. Conflicts with #10 in `pathfinder/filter.py`, `parity.py`, `pipeline.py`, `README.md`. Needs one deliberate reconcile; does not block the scored entry |
+## The scored entry today
 
-`main` = Nikhil's #10 (estimator hardening, 95 tests).
-
-## Gap plan from the brief: status
-
-| Gap | Status |
+| | Value |
 |---|---|
-| Held-out accuracy, C++ entry | Re-scored with the C++ build (15 Nov): ATE 3.19 / checkpoints 2.93 / blind 2.36 / dropouts 3.27 m vs stand still 3.28 / 3.03 / 2.38 / 3.27; identical to the Python numbers. Every filter setting tested since; none moves it (`docs/RESEARCH_REVIEW.md`). Branch `airio-debadrita`: AirIO-style body-frame network, held-out 3.08 / 2.86 / 2.34 / 3.15, validation 4.06 → 3.82 m ATE; worse on the TUM-VI rooms and with a remounted IMU (`docs/AIRIO.md`) |
-| Every recording, C++ entry | All 11 EuRoC + TUM-VI rooms 1-4, 6, seeds 1-2 (32 runs): **ATE better than stand still in all 32**, mean 2.58 vs 2.71 m; checkpoints 2.42 vs 2.54. Blind 5 s is a tie (2.36 vs 2.38): we lose it by 0.01-0.13 m on TUM-VI rooms and V2_01/V2_02 |
-| 5 s prediction after IMU death (20 pts) | Done: dead reckoning from the last trusted state; `--extend-blind` when the file just ends. Held-out blind 5 s: 2.36 m with the network vs 2.38 m stand still (Debadrita) |
-| No ground truth, unknown gravity | Done: gravity and gyro bias from the data itself; Mayank's test with the IMU rotated 90° passes |
-| Exact I/O, one pose per row, through dropouts | Done: 23 contract tests (NaN, inf, frozen, gaps, duplicates, truncated files, header variants) pass |
-| ≤ 20 ms per second of IMU | Done: 1.6-2.9 ms in Python |
-| ≤ 8 MB peak RAM | Done with `src/main.cpp`: **2.2 MB** peak, 4 ms per second of IMU with the network; same output as `main.py` (exact without the network, within 1 µm with it); all 24 contract tests pass (`PF_ENTRY=cpp pytest tests/stress/test_main_contract.py`). Python stays as the readable reference (28 MB) |
-| EuRoC data | Done on Mayank's and Debadrita's machines (all 11); still fetching on Rehaan's |
-| Their degradation script | Stand-in `tools/degrade_imu.py`; organisers' script not received |
-| Their scoring | Done: `tools/score_track3.py` and Mayank's `evo`-based `tests/stress/track3_eval.py` |
-| Packaging (code) | Done: `src/Dockerfile`, `src/README.md`, `tools/make_bundle.py <input>` -> `dist/CaliforniaBurrito.zip` (trajectory + `metadata.json` + `src/`); CI builds the image and runs the contract tests on Linux |
-| Presentation | Done: `deck/SRMIST_CaliforniaBurrito.pptx` on Samsung's template (`python deck/build_track3_deck.py`) |
-| **Packaging (rest)** | **Not done**: the real `estimated_trajectory.txt` (needs the organisers' input file), video ≤ 3 min, repo made public/shared, Google Form |
+| Peak RAM / compute (C++, Apple M5, 16 Nov) | **2.2-2.3 MB** of 8 / **2.0 ms** per second of IMU of 20; Docker on Linux 3.2 MB (Mayank) |
+| Output contract | 24 tests: one pose per row through NaN, frozen, zero and missing rows, cut files, rotated gravity |
+| Held-out accuracy (EuRoC MH_05 + V2_03 + TUM-VI room6, seeds 1-3; ATE / checkpoints / blind 5 s / dropouts, m) | **3.08 / 2.86 / 2.34 / 3.15**, vs stand still 3.28 / 3.03 / 2.38 / 3.27 and the previous network 3.19 / 2.93 / 2.36 / 3.27. Reproduced independently (Codex) |
+| Real `evo` on all 11 EuRoC (previous network, Mayank, `docs/TRACK3_EVAL.md`) | our scorer matches evo on ATE to 0.01 % |
+| Mount guard (`docs/MOUNT_GUARD.md`) | if start-up gravity is > 25° from both training mounts (rotated IMU), switch to the gravity-aligned network. Quiet and byte-identical on all 16 normal recordings; ahead of the AirIO network on every rotated case. `--mount-guard-deg 0` turns it off |
+| Python = C++ | within 1e-6 m |
+| CI | entry (build, 38 tests, Python reference), Docker (incl. the guard inside the image), Nikhil's suite on Ubuntu and Windows, `demo_line/` tests |
 
-## Independent review (15 Nov, Raghav + an AI reviewer, read-only)
+Limits we state: the gain over standing still is about 6 % on held-out data; the blind 5 s is close to a tie (its
+error is set before the IMU dies); results use our degradation stand-in, not the organisers' script.
 
-Verdict: efficiency full marks, accuracy edge over standing still small but real (reproduced on MH_05 with evo: ATE
-6.75 vs 6.83 m). Estimated 62/100. Everything it reproduced is fixed, each with a regression test
-(`tests/stress/test_review_fixes.py`); output on real recordings is bit-identical to before:
+## Reviews done
 
-| Finding | Fix |
-|---|---|
-| Accelerometer reading zero at the start: every pose NaN | gravity only from readings that carry it; a reading with no gravity counts as bad; a step that turns NaN restores the last finite state |
-| `--extend-blind` lost when the file is exactly 200 rows | start-up replay records the last timestamp |
-| Bundle metadata reported 140 MB (it measured the compiler) | measures the estimator process alone (wait4): 2.08 MB |
-| Zip with 100k members: 9 MB | zip directory read one entry at a time: 2.2 MB |
-| "1 s RPE" counted 200 rows, position only | pairs chosen by time; renamed "1 s position drift", not evo's RPE |
-| README "physics only" comparison overstated the network | README says the retuned filter alone also reaches 3.19 m on held-out |
+- **Independent review 1** (Raghav + an AI reviewer): four faults reproduced and fixed with regression tests
+  (`tests/stress/test_review_fixes.py`): NaN start with zero acceleration, lost `--extend-blind` at 200 rows, bundle
+  RAM measuring the compiler, zip memory growing with archive size. Claims corrected.
+- **Codex reviews** of #27 (numbers reproduced, no leakage, parity), the mount guard (two fixes made), and this
+  consolidated branch (the Docker image was missing the fallback network: fixed, now tested in CI).
 
-**For the PPT pass (at the end):** slide 4 says "single pass, constant memory" (say "streamed, bounded memory, one
-short pre-scan"); slide 5 footnote "physics only = our filter without the network" (say "original filter settings",
-and that the retuned filter alone matches us on held-out); notes mention RPE (say "1 s position drift").
+## Left before 18 Nov, 11:59 PM
 
-## Open issues
-
-#13-#19 (Mayank's stress findings, in the streaming tracker and live server, not the scored entry): all fixed in
-PR #24 (on top of Mayank's #20), with his tests now passing.
-
-## Next, in order
-
-1. Done: `src/main.cpp`. The network is now the default in both entries (`--model none` = old filter); with it the
-   C++ entry beats stand still on MH_05 + room3 (ATE 3.81 vs 4.04 m, checkpoints 3.43 vs 3.68 m).
-2. Done: Dockerfile, bundle script, `src/README.md`, `metadata.json`, CI.
-3. Done: PPT. Left: video (needs a screen recording and a voice).
-4. Reconcile the demo line (#4-#11, #20, #24) with `main`.
+1. Nikhil reviews and merges #12 into `main`.
+2. Slides and video (at the end). Slide fixes: architecture "single pass, constant memory" → "streamed, bounded
+   memory, one short pre-scan"; results footnote "physics only" → "original filter settings"; RPE → "1 s position
+   drift"; new numbers 3.08 m and the mount guard.
+3. The real `estimated_trajectory.txt`: `python tools/make_bundle.py <organisers' input>` as soon as it arrives.
+4. Repo shared or public, Google Form.
