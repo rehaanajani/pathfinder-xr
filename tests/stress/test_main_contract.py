@@ -2,8 +2,8 @@
 TUM estimated_trajectory.txt out, exactly one pose per IMU row, seconds, unit quaternions,
 <= 8 MB peak RAM, <= 20 ms of compute per 1 s of IMU, single thread.
 
-Skipped until src/main.py exists. ASSUMED command line (change RUN below if README differs):
-    python src/main.py <imu0/data.csv> <estimated_trajectory.txt>
+Skipped until src/main.py exists. Command line (from src/main.py):
+    python src/main.py <imu0/data.csv> -o <estimated_trajectory.txt>
 
 Peak RAM is measured with `/usr/bin/time -l` (macOS: "maximum resident set size" in bytes).
 """
@@ -44,8 +44,8 @@ def write_csv(path, ts, g, a, header=HEADER, eol="\n", fmt="{:.6f}"):
 def run(csv, out, extra=()):
     """Returns (CompletedProcess, peak_rss_bytes or None, wall_s)."""
     import time
-    cmd = ["/usr/bin/time", "-l", sys.executable, str(MAIN), str(csv), str(out), *extra] \
-        if sys.platform == "darwin" else [sys.executable, str(MAIN), str(csv), str(out), *extra]
+    cmd = ["/usr/bin/time", "-l", sys.executable, str(MAIN), str(csv), "-o", str(out), *extra] \
+        if sys.platform == "darwin" else [sys.executable, str(MAIN), str(csv), "-o", str(out), *extra]
     t = time.perf_counter()
     p = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT, env={**os.environ, "OMP_NUM_THREADS": "1"})
     wall = time.perf_counter() - t
