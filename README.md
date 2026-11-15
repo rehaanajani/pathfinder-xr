@@ -3,10 +3,37 @@
 **Samsung PRISM XR Hackathon 2026, Track 3: Path Finder, Trajectory Estimation Under Sensor Degradation.**
 Team California Burrito, SRM Institute of Science and Technology, Kattankulathur.
 
-**Estimator implementation update:** see [issue #1 completion notes](docs/ISSUE1_COMPLETION.md)
-for the current reference-free API, conservative model policy, input validation and validity semantics.
-The result tables and submission artifacts below predate this implementation; they are historical
-research evidence, not revalidated measurements of the current defaults or production certification.
+## The scored entry (start here)
+
+The task Samsung scores is IMU-only: a degraded EuRoC-format `imu0/data.csv` in, `estimated_trajectory.txt` (TUM
+format, one pose per IMU row, including the 5 s after the IMU dies) out, within 8 MB peak RAM and 20 ms per second of
+IMU on one thread. The entry is [`src/`](src/README.md):
+
+```bash
+docker build -t pathfinder src/
+docker run --rm -v "$PWD/data:/data" pathfinder /data -o /data/estimated_trajectory.txt
+```
+
+or without Docker: `make -C src && src/pathfinder <imu folder | zip | csv> -o estimated_trajectory.txt`.
+
+| | |
+|---|---|
+| Entry | `src/main.cpp` (C++17 + zlib); `src/main.py` is the readable reference with the same output |
+| Peak RAM / compute | 2.2 MB / 4 ms per second of IMU (Apple M5), one thread |
+| Output contract | 24 tests: one pose per row through NaN, frozen, zero and missing rows, cut files, unknown gravity (`PF_ENTRY=cpp pytest tests/stress/test_main_contract.py`) |
+| Accuracy, held-out EuRoC MH_05 + V2_03 + TUM-VI room6 | ATE 3.19 m vs 3.28 m standing still and 4.54 m physics only ([details](docs/LEARNED_VELOCITY.md)) |
+| Bundle | `python tools/make_bundle.py <input>` writes `dist/CaliforniaBurrito.zip` with `metadata.json` |
+| Slides | [`deck/SRMIST_CaliforniaBurrito.pptx`](deck/SRMIST_CaliforniaBurrito.pptx) |
+
+Brief: [`docs/TRACK3_BRIEF.md`](docs/TRACK3_BRIEF.md). Status: [`docs/TRACK3_STATUS.md`](docs/TRACK3_STATUS.md).
+What we tried and what did not work: [`docs/RESEARCH_REVIEW.md`](docs/RESEARCH_REVIEW.md).
+
+## The wider system (camera + several IMUs; not scored)
+
+Everything below is the camera + multi-IMU tracker built before the official brief arrived. It is the material for the
+final demo. **Estimator implementation update:** see [issue #1 completion notes](docs/ISSUE1_COMPLETION.md) for the
+current reference-free API, model policy, input validation and validity semantics. The result tables below predate
+that implementation; they are historical research evidence, not revalidated measurements of the current defaults.
 
 > Design robust trajectory-estimation techniques capable of maintaining reliable tracking and navigation
 > when sensor measurements become degraded or unreliable.
