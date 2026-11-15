@@ -30,7 +30,7 @@ stand still on held-out EuRoC and TUM-VI is the target; Debadrita's entry does i
 | No ground truth, unknown gravity | Done: gravity and gyro bias from the data itself; Mayank's test with the IMU rotated 90° passes |
 | Exact I/O, one pose per row, through dropouts | Done: 23 contract tests (NaN, inf, frozen, gaps, duplicates, truncated files, header variants) pass |
 | ≤ 20 ms per second of IMU | Done: 1.6-2.9 ms in Python |
-| **≤ 8 MB peak RAM** | **Fails: 28 MB in Python** (bare Python is ~10 MB). Needs `src/main.cpp`: in progress (Rehaan) |
+| ≤ 8 MB peak RAM | Done with `src/main.cpp`: **2.2 MB** peak, 4 ms per second of IMU with the network; same output as `main.py` (exact without the network, within 1 µm with it); all 24 contract tests pass (`PF_ENTRY=cpp pytest tests/stress/test_main_contract.py`). Python stays as the readable reference (28 MB) |
 | EuRoC data | Done on Mayank's and Debadrita's machines (all 11); still fetching on Rehaan's |
 | Their degradation script | Stand-in `tools/degrade_imu.py`; organisers' script not received |
 | Their scoring | Done: `tools/score_track3.py` and Mayank's `evo`-based `tests/stress/track3_eval.py` |
@@ -43,7 +43,8 @@ entry. Fix them when that line is reconciled with `main`.
 
 ## Next, in order
 
-1. `src/main.cpp`: port of `main.py` + the network forward pass, same output to within 1 mm, under 8 MB (Rehaan).
+1. Done: `src/main.cpp`. The network is now the default in both entries (`--model none` = old filter); with it the
+   C++ entry beats stand still on MH_05 + room3 (ATE 3.81 vs 4.04 m, checkpoints 3.43 vs 3.68 m).
 2. Dockerfile, bundle script, `src/README.md`, `metadata.json`.
 3. PPT and video.
 4. Reconcile the demo line with `main`; fix #13-#19.
