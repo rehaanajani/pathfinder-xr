@@ -67,7 +67,57 @@ for k, v in iso.items():
 
 extra = []
 P = Path("results")
-if (P / "real_summary.json").exists():
+MV = ["vo_only", "conventional", "ours_1imu", "ours_3imu", "ours_1imu_net"]
+MV_NAMES = ["Camera only", "Standard filter", "Ours (1 real IMU)", "Ours (3 IMUs, 2 simulated)", "Ours + learned model"]
+
+
+def vo_table(path, title, intro):
+    R = json.loads(path.read_text())
+    S = R["summary"]
+    extra.append(f"### {title}\n")
+    extra.append(intro + "\n")
+    extra.append("| Scenario | " + " | ".join(MV_NAMES) + " |")
+    extra.append("|---|" + "---:|" * len(MV))
+    for k, v in S.items():
+        vals = [v[m]["ate_m"] for m in MV]
+        best = min(vals)
+        cells = [f"**{x_:.3f}**" if x_ == best else f"{x_:.3f}" for x_ in vals]
+        extra.append(f"| {NAMES.get(k, k)} | " + " | ".join(cells) + " |")
+    extra.append("")
+
+
+if (P / "real_vo_monado_summary.json").exists():
+    vo_table(P / "real_vo_monado_summary.json", "Real VR headsets: Samsung Odyssey+ and Valve Index",
+             "Monado SLAM Dataset (Collabora, CC-BY 4.0): real headset cameras and IMU, SteamVR Lighthouse ground truth "
+             "(~1 cm). Motion from the real stereo images by our visual odometry; faults applied to the real images and "
+             "IMU at 8 s for 8 s; odometry noise calibrated per headset on separate short recordings. 6 non-overlapping "
+             "clips of up to 30 s. ATE in metres (lower is better), best in bold.")
+if (P / "phone_benchmark.json").exists():
+    B = json.loads((P / "phone_benchmark.json").read_text())
+    d = B["device"]
+    best = min(B["runs"], key=lambda r: r["net_ms"]["p50"])
+    extra.append("### On a real phone (Samsung Galaxy M36)\n")
+    extra.append(f"Measured on a {d['model']} ({d['soc']}, Android {d['android']}) over USB: one learned-model prediction "
+                 f"takes **{best['net_ms']['p50']:.2f} ms** (p99 {best['net_ms']['p99']:.2f} ms, {best['model']}, "
+                 f"{best['threads']} thread); the filter arithmetic {best['filter_ms_per_second_of_data']['p50']:.2f} ms per "
+                 f"second of sensor data. Total about **{best['cpu_share_one_core_pct']:.1f}% of one CPU core**.\n")
+if (P / "phone_sessions.json").exists():
+    PS = json.loads((P / "phone_sessions.json").read_text())
+    extra.append("**Live phone sessions** (phone streams raw IMU + ARCore over USB; tracking runs live). Error when ARCore "
+                 "came back after each camera outage, using ARCore's recovered pose as the reference (no motion capture "
+                 "on a phone). Some outages had the app's labelled simulated IMU bias switched on.\n")
+    extra.append("| Outage | Standard tracker | **Ours** | Ours reported |")
+    extra.append("|---:|---:|---:|---|")
+    for o in PS["outages"]:
+        extra.append(f"| {o['seconds']:.0f} s | {o['standard_m']:,.1f} m | **{o['ours_m']:.2f} m** | "
+                     f"+-{o['ours_std_m']:.1f} m, not valid |")
+    extra.append("")
+if (P / "real_vo_tumvi_summary.json").exists():
+    vo_table(P / "real_vo_tumvi_summary.json", "Real stereo cameras + real IMU (TUM-VI)",
+             "TUM-VI rooms 1 and 2: real BMI160 IMU, real stereo fisheye images, OptiTrack truth. Same protocol as above: "
+             "visual odometry from the real (degraded) images, noise calibrated on the other room, 4 non-overlapping "
+             "60 s clips, faults at 20 s for 10 s. ATE in metres, best in bold.")
+elif (P / "real_summary.json").exists():
     R = json.loads((P / "real_summary.json").read_text())["summary"]
     extra.append("### On real sensor data (TUM-VI)\n")
     extra.append("Real Bosch BMI160 IMU, real fisheye camera frames, OptiTrack truth. Degradations are applied to the real "

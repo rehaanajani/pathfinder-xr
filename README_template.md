@@ -29,8 +29,12 @@ This system **finds which sensor is lying, stops trusting it, and keeps tracking
 5. **A self-check on the learned model.** While the camera is healthy, the filter compares the network's predictions
    with what the camera sees. If the network keeps being wrong on this kind of motion, its uncertainty is inflated
    so it is trusted less once the camera drops out.
-6. **A health signal out.** Per-sensor trust and the filter's own position uncertainty in metres. OpenXR today
-   only reports a yes/no "position tracked" flag; this gives a graded one.
+6. **Outage handling.** During a camera outage a head can't move faster than ~2 m/s; after a few seconds blind the
+   tracker assumes the user is roughly staying put and releases that assumption the moment vision returns. A
+   clipped (saturated) IMU is detected from the data itself and the learned model is distrusted while it lasts.
+7. **A live tracker with an honest health signal.** One sensor sample in, one pose out, with OpenXR-style
+   *tracked* / *valid* flags, the position uncertainty in metres and a reason ("camera outage", "IMU saturated",
+   "too uncertain"). OpenXR today only reports yes/no flags. It matches the offline benchmark sample for sample.
 
 ## Where this sits in a headset
 
@@ -53,10 +57,11 @@ poses. Shipping it means a C++ port of the filter and voting, and the network ex
 | Item | Where |
 |---|---|
 | Source code | this repository |
-| Presentation | [`deck/PathFinder_SRMIST_CaliforniaBurrito.pptx`](deck/PathFinder_SRMIST_CaliforniaBurrito.pptx) (Samsung template, built by `deck/build_deck.py`) |
-| Video | [`results/demo.mp4`](results/demo.mp4) (84 s, rendered from real runs by `make_video.py`) |
-| Interactive demo | [`demo/index.html`](demo/index.html), open in any browser |
-| Results | [`results/report.html`](results/report.html), [`results/summary.json`](results/summary.json) |
+| Phone app (APK) | [release `phone-app-v1`](https://github.com/rehaanajani/pathfinder-xr/releases/tag/phone-app-v1): "Path Finder bridge", streams the phone's sensors for the live demo |
+| Live demo | `./demo.sh live` (phone over USB) or `./demo.sh replay <session>`; see [`DEMO.md`](DEMO.md) |
+| Real phone recordings | [release `phone-sessions-v1`](https://github.com/rehaanajani/pathfinder-xr/releases/tag/phone-sessions-v1) |
+| Presentation | [`deck/PathFinder_SRMIST_CaliforniaBurrito.pptx`](deck/PathFinder_SRMIST_CaliforniaBurrito.pptx) (Samsung template) |
+| Results | [`results/`](results/) and [`results/diagnostics/`](results/diagnostics/) (every number in this README) |
 | Trained models | [release `models-v1`](https://github.com/rehaanajani/pathfinder-xr/releases/tag/models-v1) |
 | AI disclosure | [`AI_DISCLOSURE.md`](AI_DISCLOSURE.md) |
 
@@ -105,40 +110,31 @@ Outputs: `results/report.html` (all numbers and plots), `results/summary.json`, 
 
 ## Honest limits
 
-- **Not every scenario is a win.** In *dark room + all IMUs drifting* our mean error is higher than naive fusion
-  (median is lower); one held-out recording with fast, unusual motion is outside what the network learned and
-  dominates the mean. When the camera already rescues naive fusion (one biased IMU with a working camera, plain
-  noise) the two are level.
-- **Fault-aware training helps less than the architecture.** Swapping in the TLIO-style-trained network gives
-  similar numbers in most scenarios; the fault-aware network is clearly better only under vibration and saturation
-  on every IMU. Most of the gain comes from voting, camera health, the robust gate and the model self-check.
-- **60 s clips.** Each of the 36 test sequences is scored on one 60 s clip; longer runs are a next step.
-
-- **Clean tracking costs about 1 cm.** With a healthy camera and healthy IMUs our filter is slightly behind naive
-  fusion (real TUM-VI: 4.9 vs 4.3 cm), the price of the extra caution that wins every failure case.
-- **Real camera, but fixes still come from motion capture.** On TUM-VI we use the real IMU and the real fisheye
-  frames: degradations are applied to the real images, the health score is computed from them, and fix noise follows
-  the measured fraction of correctly tracked features. The position fix itself is motion-capture truth plus that
-  noise, not a full visual odometry front end.
-- **Extra IMUs are simulated.** TLIO and TUM-VI have one IMU each. Multi-IMU tests copy the real IMU with its own
-  noise and bias per copy, all at the same point. The parity detector compensates lever arms when the IMU
-  positions are given (`lever_arms`, tested on a simulated rigid head: false alarms 99 % without it, 1-2.6 %
-  with it), assumes the IMUs are already rotated into one body frame and time-aligned, and has not been
-  validated on real multi-IMU hardware. A fault shared by every IMU (common vibration, same-model temperature
-  drift) cancels in the parity test and is not detected there.
-- **Two IMUs detect, three isolate.** With two IMUs a smooth bias is detected but cannot always be attributed; the
-  parity test isolates it with three or more, which is why Galaxy XR's five matter.
-- **IMU-only accuracy is close to, not yet at, published TLIO.** Full TLIO test split, IMU only, no
-  alignment: published TLIO 1.72 m, EqNIO 1.43 m. Ours went from 6.27 m to **2.00 m (median 1.44 m)** by
-  keeping past poses in the filter (stochastic cloning) and calibrating the network's claimed uncertainty
-  on the validation split (it overlaps 10 one-second windows per second and its errors are correlated).
-  The headset benchmark above still uses the earlier filter setting; switching it over is being tested.
-  TLIO's yaw-frame measurement was also implemented and did not help IMU-only tracking (a common heading
-  error cancels in it); it stays as an option. See `results/diagnostics/`.
-- **A wider network is training.** 1.46M parameters, 0.120 m per-window error after 17 of 30 epochs vs 0.136 m
-  for the current network; not yet scored end to end.
-- **Not on a headset yet.** The network runs in ONNX Runtime at __MS__ ms on one CPU core (INT8: 0.4 MB); the
-  next step is ONNX Runtime Mobile or Qualcomm QNN on Snapdragon XR2+ Gen 2.
+- **Clean tracking costs about 1 cm.** With nothing wrong, a standard tracker is slightly ahead of ours (the
+  price of the checks that win the failure cases). Every table above shows it.
+- **Not every failure is a win.** When every IMU saturates during a camera outage, "camera only" (which simply
+  stands still) is still better than ours on real data; ours went from tens of metres to about 2-3 m but not
+  below it. With a learned model running on a device it wasn't trained on (handheld TUM-VI), the model hurts.
+- **Extra IMUs are simulated.** Every dataset here has one IMU per device; multi-IMU results add simulated copies
+  of the real IMU (own noise and bias each) and are labelled. The parity detector handles lever arms when IMU
+  positions are given, but has not yet been validated on real multi-IMU hardware (in progress). A fault shared
+  by every IMU (common vibration, same-model temperature drift) cancels in the parity test and is not detected.
+- **Two IMUs detect, three isolate.** Galaxy XR's five IMUs are why isolation matters.
+- **The visual odometry is ours and simple.** Frame-to-frame stereo (no map, no loop closure): it drifts a few
+  percent of distance travelled, and on the Samsung Odyssey+ (cameras 47 degrees apart) it solves about 60% of
+  frame pairs. A production system would feed in the headset's own VIO instead.
+- **Phone results have no motion-capture truth.** Live-session errors use ARCore's pose after it recovers as the
+  reference. Some phone outages used the app's simulated IMU bias button (labelled in the recordings).
+- **Long outages are bounded, not solved.** After about 3 s without vision the tracker assumes the user is
+  roughly staying put and reports itself "not valid"; a user who walks far while blind will be off.
+- **Test recordings were seen during development.** Settings were chosen on the validation split, but the test
+  recordings had been looked at before; the real headset recordings (Monado) and the phone sessions were not used
+  to choose any setting.
+- **IMU-only accuracy is close to, not at, published TLIO.** Full TLIO test split, IMU only: published TLIO
+  1.72 m, EqNIO 1.43 m, ours 2.00 m (median 1.44 m) with stochastic cloning and a network-uncertainty factor
+  chosen on validation. See `results/diagnostics/`.
+- **Laptop/phone, not headset firmware.** Runs live on a laptop with a phone as the sensor head, and the model runs
+  on a Galaxy M36 in 0.44 ms; a production port would move the filter to C++ inside the headset's tracking service.
 
 ## Prior work we build on
 
