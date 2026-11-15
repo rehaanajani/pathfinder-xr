@@ -19,18 +19,21 @@ HERE = Path(__file__).resolve().parent
 
 # ------------------------------------------------------------------------------------------------ numbers
 R = {
-    # docs/LEARNED_VELOCITY.md: held-out MH_05, V2_03, room6, seeds 1-3, tools/eval_track3.py (metres)
+    # held-out MH_05, V2_03, room6, seeds 1-3, tools/eval_track3.py (metres). Physics only and stand still:
+    # docs/LEARNED_VELOCITY.md; Ours: the AirIO-style network, docs/AIRIO.md (RPE 1 s on the scorer's earlier
+    # definition, same as the other two rows)
     "held_out": {
         "Physics only": {"ATE": 4.54, "Checkpoints": 4.19, "Blind 5 s": 4.03, "Dropouts": 4.47, "RPE 1 s": 0.97},
         "Stand still": {"ATE": 3.28, "Checkpoints": 3.03, "Blind 5 s": 2.38, "Dropouts": 3.27, "RPE 1 s": 0.85},
-        "Ours": {"ATE": 3.19, "Checkpoints": 2.93, "Blind 5 s": 2.36, "Dropouts": 3.27, "RPE 1 s": 0.83},
+        "Ours": {"ATE": 3.08, "Checkpoints": 2.86, "Blind 5 s": 2.34, "Dropouts": 3.15, "RPE 1 s": 0.80},
     },
     # tools/eval_track3.py, PF_ENTRY=cpp, MH_05 seeds 1-3, no corrections at all (runs/track3/raw_mh05)
     "raw_mh05_ate": 825.0,
-    "ours_mh05_ate": 6.72,
-    # tools/make_bundle.py / docs/TRACK3_STATUS.md (C++ entry, Apple M5)
-    "peak_mb": 2.2, "ms_per_s": 4.0, "contract_tests": 24,
-    "params": 27020, "weights_kb": 108,
+    "ours_mh05_ate": 6.42,
+    # docs/AIRIO.md: C++ entry with the AirIO network, Windows 11 laptop, static build (peak working set; 5.0 MB of
+    # it with no network at all). The earlier network measured 2.2 MB / 4 ms on an Apple M5 (tools/make_bundle.py).
+    "peak_mb": 5.2, "ms_per_s": 6.0, "contract_tests": 24,
+    "params": 42716, "weights_kb": 171,
     # PR #11, #8 and the stress report (demo line, not scored)
     "phone_before": 46.0, "phone_after": 0.6,
     "headset_before": 62.4, "headset_after": 2.06,
@@ -160,7 +163,7 @@ def main():
          ["Rehaan Ajani (lead)", "Nikhil Solanki", "Debadrita Haldar", "Mayank Yadav"],
          size=12, name="Members list")
     text(s, Inches(0.55), Inches(3.55), Inches(5.0), Inches(1.0),
-         [[("Trajectory from a jammed IMU alone, in 2.2 MB", {"size": 15, "bold": True, "color": CYAN})],
+         [[(f"Trajectory from a jammed IMU alone, in {R['peak_mb']} MB", {"size": 15, "bold": True, "color": CYAN})],
           [("Track 3: Trajectory Estimation Under Sensor Degradation  |  github.com/rehaanajani/pathfinder-xr",
             {"size": 10, "color": MUTED})]], name="Tagline")
     notes(s, "Theme: Track 3, Path Finder, trajectory estimation under sensor degradation. Team California Burrito, "
@@ -204,7 +207,7 @@ def main():
     steps = [("1", "Check every sample", "NaN, zero, frozen, impossible values and time gaps are caught per row", RED),
              ("2", "Start blind", "Gravity and gyro bias come from the data; no ground truth needed", ORANGE),
              ("3", "Integrate, with brakes", "Gravity correction, still detection, speed limit, drift removal", CYAN),
-             ("4", "Learned velocity", f"{R['params']:,}-parameter CNN reads 1 s of IMU: velocity and how sure it is", GREEN),
+             ("4", "Learned velocity", f"{R['params']:,}-parameter CNN reads 1 s of body-frame IMU: velocity and how sure it is", GREEN),
              ("5", "Coast when blind", "Dropouts and the 5 s after death: turn rate and speed decay from the last trusted state", GREY)]
     for i, (n, h, d, c) in enumerate(steps):
         x = Inches(0.5 + i * 1.62)
@@ -306,7 +309,8 @@ def main():
     notes(s, f"Held-out means: ours ATE {ho['Ours']['ATE']} m vs stand still {ho['Stand still']['ATE']} m vs physics only "
              f"{ho['Physics only']['ATE']} m; RPE 1 s {ho['Ours']['RPE 1 s']} vs {ho['Stand still']['RPE 1 s']} vs "
              f"{ho['Physics only']['RPE 1 s']} m. The degradation is our stand-in for the organisers' script, which "
-             "we have not received. Memory and time: C++ entry on an Apple M5, from tools/make_bundle.py.")
+             "we have not received. Memory and time: C++ entry on a Windows 11 laptop (5.0 MB of the 5.2 MB is the "
+             "Windows runtime with no network; the earlier network measured 2.2 MB and 4 ms on an Apple M5).")
 
     # ---------- 6. Differentiation
     s = sl[5]
@@ -338,8 +342,8 @@ def main():
     card(s, Inches(0.5), Inches(4.35), Inches(8.0), Inches(0.62), name="Limitations")
     text(s, Inches(0.6), Inches(4.38), Inches(7.8), Inches(0.58),
          [[("Honest limits  ", {"bold": True, "color": ORANGE, "size": 11}),
-           ("On held-out data we beat standing still by about 3 %: an IMU alone cannot see its heading, so long "
-            "flights drift. Our degradation is a stand-in for the organisers' script. Results on their data may differ.",
+           ("On held-out data we beat standing still by about 6 %. An IMU alone cannot see its heading, and the network "
+            "is tuned to the drone's axes (weaker on handheld rooms and a remounted IMU). Our degradation is a stand-in.",
             {"size": 10, "color": MUTED})]])
     notes(s, "Large learned model column refers to TLIO / RoNIN-style inertial odometry networks, which are trained on "
              "clean, gravity-aligned IMU data and run in PyTorch.")
