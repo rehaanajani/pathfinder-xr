@@ -39,6 +39,8 @@ Validation mean, metres (ATE / checkpoints / blind 5 s / dropouts):
 | Pull back to start 5 s instead of 3 s | 4.00 | 3.92 | 2.44 | 3.80 |
 | Gravity-correction trust 0.3-3 m/s², gain 0.1-1, low-pass 0.5 s (Gemini: drone banking fools it) | 4.06-4.07 | 3.96-3.97 | 2.52-2.55 | 3.83-3.87 |
 | Separate, stronger pull for height (0.3-10 s) | 4.05-4.07 | 3.93-3.97 | 2.55-2.57 | 3.84-3.87 |
+| Pull toward our own running average instead of the start (15-120 s) | 4.04-4.06 | 3.85-3.95 | 2.62-3.20 | 3.88-4.01 |
+| Stop dead the moment the IMU dies (5 recordings incl. TUM-VI) | 2.40 vs 2.40 | 2.30 vs 2.30 | 1.90 vs 1.91 | 2.54 vs 2.54 |
 
 - **"Remove the brakes" is wrong for us.** All three said the pull-to-start, leak and speed limit fight the
   network. Removing the pull makes everything worse (4.06 -> 4.96 m); the others do nothing, because the network's

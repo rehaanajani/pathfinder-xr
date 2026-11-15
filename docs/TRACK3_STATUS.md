@@ -27,6 +27,7 @@ stand still on held-out EuRoC and TUM-VI is the target; Debadrita's entry does i
 | Gap | Status |
 |---|---|
 | Held-out accuracy, C++ entry | Re-scored with the C++ build (15 Nov): ATE 3.19 / checkpoints 2.93 / blind 2.36 / dropouts 3.27 m vs stand still 3.28 / 3.03 / 2.38 / 3.27; identical to the Python numbers. Every filter setting tested since; none moves it (`docs/RESEARCH_REVIEW.md`). Next lever: the network (Debadrita) |
+| Every recording, C++ entry | All 11 EuRoC + TUM-VI rooms 1-4, 6, seeds 1-2 (32 runs): **ATE better than stand still in all 32**, mean 2.58 vs 2.71 m; checkpoints 2.42 vs 2.54. Blind 5 s is a tie (2.36 vs 2.38): we lose it by 0.01-0.13 m on TUM-VI rooms and V2_01/V2_02 |
 | 5 s prediction after IMU death (20 pts) | Done: dead reckoning from the last trusted state; `--extend-blind` when the file just ends. Held-out blind 5 s: 2.36 m with the network vs 2.38 m stand still (Debadrita) |
 | No ground truth, unknown gravity | Done: gravity and gyro bias from the data itself; Mayank's test with the IMU rotated 90° passes |
 | Exact I/O, one pose per row, through dropouts | Done: 23 contract tests (NaN, inf, frozen, gaps, duplicates, truncated files, header variants) pass |
