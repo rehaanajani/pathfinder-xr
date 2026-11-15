@@ -10,8 +10,8 @@ paper. Its point, for drones: rotating the IMU into a global frame throws away w
 about the motion (thrust along the body axes, attitude through the gravity component). Feed the body-frame IMU with
 gravity kept, plus the attitude, and predict body-frame velocity.
 
-**Default since the last commit of this branch**: `src/velnet_weights.bin` is the AirIO network below (called
-`velnet_airio.bin` in the tables); the previous network is `src/velnet_weights_world.bin`. Dropping that commit
+**Default on this branch** (commit f18c1e3): `src/velnet_weights.bin` is the AirIO network below (called
+`velnet_airio.bin` in the tables); the previous network is `src/velnet_weights_world.bin`. `git revert f18c1e3`
 restores the old default.
 
 ## Result in one paragraph
