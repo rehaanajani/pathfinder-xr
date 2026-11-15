@@ -33,6 +33,9 @@ import zipfile
 from pathlib import Path
 
 G = 9.80665
+# Gravity ("up") in the IMU frame at the start of the recordings the body-frame network was trained on: EuRoC (all 11
+# sequences within ~6 deg of this) and TUM-VI (rooms 1-6). The mount guard compares a new file against these.
+TRAIN_UP = ((0.9412, -0.0101, -0.3376), (0.0160, -0.0040, 0.9999))
 
 
 # ---------------------------------------------------------------------------- small vector / quaternion helpers
@@ -191,10 +194,36 @@ class PathFinder:
         # Gravity alignment: rotate the measured specific force (body) onto +z (world).
         if norm3(ma) > 1e-6:                      # (healthy samples always carry gravity; guard anyway)
             self.q = q_from_two(tuple(c / norm3(ma) for c in ma), (0.0, 0.0, 1.0))
+            self.check_mount(ma)
         var_g = sum(sum((b[0][i] - mg[i]) ** 2 for i in range(3)) for b in buf) / n
         if var_g < self.a.still_gyro_var and not self.bias_known:   # still at start: the mean gyro is its bias
             self.bg = mg
         self.initialised = True
+
+    def check_mount(self, ma):
+        """Mount guard: the body-frame network learned the training IMUs' axes. If gravity at the start points far
+        from every training mount (the IMU axes were rotated), use the gravity-aligned network instead, which does
+        not depend on how the IMU is mounted. A rotation about gravity itself cannot be seen here."""
+        A = self.a
+        if self.net is None or not self.body or A.mount_guard_deg <= 0 or not A.fallback_model:
+            return
+        n = norm3(ma)
+        u = [c / n for c in ma]
+        cos = max(sum(u[i] * m[i] for i in range(3)) / norm3(m) for m in TRAIN_UP)
+        self.mount_angle = math.degrees(math.acos(max(-1.0, min(1.0, cos))))
+        if self.mount_angle > A.mount_guard_deg:
+            from velnet import VelNet
+            try:
+                fb = VelNet(A.fallback_model)
+            except Exception as e:                # unusable fallback: keep the body-frame network (as the C++ entry)
+                print(f"mount guard: cannot load {A.fallback_model} ({e}); keeping the body-frame network",
+                      file=sys.stderr)
+                return
+            self.net = fb
+            self.W, self.dec = self.net.window, self.net.dec
+            self.body = self.net.version >= 3
+            print(f"IMU mount {self.mount_angle:.0f} deg from the training mounts: using {Path(A.fallback_model).name}",
+                  file=sys.stderr)
 
     def zero_velocity(self, g, a):
         A = self.a
@@ -576,6 +605,10 @@ def args(argv=None):
     ap.add_argument("--model-vel-gain", type=float, default=1.0)
     ap.add_argument("--model-window", type=int, default=200, help=argparse.SUPPRESS)   # taken from the weights file;
     ap.add_argument("--model-dec", type=int, default=1, help=argparse.SUPPRESS)        # only set when recording
+    ap.add_argument("--fallback-model", default="auto",
+                    help="network used when the mount guard fires; 'auto' = velnet_weights_world.bin next to this script")
+    ap.add_argument("--mount-guard-deg", type=float, default=25.0,
+                    help="deg; switch to --fallback-model if start-up gravity is this far from the training mounts (0 = off)")
     ap.add_argument("--model-input", choices=["world", "body"], default="world", help=argparse.SUPPRESS)
     ap.add_argument("--yaw-q", type=float, default=0.0, help="rad^2/s; heading uncertainty growth on healthy data")
     ap.add_argument("--yaw-q-blind", type=float, default=2.0, help="rad^2/s; heading uncertainty growth in dropouts")
@@ -593,6 +626,13 @@ def args(argv=None):
         a.model = str(cand) if cand.exists() else None
     elif a.model in ("none", ""):
         a.model = None
+    if not math.isfinite(a.mount_guard_deg):
+        ap.error("--mount-guard-deg must be a finite number")
+    if a.fallback_model == "auto":
+        cand = Path(__file__).resolve().parent / "velnet_weights_world.bin"
+        a.fallback_model = str(cand) if cand.exists() else None
+    elif a.fallback_model in ("none", ""):
+        a.fallback_model = None
     for k, v in PRESETS[a.preset or ("learned" if a.model else "physics")].items():
         if getattr(a, k) is None:
             setattr(a, k, v)

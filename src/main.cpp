@@ -25,6 +25,8 @@
 #include <zlib.h>
 
 static const double G = 9.80665;
+// Gravity in the IMU frame at the start of the training recordings (EuRoC, TUM-VI); see main.py TRAIN_UP.
+static const double TRAIN_UP[2][3] = {{0.9412, -0.0101, -0.3376}, {0.0160, -0.0040, 0.9999}};
 static const double NaN = std::nan("");
 
 // ------------------------------------------------------------------------------------------------ small math
@@ -67,7 +69,8 @@ static double pyround(double x) { return std::nearbyint(x); }   // Python round(
 
 // ------------------------------------------------------------------------------------------------ options
 struct Opt {
-    std::string input, output = "estimated_trajectory.txt", model = "auto", preset;
+    std::string input, output = "estimated_trajectory.txt", model = "auto", preset, fallback_model = "auto";
+    double mount_guard_deg = 25.0;
     double extend_blind = 0; int init_samples = 200; double still_gyro_var = 4e-4; int zupt_window = 40;
     double zupt_gyro = 0.04, zupt_acc = 0.15, zupt_tau = 0.05, zupt_gyro_std = NaN, zupt_acc_std = 0.15;
     double prescan = NaN, bias_rate = NaN, leak = 1.0, kp = NaN, ki = NaN, kp_boost = NaN, ki_calm = NaN;
@@ -89,6 +92,7 @@ static void parse_args(int argc, char** argv, Opt& a) {
     struct D { const char* n; double* d; int* i; std::string* s; };
     D table[] = {
         {"output", nullptr, nullptr, &a.output}, {"model", nullptr, nullptr, &a.model},
+        {"fallback-model", nullptr, nullptr, &a.fallback_model}, {"mount-guard-deg", &a.mount_guard_deg, nullptr, nullptr},
         {"preset", nullptr, nullptr, &a.preset}, {"extend-blind", &a.extend_blind, nullptr, nullptr},
         {"init-samples", nullptr, &a.init_samples, nullptr}, {"still-gyro-var", &a.still_gyro_var, nullptr, nullptr},
         {"zupt-window", nullptr, &a.zupt_window, nullptr}, {"zupt-gyro", &a.zupt_gyro, nullptr, nullptr},
@@ -139,6 +143,14 @@ static void parse_args(int argc, char** argv, Opt& a) {
         struct stat st;
         a.model = stat(cand.c_str(), &st) == 0 ? cand : "";
     } else if (a.model == "none") a.model = "";
+    if (!std::isfinite(a.mount_guard_deg)) usage_exit("--mount-guard-deg must be a finite number");
+    if (a.fallback_model == "auto") {           // the gravity-aligned network, used when the mount guard fires
+        std::string self = argv[0];
+        size_t sl = self.find_last_of("/\\");
+        std::string cand = (sl == std::string::npos ? std::string(".") : self.substr(0, sl)) + "/velnet_weights_world.bin";
+        struct stat st;
+        a.fallback_model = stat(cand.c_str(), &st) == 0 ? cand : "";
+    } else if (a.fallback_model == "none") a.fallback_model = "";
     std::string p = a.preset.empty() ? (a.model.empty() ? "physics" : "learned") : a.preset;
     if (p != "physics" && p != "learned") usage_exit("--preset must be physics or learned");
     bool L = p == "learned";
@@ -514,7 +526,10 @@ struct PathFinder {
             ma[i] = sa / n; mg[i] = sg / n;
         }
         double nm = norm3(ma);
-        if (nm > 1e-6) q = q_from_two({{ma[0] / nm, ma[1] / nm, ma[2] / nm}}, {{0.0, 0.0, 1.0}});
+        if (nm > 1e-6) {
+            q = q_from_two({{ma[0] / nm, ma[1] / nm, ma[2] / nm}}, {{0.0, 0.0, 1.0}});
+            check_mount(ma);
+        }
         double var = 0;
         for (auto& b : init_buf) {
             double s = 0;
@@ -524,6 +539,30 @@ struct PathFinder {
         var /= n;
         if (var < A.still_gyro_var && !bias_known) bg = mg;
         initialised = true;
+    }
+
+    // Mount guard (see main.py check_mount): far from every training mount -> the gravity-aligned network.
+    VelNet fallback;
+    void check_mount(const V3& ma) {
+        if (!net || !body || A.mount_guard_deg <= 0 || A.fallback_model.empty()) return;
+        double n = norm3(ma), best = -1.0;
+        for (const auto& m : TRAIN_UP) {
+            double nm = std::sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
+            best = std::max(best, (ma[0] * m[0] + ma[1] * m[1] + ma[2] * m[2]) / (n * nm));
+        }
+        double ang = std::acos(std::max(-1.0, std::min(1.0, best))) * 180.0 / M_PI;
+        if (ang <= A.mount_guard_deg) return;
+        if (!fallback.load(A.fallback_model)) {           // unusable file: keep the body-frame network (as main.py)
+            std::fprintf(stderr, "mount guard: cannot load %s; keeping the body-frame network\n", A.fallback_model.c_str());
+            return;
+        }
+        net = &fallback;
+        W = net->window; dec = net->dec;
+        body = net->version >= 3;
+        const std::string& f = A.fallback_model;
+        size_t sl = f.find_last_of("/\\");
+        std::fprintf(stderr, "IMU mount %.0f deg from the training mounts: using %s\n", ang,
+                     (sl == std::string::npos ? f : f.substr(sl + 1)).c_str());
     }
 
     bool zero_velocity(const V3& g, const V3& a) {
