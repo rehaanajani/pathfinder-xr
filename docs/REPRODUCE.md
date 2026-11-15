@@ -87,7 +87,19 @@ flag, diff hash, packages, hardware, command, input hashes) and `status.json` (`
 `tools/vision_report.py`, which writes `results/vision/<run>/bundle.json` with the source run id and
 the hash of every file. Failed and superseded runs are kept, and `results/vision/README.md` lists them.
 
-## Fresh-setup check (this session)
+## Fresh-setup check (this session, 2026-11-15)
 
-See `results/vision/README.md` for the exact commands, durations and outcome of the clean-venv test
-run on this machine.
+Run on the development machine (i7-11800H, Windows 11, Python 3.13.5). This is the same person and
+machine, **not** an independent second-person reproduction.
+
+1. The link to PyPI ran at about 50 KB/s, and `uv pip install --require-hashes` failed twice on network
+   timeouts (opencv). The wheels were therefore fetched resumably with `tools/fetch.py`, with the
+   SHA-256 checked against PyPI, into a wheelhouse.
+2. `uv venv --python 3.13` and `uv pip install --offline --no-index --find-links wheelhouse --require-hashes -r requirements/core-dev-py313.lock`
+   installed 19 packages in 19 s. The venv has numpy 2.2.6, scipy 1.18.0, OpenCV 4.12.0 and
+   matplotlib 3.10.7, and no torch.
+3. In a fresh `git clone` of commit `51192ba`, with BLAS threads = 1: `tools/check_repo.py` found 0
+   problems; `pytest` gave **145 passed, 1 skipped** (the symlink test is skipped on Windows without
+   symlink privilege) in 462 s; `tools/smoke_eval.py` passed every gate. Total time was 495 s.
+4. Not covered: the GitHub Actions run (see the PR checks), Linux, the torch install, and the dataset
+   and model-dependent workflow from a clean machine.
