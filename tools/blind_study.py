@@ -26,6 +26,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from score_track3 import umeyama  # noqa: E402
+from eval_evo import locate  # noqa: E402
 
 DATA = Path(os.environ.get("PFX_DATA", ROOT / "local_data"))
 BIN = str(ROOT / "src" / "pathfinder")
@@ -33,7 +34,7 @@ BIN = str(ROOT / "src" / "pathfinder")
 
 def one(job):
     name, i, tk, T, work = job
-    src = DATA / "euroc" / name / "mav0"
+    src, gt_csv = locate(name)
     d = work / f"{name}_k{i:02d}"
     subprocess.run([sys.executable, str(ROOT / "tools" / "degrade_imu.py"), str(src), str(d), "--seed", "1",
                     "--blind", f"{T - tk:.6f}"], check=True, capture_output=True)
@@ -46,7 +47,7 @@ def one(job):
     cut = work / f"{name}_k{i:02d}_cut" / "imu0"
     cut.mkdir(parents=True, exist_ok=True)
     (cut / "data.csv").write_text("\n".join([head, *keep]) + "\n")
-    gt = np.loadtxt(src / "state_groundtruth_estimate0" / "data.csv", delimiter=",", comments="#")
+    gt = np.loadtxt(gt_csv, delimiter=",", comments="#")
     tg, pg = gt[:, 0] * 1e-9, gt[:, 1:4]
     out = {"data": name, "kill_s": tk, "t_fail_s": truth["t_fail_s"]}
     for label, extra in (("ours", []), ("still", ["--v-max", "0.0000001"])):
@@ -93,7 +94,7 @@ def main():
     work.mkdir(parents=True, exist_ok=True)
     jobs = []
     for n, name in enumerate(a.data):
-        raw = np.loadtxt(DATA / "euroc" / name / "mav0" / "imu0" / "data.csv", delimiter=",", comments="#", usecols=0)
+        raw = np.loadtxt(locate(name)[0] / "imu0" / "data.csv", delimiter=",", comments="#", usecols=0)
         T = (raw[-1] - raw[0]) * 1e-9
         rng = np.random.default_rng(a.seed + n)
         for i, tk in enumerate(np.sort(rng.uniform(20.0, T - 10.0, a.kills))):

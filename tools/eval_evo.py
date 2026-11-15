@@ -2,6 +2,7 @@
 
     python tools/eval_evo.py --data MH_01_easy V1_01_easy ... --seeds 1 2 3 --tag eval [--jobs 4]
 
+Recordings are EuRoC names (MH_01_easy, ...) or TUM-VI rooms (room1 ... room6; needs tools/fetch_tumvi.py).
 Per recording and seed: degrade with tools/degrade_imu.py, run src/pathfinder (C++ entry) and the stand-still
 baseline (--v-max 0.0000001), then run
     evo_ape tum gt est -a        (SE(3) alignment)
@@ -31,9 +32,18 @@ STILL = ["--v-max", "0.0000001"]
 EVO_BIN = Path(sys.executable).parent
 
 
+def locate(name):
+    """(mav0 folder, ground-truth csv) for `MH_01_easy` (EuRoC) or `room1` (TUM-VI, mocap0)."""
+    if name.startswith("room"):
+        m = DATA / "tumvi" / f"dataset-{name}_512_16" / "mav0"
+        return m, m / "mocap0" / "data.csv"
+    m = DATA / "euroc" / name / "mav0"
+    return m, m / "state_groundtruth_estimate0" / "data.csv"
+
+
 def gt_tum(name, out):
-    """EuRoC state_groundtruth_estimate0 (ns, p, q wxyz) -> TUM (s, p, q xyzw)."""
-    d = np.loadtxt(DATA / "euroc" / name / "mav0" / "state_groundtruth_estimate0" / "data.csv", delimiter=",", comments="#")
+    """EuRoC state_groundtruth_estimate0 / TUM-VI mocap0 (ns, p, q wxyz) -> TUM (s, p, q xyzw)."""
+    d = np.loadtxt(locate(name)[1], delimiter=",", comments="#")
     rows = np.c_[d[:, 0] * 1e-9, d[:, 1:4], d[:, 5:8], d[:, 4]]
     np.savetxt(out, rows, fmt="%.9f")
 
@@ -51,7 +61,7 @@ def run_one(job):
     name, seed, work = job
     d = work / f"{name}_s{seed}"
     gt = work / f"{name}_gt.txt"
-    src = DATA / "euroc" / name / "mav0"
+    src, gt_csv = locate(name)
     subprocess.run([sys.executable, str(ROOT / "tools" / "degrade_imu.py"), str(src), str(d), "--seed", str(seed)],
                    check=True, capture_output=True)
     truth = json.load(open(d / "truth.json"))
@@ -74,8 +84,7 @@ def run_one(job):
         res["evo_rpe_1s"], e3 = evo("evo_rpe", str(gt), str(est), "-d", "200", "-u", "f")
         if e1 or e2 or e3:
             res["evo_err"] = e1 or e2 or e3
-        sc = score(est, d / "gt_unused" if False else DATA / "euroc" / name / "mav0" / "state_groundtruth_estimate0" / "data.csv",
-                   truth, csv)
+        sc = score(est, gt_csv, truth, csv)
         res["score_track3"] = sc
         out[label] = res
     return out
