@@ -8,6 +8,17 @@ for the current reference-free API, conservative model policy, input validation 
 The result tables and submission artifacts below predate this implementation; they are historical
 research evidence, not revalidated measurements of the current defaults or production certification.
 
+**Real-vision update (issues #2/#3):** Path Finder now runs on motion estimated from **real stereo images**
+(`pathfinder/stereo_vo.py`), fused through clone-based relative-pose updates with the **real** IMU. It has been
+evaluated on TUM-VI room1 under a frozen protocol ([docs/PROTOCOL.md](docs/PROTOCOL.md)), with
+the report and figures in [results/vision/](results/vision/README.md) and a labelled prerecorded replay in
+[demo/vision_replay.html](demo/vision_replay.html). room1 is a *development* recording that earlier work already
+used. That evaluation has no untouched final test and runs no established external VIO baseline, and the
+VO covariance is not validated, so relative-mode poses are reported `valid=False` by contract. The tables, deck
+and video further down still describe the earlier simulated-camera benchmark and have **not** been regenerated
+from the new bundle. Setup and reproduction: [docs/REPRODUCE.md](docs/REPRODUCE.md); runtime contract:
+[docs/STREAMING.md](docs/STREAMING.md); releases/licences: [docs/RELEASE.md](docs/RELEASE.md).
+
 > Design robust trajectory-estimation techniques capable of maintaining reliable tracking and navigation
 > when sensor measurements become degraded or unreliable.
 
