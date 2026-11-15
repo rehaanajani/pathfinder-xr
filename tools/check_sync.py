@@ -4,10 +4,10 @@
 
 Nothing measured here is assumed by the runtime. The output records:
 
-1. mocap <-> IMU: angular velocity from consecutive mocap orientations against the gyro, over a grid of
-   time offsets (0.25 ms steps). Reports the best offset, the residual and the rotation that best maps
-   mocap body rates onto gyro rates (identity = the mocap pose is the IMU pose, as the column names
-   ``q_RS`` claim).
+1. mocap <-> IMU: rotation increments of the mocap orientation over 50 ms windows against the gyro
+   integrated over the same windows, for a grid of time offsets (0.25 ms steps). Reports the best
+   offset, the residual and the rotation that best maps mocap increments onto gyro increments
+   (identity = the mocap pose is the IMU pose, as the column names ``q_RS`` claim).
 2. gravity: the mean specific force rotated into the mocap frame over the whole recording. Its
    angle from +z says whether the reference frame is gravity aligned (needed for 4-DoF alignment).
 3. camera <-> IMU: rotation increments measured by the stereo visual front end (images only) against
@@ -69,23 +69,43 @@ def offset_scan(cost, grid):
     return float(best), float(c[k]), c
 
 
-def mocap_imu(s, ref, grid):
-    tm, wm = mocap_rates(ref)
-    inner = (tm > s.imu_t[0] + 0.1) & (tm < s.imu_t[-1] - 0.1)
-    tm, wm = tm[inner], wm[inner]
+def _gyro_increments(s, t0, t1, d):
+    """Integrated gyro (rad) over [t0, t1] with the IMU clock shifted by d. Integrating (instead of
+    interpolating single samples) avoids a bias toward half-sample offsets: interpolating between two
+    noisy samples halves their variance, which a residual minimum would otherwise prefer."""
+    dt = np.diff(s.imu_t)
+    cum = np.vstack([np.zeros(3), np.cumsum(0.5 * (s.gyro[1:] + s.gyro[:-1]) * dt[:, None], 0)])
+    tt = s.imu_t + d
+    return np.stack([np.interp(t1, tt, cum[:, i]) - np.interp(t0, tt, cum[:, i]) for i in range(3)], 1)
 
-    def cost(d):            # gyro sample time t_imu corresponds to mocap time t_imu + d
-        return float(np.mean(np.sum((_interp_gyro(s.imu_t + d, s.gyro, tm) - wm) ** 2, 1)))
+
+def mocap_imu(s, ref, grid, span=0.05):
+    """Rotation increments of the reference over ``span`` s windows against the integrated gyro."""
+    R = Rot.from_quat(ref.q)
+    j = np.searchsorted(ref.t, ref.t + span)
+    ok = (j < len(ref.t))
+    i = np.where(ok)[0]
+    j = j[ok]
+    seg_ok = np.array([np.all(np.diff(ref.t[a:b + 1]) < 0.02) for a, b in zip(i, j)])
+    i, j = i[seg_ok], j[seg_ok]
+    inner = (ref.t[i] > s.imu_t[0] + 0.1) & (ref.t[j] < s.imu_t[-1] - 0.1)
+    i, j = i[inner][::2], j[inner][::2]
+    t0, t1 = ref.t[i], ref.t[j]
+    dR = (R[i].inv() * R[j]).as_rotvec()
+
+    def cost(d):            # gyro sample time t_imu corresponds to reference time t_imu + d
+        return float(np.mean(np.sum((_gyro_increments(s, t0, t1, d) - dR) ** 2, 1)))
 
     best, c, curve = offset_scan(cost, grid)
-    g = _interp_gyro(s.imu_t + best, s.gyro, tm)
-    C = kabsch(wm, g)
-    resid = g - wm
+    g = _gyro_increments(s, t0, t1, best)
+    C = kabsch(dR, g)
+    resid = (g - dR) / (t1 - t0)[:, None]
     return {"offset_s": best, "convention": "reference time = imu time + offset_s",
-            "rms_rate_residual_rad_s": float(np.sqrt(c)), "rms_rate_at_zero_rad_s": float(np.sqrt(cost(0.0))),
+            "window_s": span, "rms_increment_residual_deg": float(np.rad2deg(np.sqrt(c))),
+            "rms_increment_at_zero_deg": float(np.rad2deg(np.sqrt(cost(0.0)))),
             "mocap_to_imu_rate_rotation_deg": float(np.rad2deg(np.linalg.norm(Rot.from_matrix(C).as_rotvec()))),
             "gyro_bias_estimate_rad_s": resid.mean(0).tolist(),
-            "n_rates": int(len(tm)), "scan_ms": [float(grid[0] * 1e3), float(grid[-1] * 1e3)]}
+            "n_increments": int(len(t0)), "scan_ms": [float(grid[0] * 1e3), float(grid[-1] * 1e3)]}
 
 
 def gravity(s, ref, offset):
