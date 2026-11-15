@@ -22,7 +22,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
-FILES = ["main.cpp", "Makefile", "Dockerfile", ".dockerignore", "main.py", "velnet.py", "velnet_weights.bin",
+FILES = ["main.cpp", "Makefile", "Dockerfile", ".dockerignore", "main.py", "velnet.py", "velnet_weights.bin", "velnet_weights_world.bin",
          "README.md"]
 
 
@@ -77,7 +77,7 @@ def main():
         "entry": "src/main.cpp (C++17, single thread, offline); src/main.py is the reference implementation",
         "command": "src/pathfinder <input> -o estimated_trajectory.txt" + (
             f" --extend-blind {a.extend_blind}" if a.extend_blind > 0 else ""),
-        "model": {"file": "src/velnet_weights.bin", "parameters": 27020,
+        "model": {"file": "src/velnet_weights.bin", "parameters": 42716, "input": "body frame (AirIO style), weights version 3",
                   "sha256": hashlib.sha256((SRC / "velnet_weights.bin").read_bytes()).hexdigest()},
         "input": {"imu_rows": len(rows), "duration_s": round(span, 3),
                   "sha256": hashlib.sha256(data).hexdigest()},

@@ -20,8 +20,8 @@ Pipeline (single pass over the samples, single thread, standard library only):
   5. Dropouts and the final IMU failure: dead reckoning from the last trusted state — constant turn rate decaying
      to zero, velocity decaying with a time constant, never faster than the speed limit.
   6. Learned velocity (default when src/velnet_weights.bin is present, needs numpy; --model none turns it off): a
-     small learned network reads the last 1 s of
-     gravity-aligned IMU and its velocity is used as a measurement; this also switches the filter to the
+     small learned network reads the last 1 s of IMU (body frame with gravity kept plus our "up" direction,
+     docs/AIRIO.md; velnet_weights_world.bin: the earlier gravity-aligned input) and its velocity is used as a measurement; this also switches the filter to the
      "learned" preset (see PRESETS and docs/LEARNED_VELOCITY.md). --model none --preset physics is the original filter.
 """
 
