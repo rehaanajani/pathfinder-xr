@@ -51,8 +51,7 @@ def prepare(seq, faults: list[Fault], seed: int = 0):
 
 
 def _pack(est, seq, log=None, **extra):
-    ok = np.all(np.isfinite(est), 1)
-    r = {"p": est, **(metrics.summary(est[ok], seq.p[ok], seq.rate) if ok.any() else {}), **extra}
+    r = {"p": est, **metrics.summary(est, seq.p, seq.rate), **extra}
     if log is not None:
         r.update(cam_used=log.cam_used, cam_rejected=log.cam_rejected, cam_skipped=log.cam_skipped,
                  cam_recovered=log.cam_recovered, disp_used=log.disp_used,
@@ -61,7 +60,8 @@ def _pack(est, seq, log=None, **extra):
         out = getattr(log, "outputs", None)
         if out is not None:
             r.update(P_pos=out["P_pos"], valid=out["valid"], track_state=out["track_state"],
-                     camera_state=out["camera_state"], reasons=out["reasons"])
+                     camera_state=out["camera_state"], reasons=out["reasons"],
+                     valid_fraction=float(np.mean(out["valid"])) if len(out["valid"]) else 0.0)
     return r
 
 

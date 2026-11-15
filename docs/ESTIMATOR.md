@@ -1,5 +1,11 @@
 # Estimator contract, fault handling and evidence (issue #1)
 
+**Historical implementation/evidence snapshot: `70830e5`.** The completion pass changes the default
+model guard and validity policy and adds API/metric checks. See [ISSUE1_COMPLETION.md](ISSUE1_COMPLETION.md)
+for the current contract and new evidence. Numerical tables below are retained as historical results,
+not rerun measurements of the current defaults. In particular, model withholding is now enabled by
+default, unvalidated learned covariance cannot certify an outage, and degraded-camera output is invalid.
+
 Scope: `pathfinder/imu_health.py`, `parity.py`, `filter.py`, `estimator.py`, `pipeline.py`.
 Baseline for every before/after number: `main` at `ff7ec44`. **All evidence below is synthetic**
 (`synthetic.head_walk`, simulated camera fixes, simulated co-located redundant IMUs) unless a row says

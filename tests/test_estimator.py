@@ -13,7 +13,7 @@ from pathfinder.faults import Fault
 from pathfinder.filter import ESKF, FilterConfig, G, run
 from pathfinder.synthetic import head_walk
 
-from .helpers import displacement_oracle, err, run_shipped
+from .helpers import assert_recovered_validity, displacement_oracle, err, run_shipped
 
 FS = 200
 
@@ -151,11 +151,13 @@ def test_reference_free_run_does_not_read_reference_fields():
     b, _, ob = run(blind, fg, fa, None, cam, None, pipeline.ours_cfg(), **kw)
     assert np.array_equal(a, b, equal_nan=True) and np.array_equal(oa["reasons"], ob["reasons"])
     ok = oa["valid"]
-    assert not ok[:2 * FS].any() and ok[4 * FS:15 * FS].all() and ok[21 * FS:].all()
+    assert not ok[:2 * FS].any()
+    assert_recovered_validity(oa, slice(4 * FS, 15 * FS))
+    assert_recovered_validity(oa, slice(21 * FS, None))
     # Inside the blackout, without a learned model, the estimate is withdrawn once its own
     # uncertainty passes max_valid_pos_std, and it says why.
     for i in np.flatnonzero(~ok[4 * FS:]) + 4 * FS:
-        assert oa["reasons"][i] & REASONS["UNCERTAINTY_LIMIT"]
+        assert oa["reasons"][i] & (REASONS["UNCERTAINTY_LIMIT"] | REASONS["COVARIANCE_UNRELIABLE"])
     assert err(a, s)[ok].mean() < 0.06
     assert not any(oa["reasons"] & REASONS["TRUTH_INIT_DIAGNOSTIC"])
 
@@ -263,7 +265,8 @@ def test_validity_and_reasons_when_both_modalities_degrade():
     assert not out["valid"][30 * FS:36 * FS].any()                      # uncertainty limit reached
     nv = metrics.nees(est[sl], s.p[sl], out["P_pos"][sl])
     assert np.mean(nv <= 14.16) > 0.95                                  # conservative, not overconfident
-    assert out["valid"][40 * FS:].all() and err(est, s)[40 * FS:].max() < 0.15
+    assert_recovered_validity(out, slice(40 * FS, None))
+    assert err(est, s)[40 * FS:].max() < 0.15
 
 
 def test_clean_uncertainty_is_not_overconfident():

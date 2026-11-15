@@ -13,7 +13,7 @@ from pathfinder.faults import Fault
 from pathfinder.filter import FilterConfig, run
 from pathfinder.synthetic import head_walk
 
-from .helpers import displacement_oracle, err, run_shipped
+from .helpers import assert_recovered_validity, displacement_oracle, err, run_shipped
 
 FS = 200
 
@@ -63,7 +63,7 @@ def test_genuine_recovery_after_inertial_drift_without_model(dur):
     e = err(est, s)
     back = int((12 + dur) * FS)
     assert e[back + 3 * FS:].max() < 0.15
-    assert out["valid"][back + 3 * FS:].all()
+    assert_recovered_validity(out, slice(back + 3 * FS, None))
 
 
 def test_genuine_correction_with_bias_on_every_imu():
@@ -178,4 +178,4 @@ def test_distrusted_model_outage_is_not_declared_valid():
     sl = slice(16 * FS, 25 * FS)
     assert not out["valid"][sl].any()
     assert np.all(out["reasons"][sl] & REASONS["COVARIANCE_UNRELIABLE"])
-    assert out["valid"][28 * FS:].all()
+    assert_recovered_validity(out, slice(28 * FS, None))

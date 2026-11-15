@@ -70,6 +70,20 @@ def skew(v):
     return np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
 
 
+def valid_covariance(value, size=3):
+    """Reject malformed/indefinite measurement covariance instead of legitimising it by jitter."""
+    value = np.asarray(value, float)
+    if value.shape != (size, size) or not np.isfinite(value).all():
+        return False
+    if not np.allclose(value, value.T, atol=1e-12, rtol=1e-8):
+        return False
+    try:
+        np.linalg.cholesky(value)
+    except np.linalg.LinAlgError:
+        return False
+    return True
+
+
 @dataclass
 class FilterConfig:
     sigma_g: float = 0.005        # gyro white-noise density used by the filter, rad/s/sqrt(Hz)
@@ -94,7 +108,8 @@ class FilterConfig:
     model_check_up: float = 0.1     # learned-model self-check: how fast trust drops (per update)
     model_check_down: float = 0.003 # ... and how slowly it comes back
     model_doubt_scale: float = 10.0 # self-check scale above which the model is "distrusted" (see model_distrusted)
-    model_max_scale: float | None = None  # optional: withhold learned updates without camera above this scale
+    model_max_scale: float | None = 10.0  # withhold a measured-inconsistent model without a healthy camera
+    model_covariance_validated: bool = False  # requires held-out calibration evidence for this model/domain
     use_health: bool = True       # off = naive fusion that trusts every frame equally
     trust: tuple | None = None    # (health, std_m) table from camera.calibrate_trust
     cloning: bool = False         # TLIO-style stochastic cloning of past (rotation, position)
@@ -116,6 +131,39 @@ class FilterConfig:
     gap_sigma_a: float = 2.0         # ... m/s^2/sqrt(Hz)
     max_valid_pos_std: float = 1.0   # largest position std (m, worst axis) still reported as valid
     disp_rate_tol: float = 0.05      # learned window skipped if its sample spacing deviates more
+
+    def __post_init__(self):
+        positive = ("fix_std", "gate", "max_imu_gap_s", "max_valid_pos_std", "disp_cov_scale",
+                    "outage_gap_s", "recover_after_s", "recover_after_jump_s", "model_doubt_scale",
+                    "max_jump_holdout_s", "episode_end_lr", "jump_cover", "outage_envelope")
+        nonnegative = ("sigma_g", "sigma_a", "sigma_bg", "sigma_ba", "gap_sigma_g", "gap_sigma_a",
+                       "bias_q_gain", "anchor_min_s", "provisional_factor", "soft_power", "disp_rate_tol")
+        for name in positive + nonnegative:
+            value = getattr(self, name)
+            if not np.isfinite(value) or value < 0 or (name in positive and value == 0):
+                raise ValueError(f"invalid {name}: {value}")
+        if self.model_max_scale is not None and (not np.isfinite(self.model_max_scale) or self.model_max_scale <= 0):
+            raise ValueError("model_max_scale must be positive, finite or None (research only)")
+        for name in ("model_check_up", "model_check_down", "q_up", "q_down"):
+            if not 0 <= getattr(self, name) <= 1:
+                raise ValueError(f"{name} must be in [0, 1]")
+        if not 0 <= self.min_health <= self.recover_health <= 1:
+            raise ValueError("health thresholds must satisfy 0 <= min <= recovery <= 1")
+        if not 0 < self.consistency_alpha < 1 or not 0 < self.step_back_ratio < 1:
+            raise ValueError("consistency_alpha and step_back_ratio must be in (0, 1)")
+        if (self.gate_mode not in ("soft", "hard") or not np.isfinite(self.q_max) or self.q_max < 1
+                or not np.isfinite(self.low_conf_inflate) or self.low_conf_inflate < 1):
+            raise ValueError("invalid gating or process-noise configuration")
+        if self.min_episode_fixes < 3 or self.max_episode_fixes < self.min_episode_fixes + 2:
+            raise ValueError("episode buffer is too short for the consistency fit")
+        if self.max_jump_holdout_s < self.recover_after_jump_s:
+            raise ValueError("maximum jump hold-out must include the minimum hold-out")
+        if self.trust is not None:
+            h, std = (np.array(x, dtype=float, copy=True) for x in self.trust)
+            if (h.ndim != 1 or std.shape != h.shape or len(h) < 2 or not np.isfinite(h).all()
+                    or not np.isfinite(std).all() or np.any(np.diff(h) <= 0) or np.any(std <= 0)):
+                raise ValueError("trust must contain increasing health bins and positive finite standard deviations")
+            self.trust = (h, std)
 
 
 @dataclass
@@ -190,6 +238,14 @@ class _Episode:
 class ESKF:
     def __init__(self, cfg: FilterConfig, p0, v0, q0, P0_scale: float = 1e-4, P0=None):
         self.cfg = cfg
+        for name, value, shape in (("p0", p0, (3,)), ("v0", v0, (3,)), ("q0", q0, (4,))):
+            if np.shape(value) != shape or not np.isfinite(value).all():
+                raise ValueError(f"{name} must be finite with shape {shape}")
+        if P0 is not None:
+            P0 = np.asarray(P0, float)
+            if (P0.shape != (15, 15) or not np.isfinite(P0).all() or not np.allclose(P0, P0.T)
+                    or np.linalg.eigvalsh(P0).min() < -1e-12):
+                raise ValueError("initial covariance must be a finite symmetric positive semidefinite 15x15 matrix")
         self.R = Rot.from_quat(q0)
         self.v = np.array(v0, float)
         self.p = np.array(p0, float)
@@ -280,7 +336,7 @@ class ESKF:
     def _update(self, y, H, Rmeas, mode: str = "soft"):
         """mode: "soft" (robust down-weighting outside the gate), "hard" (reject), "off" (no gate).
         Returns "accepted", "softened" or "rejected"."""
-        if not (np.all(np.isfinite(y)) and np.all(np.isfinite(Rmeas))):
+        if not (np.all(np.isfinite(y)) and valid_covariance(Rmeas, len(y))):
             return "rejected"
         n = self.P.shape[0]
         S = H @ self.P @ H.T + Rmeas
@@ -379,9 +435,9 @@ class ESKF:
     def model_distrusted(self):
         """The self-check says the network is far outside its claimed uncertainty on this motion.
 
-        model_scale is an EWMA (weight model_check_up ~ 0.1, i.e. ~10 updates) of NIS/3. For a
-        consistent model its 99.9 % quantile is about 2 (chi2(30)/30), so model_doubt_scale = 10 is
-        well outside anything a consistent model produces. Statistical choice, not fitted to a test set.
+        model_scale is an asymmetric EWMA of NIS/3 with correlated windows. Its threshold is a
+        conservative engineering guard, not a chi-square confidence level; the EWMA does not
+        itself have a chi-square law. A low value does not certify model covariance calibration.
         """
         return self.model_scale > self.cfg.model_doubt_scale
 
@@ -399,8 +455,8 @@ class ESKF:
             log.disp_withheld += 1
             return None
         if c.model_max_scale is not None and self.model_scale > c.model_max_scale and not self._anchored(t):
-            # Optional activation policy (off by default, not yet validated on real data): a model
-            # the self-check has measured as badly inconsistent is not used without the camera.
+            # Conservative default: an observed-inconsistent model cannot anchor an outage.
+            # None is an explicit research override, not a claim of calibrated model uncertainty.
             log.disp_skipped += 1
             log.disp_withheld += 1
             return None
@@ -411,7 +467,7 @@ class ESKF:
         if k0 not in self.clone_k:
             log.disp_skipped += 1
             return
-        if not (np.all(np.isfinite(d)) and np.all(np.isfinite(cov))):
+        if not (np.shape(d) == (3,) and np.all(np.isfinite(d)) and valid_covariance(cov)):
             log.disp_skipped += 1
             return
         h, H = self.clone_measurement(k0)
@@ -426,7 +482,8 @@ class ESKF:
             log.disp_rejected += 1
 
     def displacement_update(self, d, cov, p_past, P_past_pos, log: FilterLog, t: float = 0.0):
-        if not (np.all(np.isfinite(d)) and np.all(np.isfinite(cov)) and np.all(np.isfinite(p_past))):
+        if not (np.shape(d) == (3,) and np.all(np.isfinite(d)) and valid_covariance(cov)
+                and np.all(np.isfinite(p_past))):
             log.disp_skipped += 1
             return
         z = p_past + d

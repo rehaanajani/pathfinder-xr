@@ -28,6 +28,7 @@ Initialisation
 """
 
 from collections import deque
+from copy import deepcopy
 from dataclasses import dataclass
 
 import numpy as np
@@ -35,8 +36,8 @@ from scipy.spatial.transform import Rotation as Rot
 
 from . import GRAVITY
 from .filter import (CAM_DEGRADED, CAM_NOMINAL, CAM_NONE, CAM_OUTAGE, CAM_RECOVERING, CAM_SUSPECT, ESKF,
-                     FilterConfig, FilterLog, skew)
-from .imu_health import COMMON_MODE, ISOLATED, LOST, SINGLE, UNISOLATED
+                     FilterConfig, FilterLog, skew, valid_covariance)
+from .imu_health import COMMON_MODE, ISOLATED, LOST, SINGLE, UNISOLATED, WARMUP
 
 G = np.array([0.0, 0.0, -GRAVITY])
 
@@ -84,7 +85,12 @@ class ReferenceFreeInit:
 
 def _gravity_tilt(f_body0: np.ndarray) -> Rot:
     """Rotation body0 -> world with zero yaw that maps the mean specific force to +z."""
-    u = f_body0 / np.linalg.norm(f_body0)
+    norm = np.linalg.norm(f_body0)
+    if not np.isfinite(norm) or norm < 1e-9:
+        # No gravity information (e.g. free fall): do not manufacture an observable heading/tilt.
+        # The fallback initializer carries an arbitrary-frame flag and large attitude covariance.
+        return Rot.identity()
+    u = f_body0 / norm
     z = np.array([0.0, 0.0, 1.0])
     v = np.cross(u, z)
     s, c = np.linalg.norm(v), float(u @ z)
@@ -178,10 +184,23 @@ def solve_alignment(t, gyro, acc, cam_t, cam_fix, cam_std, cfg: ReferenceFreeIni
 
 
 class StreamingEstimator:
-    def __init__(self, cfg: FilterConfig = FilterConfig(), init=None, predictor=None,
+    def __init__(self, cfg: FilterConfig | None = None, init=None, predictor=None,
                  expect_camera: bool = True):
-        self.cfg = cfg
-        self.init = init if init is not None else ReferenceFreeInit()
+        self.cfg = deepcopy(cfg) if cfg is not None else FilterConfig()
+        self.init = deepcopy(init) if init is not None else ReferenceFreeInit()
+        self.cfg.__post_init__()
+        if not isinstance(self.init, (TruthInit, ReferenceFreeInit)):
+            raise ValueError("init must be ReferenceFreeInit or TruthInit (diagnostic only)")
+        if isinstance(self.init, ReferenceFreeInit):
+            for name in ("duration_s", "max_wait_s", "cov_inflate", "tilt_floor_deg", "yaw_floor_deg",
+                         "vel_floor", "pos_floor", "fallback_vel_std"):
+                value = getattr(self.init, name)
+                if not np.isfinite(value) or value <= 0:
+                    raise ValueError(f"invalid initializer {name}")
+            if self.init.max_wait_s < self.init.duration_s or self.init.min_fixes < 4:
+                raise ValueError("initialization requires enough fixes and wait time")
+            if not 0 <= self.init.min_health <= 1:
+                raise ValueError("initializer min_health must be in [0, 1]")
         self.predictor = predictor
         self.expect_camera = expect_camera
         self.log = FilterLog()
@@ -193,6 +212,8 @@ class StreamingEstimator:
         self.W = int(getattr(predictor, "window", 200))
         self.every = int(getattr(predictor, "every", 20))
         self.pred_rate = float(getattr(predictor, "rate", 200.0))
+        if self.W < 1 or self.every < 1 or not np.isfinite(self.pred_rate) or self.pred_rate <= 0:
+            raise ValueError("predictor window, update interval and rate must be positive")
         self.hist = deque(maxlen=self.W + 1)    # per sample: (t, R, p, P_pos, gyro, acc, imu_bad)
         self.boot: list = []                    # samples buffered before initialisation
         self.base_reasons = 0
@@ -201,13 +222,15 @@ class StreamingEstimator:
 
     # ------------------------------------------------------------------ inputs
     def add_camera(self, t, fix, health):
-        if not np.isfinite(t):
+        fix = np.asarray(fix, float)
+        if (not np.isfinite(t) or fix.shape != (3,) or not np.isfinite(fix).all()
+                or not np.isfinite(health) or not 0 <= health <= 1):
             self.log.cam_invalid += 1
             return
         if self.cur_t is not None and self.f is not None and t <= self.cur_t:
             self.log.cam_late += 1                 # older than the state: cannot be applied causally
             return
-        ev = (float(t), np.asarray(fix, float), float(health))
+        ev = (float(t), fix.copy(), float(health))
         i = len(self.pending)
         while i > 0 and self.pending[i - 1][0] > ev[0]:
             i -= 1
@@ -216,12 +239,17 @@ class StreamingEstimator:
     def add_imu(self, t, gyro, acc, q_add_g: float = 0.0, q_add_a: float = 0.0, imu_state=None,
                 imu_conf: float = 1.0) -> list:
         t = float(t)
-        gyro = np.asarray(gyro, float).reshape(-1)
-        acc = np.asarray(acc, float).reshape(-1)
+        gyro = np.array(gyro, dtype=float, copy=True)
+        acc = np.array(acc, dtype=float, copy=True)
         if gyro.shape != (3,) or acc.shape != (3,):
             raise ValueError("gyro and acc must each have 3 components")
         if not np.isfinite(t):
             raise ValueError("IMU timestamp must be finite")
+        if (not np.isfinite(q_add_g) or not np.isfinite(q_add_a) or q_add_g < 0 or q_add_a < 0
+                or not np.isfinite(imu_conf) or not 0 <= imu_conf <= 1):
+            raise ValueError("IMU noise densities must be finite/nonnegative and confidence must be in [0, 1]")
+        if imu_state is not None and imu_state not in range(7):
+            raise ValueError("unknown IMU monitor state")
         last = self.boot[-1][0] if self.f is None and self.boot else self.cur_t
         if last is not None and t <= last:
             raise ValueError(f"IMU timestamps must increase strictly ({t} after {last})")
@@ -377,8 +405,8 @@ class StreamingEstimator:
                     Rz = f.clone_yaw(k0)          # into the clone's yaw frame (row vectors: v @ Rz)
                     gw, aw = gw @ Rz, aw @ Rz
                 d, cov = pred(np.concatenate([gw, aw], 1))
-                cov = np.asarray(cov) * c.disp_cov_scale
-                log.disp_std.append(float(np.sqrt(np.trace(cov))) if np.all(np.isfinite(cov)) else np.nan)
+                cov = np.asarray(cov, float) * c.disp_cov_scale
+                log.disp_std.append(float(np.sqrt(np.trace(cov))) if valid_covariance(cov) else np.nan)
                 if c.cloning:
                     f.displacement_update_clone(d, cov, k0, log, t)
                 else:
@@ -421,7 +449,7 @@ class StreamingEstimator:
         elif imu_state == COMMON_MODE:
             reasons |= REASONS["IMU_COMMON_MODE"]
             imu_bad = True
-        elif imu_state is None or imu_state == SINGLE:
+        elif imu_state is None or imu_state in (SINGLE, WARMUP):
             reasons |= REASONS["IMU_UNVERIFIED"]
         distrusted = self.predictor is not None and f.model_distrusted()
         if distrusted:
@@ -436,6 +464,8 @@ class StreamingEstimator:
             state = TRACK_INERTIAL
         worst_std = float(np.sqrt(max(np.linalg.eigvalsh(0.5 * (Pp + Pp.T)).max(), 0.0))) \
             if np.all(np.isfinite(Pp)) else np.inf
+        if lost:
+            state = TRACK_LOST
         if f.diverged:
             reasons |= REASONS["NUMERICAL_FAILURE"]
             state = TRACK_LOST
@@ -445,14 +475,17 @@ class StreamingEstimator:
         # Without the camera anchoring the state, its covariance rests on the learned model. If the self-check
         # has measured that model as inconsistent, the covariance cannot be trusted: the estimate is still
         # output (it may be the best available), but it is not declared valid.
-        unreliable = distrusted and cam not in (CAM_NOMINAL, CAM_DEGRADED) and state != TRACK_LOST
+        uncalibrated_model = self.predictor is not None and not c.model_covariance_validated
+        # An unvalidated learned covariance cannot certify an unanchored pose. Degraded vision
+        # also lacks demonstrated covariance calibration in this release, even without a model.
+        unreliable = ((distrusted or uncalibrated_model) and cam != CAM_NOMINAL) or cam == CAM_DEGRADED
         if unreliable:
             reasons |= REASONS["COVARIANCE_UNRELIABLE"]
         self.log.p.append(f.p.copy())
         self.log.q_scale.append(f.q_scale)
         self.log.p_std.append(float(np.sqrt(np.trace(Pp))) if np.all(np.isfinite(Pp)) else np.inf)
         return {"t": t, "p": f.p.copy(), "v": f.v.copy(), "q": f.R.as_quat(), "P_pos": Pp,
-                "P_vel": f.P[3:6, 3:6].copy(), "valid": state not in (TRACK_INITIALIZING, TRACK_LOST) and not unreliable,
+                "P_vel": f.P[3:6, 3:6].copy(), "valid": state not in (TRACK_INITIALIZING, TRACK_LOST) and not unreliable and not lost,
                 "track_state": state, "camera_state": cam,
                 "imu_state": -1 if imu_state is None else int(imu_state), "reasons": int(reasons)}
 
@@ -475,6 +508,8 @@ def replay(t, gyro, acc, cfg: FilterConfig, init, cam=None, predictor=None, imu_
     """
     t = np.asarray(t, float)
     gyro, acc = np.asarray(gyro, float), np.asarray(acc, float)
+    if t.ndim != 1 or not np.isfinite(t).all() or np.any(np.diff(t) <= 0):
+        raise ValueError("IMU timestamps must be a finite, strictly increasing vector")
     N = len(t)
     if gyro.shape != (N, 3) or acc.shape != (N, 3):
         raise ValueError(f"gyro and acc must be (N={N}, 3)")
@@ -482,6 +517,15 @@ def replay(t, gyro, acc, cfg: FilterConfig, init, cam=None, predictor=None, imu_
     rows = []
     ci = 0
     ct = np.asarray(cam["t"], float) if cam is not None else np.zeros(0)
+    if cam is not None and (ct.ndim != 1 or np.shape(cam["fix"]) != (len(ct), 3)
+                            or np.shape(cam["health"]) != (len(ct),)):
+        raise ValueError("camera timestamps, positions and health must have matching (M,), (M,3), (M,) shapes")
+    if not np.isfinite(ct).all():
+        raise ValueError("camera timestamps must be finite")
+    if imu_quality is not None and any(np.shape(imu_quality[k]) != (N,) for k in ("q_add_g", "q_add_a", "state")):
+        raise ValueError("IMU quality arrays must match input timestamps")
+    if imu_conf is not None and np.shape(imu_conf) != (N,):
+        raise ValueError("IMU confidence must match input timestamps")
     order = np.argsort(ct, kind="stable")
     for i in range(N):
         while ci < len(order) and ct[order[ci]] <= t[i]:

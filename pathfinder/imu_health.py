@@ -40,6 +40,7 @@ is unvalidated until measured on hardware (``validated`` stays False).
 """
 
 from dataclasses import dataclass, field
+from copy import deepcopy
 
 import numpy as np
 from scipy.stats import chi2
@@ -60,6 +61,17 @@ class ImuGeometry:
     R_bs: np.ndarray            # (K, 3, 3) rotation sensor -> body
     r_b: np.ndarray             # (K, 3) sensor origin in the body frame, metres
     validated: bool = False     # only True with measured hardware calibration evidence
+
+    def __post_init__(self):
+        self.R_bs = np.array(self.R_bs, dtype=float, copy=True)
+        self.r_b = np.array(self.r_b, dtype=float, copy=True)
+        if (self.R_bs.ndim != 3 or self.R_bs.shape[1:] != (3, 3)
+                or self.r_b.shape != (len(self.R_bs), 3)
+                or not np.isfinite(self.R_bs).all() or not np.isfinite(self.r_b).all()):
+            raise ValueError("sensor geometry must contain finite (K,3,3) rotations and (K,3) offsets")
+        if (not np.allclose(self.R_bs @ self.R_bs.transpose(0, 2, 1), np.eye(3), atol=1e-7)
+                or not np.allclose(np.linalg.det(self.R_bs), 1.0, atol=1e-7)):
+            raise ValueError("sensor-to-body matrices must be proper rotations")
 
     @classmethod
     def colocated(cls, K: int) -> "ImuGeometry":
@@ -108,6 +120,22 @@ class MonitorConfig:
     lost_sigma_g: float = 0.5       # motion envelope used when no sensor is usable, rad/s/sqrt(Hz)
     lost_sigma_a: float = 2.0       # ... m/s^2/sqrt(Hz)
 
+    def __post_init__(self):
+        for name in ("window_s", "warmup_s", "max_warmup_s", "readmit_s", "horizon_s",
+                     "max_offset_gyro", "max_offset_acc", "noise_ratio", "lost_sigma_g", "lost_sigma_a"):
+            value = getattr(self, name)
+            if not np.isfinite(value) or value <= 0:
+                raise ValueError(f"invalid monitor {name}")
+        for name in ("p_false_alarm", "trim_alpha", "stationarity_alpha"):
+            if not 0 < getattr(self, name) < 1:
+                raise ValueError(f"{name} must be in (0, 1)")
+        if self.calib_extra < 3:
+            raise ValueError("calibration needs at least three extra windows")
+        for name in ("gyro_range", "acc_range"):
+            value = getattr(self, name)
+            if value is not None and (not np.isfinite(value) or value <= 0):
+                raise ValueError(f"invalid {name}")
+
 
 @dataclass
 class _Calib:
@@ -147,11 +175,14 @@ def _longest_extreme_run(v: np.ndarray) -> int:
 
 
 class ImuMonitor:
-    def __init__(self, K: int, cfg: MonitorConfig = MonitorConfig(), geometry: ImuGeometry | None = None):
+    def __init__(self, K: int, cfg: MonitorConfig | None = None, geometry: ImuGeometry | None = None):
         if K < 1:
             raise ValueError("need at least one IMU")
-        self.K, self.cfg = K, cfg
-        self.geometry = geometry or ImuGeometry.colocated(K)
+        self.K = K
+        self.cfg = deepcopy(cfg) if cfg is not None else MonitorConfig()
+        self.cfg.__post_init__()
+        self.geometry = deepcopy(geometry) if geometry is not None else ImuGeometry.colocated(K)
+        self.geometry.__post_init__()
         if self.geometry.R_bs.shape != (K, 3, 3) or self.geometry.r_b.shape != (K, 3):
             raise ValueError("geometry does not match the number of IMUs")
         self.members = list(range(K))
@@ -173,8 +204,10 @@ class ImuMonitor:
     # ------------------------------------------------------------------ streaming interface
     def push(self, t: float, gyro: np.ndarray, acc: np.ndarray) -> list:
         """Add one synchronized sample (gyro, acc: (K, 3)). Returns fused samples of any completed window."""
-        gyro = np.asarray(gyro, float).reshape(self.K, 3)
-        acc = np.asarray(acc, float).reshape(self.K, 3)
+        gyro = np.array(gyro, dtype=float, copy=True)
+        acc = np.array(acc, dtype=float, copy=True)
+        if gyro.shape != (self.K, 3) or acc.shape != (self.K, 3):
+            raise ValueError(f"gyro and acc must have shape ({self.K}, 3)")
         t = float(t)
         if not np.isfinite(t):
             raise ValueError("IMU timestamp must be finite")
@@ -329,6 +362,13 @@ class ImuMonitor:
                 return
         mg, Sg = pg[keep].mean(0), np.cov(pg[keep].T)
         ma, Sa = pa[keep].mean(0), np.cov(pa[keep].T)
+        # Repeated/identical streams do not identify a full noise model. Stay uncalibrated
+        # rather than silently regularising it into a claimed false-alarm probability.
+        try:
+            np.linalg.cholesky(Sg)
+            np.linalg.cholesky(Sa)
+        except np.linalg.LinAlgError:
+            return
         zg = Zg[keep].mean(0).reshape(m, 3)
         za = Za[keep].mean(0).reshape(m, 3)
         dev_g, dev_a = zg - zg.mean(0), za - za.mean(0)
@@ -433,7 +473,9 @@ class ImuMonitor:
                     isolated.append(j)
                     used = [k for k in used if k != j]
                     self.excluded[j] = 0.0
-                    det, _, pval, pg, pa, st = self._test(used, zg_all, za_all, n)
+                    # Keep the original ensemble p-value for calibration diagnostics. Reporting
+                    # the selected surviving subset's p-value biases the null diagnostic upward.
+                    det, _, _, pg, pa, st = self._test(used, zg_all, za_all, n)
                 unisolated = (det and not common) or forced
                 for j in excluded:
                     ok = not unisolated and not self._test(sorted(used + [j]), zg_all, za_all, n)[0]
@@ -492,13 +534,9 @@ class ImuMonitor:
                 q_g += c.lost_sigma_g ** 2
                 q_a += c.lost_sigma_a ** 2
         else:
-            fin = [k for k in range(K) if finite[k]]
-            if fin:
-                fg = np.median(gb[fin], 0)
-                fa = np.median(ab[fin], 0)
-            else:
-                fg = np.full((n, 3), np.nan)
-                fa = np.full((n, 3), np.nan)
+            # No chosen sensor means no measurement, even if rejected values were finite.
+            fg = np.full((n, 3), np.nan)
+            fa = np.full((n, 3), np.nan)
             q_g, q_a = c.lost_sigma_g ** 2, c.lost_sigma_a ** 2
 
         weights = np.zeros(K)

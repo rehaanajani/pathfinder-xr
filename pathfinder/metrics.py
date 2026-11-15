@@ -20,6 +20,10 @@ def align_yaw(est: np.ndarray, gt: np.ndarray):
 
 
 def ate(est: np.ndarray, gt: np.ndarray, align: bool = True) -> float:
+    ok = np.isfinite(est).all(axis=1) & np.isfinite(gt).all(axis=1)
+    est, gt = est[ok], gt[ok]
+    if not len(est):
+        return float("nan")
     if align:
         Rz, tr = align_yaw(est, gt)
         est = est @ Rz.T + tr
@@ -27,28 +31,47 @@ def ate(est: np.ndarray, gt: np.ndarray, align: bool = True) -> float:
 
 
 def rte(est: np.ndarray, gt: np.ndarray, window: int, align: bool = True) -> float:
-    if len(gt) <= window:
+    if window < 1 or len(gt) <= window:
+        return float("nan")
+    ok = np.isfinite(est).all(axis=1) & np.isfinite(gt).all(axis=1)
+    # Never compress the time axis by deleting failed/initializing samples. Score only windows
+    # whose entire original interval contains finite outputs, at its original sample spacing.
+    missing = np.r_[0, np.cumsum(~ok)]
+    usable = missing[window + 1:] - missing[:len(ok) - window] == 0
+    if not usable.any():
         return float("nan")
     if align:
-        Rz, _ = align_yaw(est, gt)
+        Rz, _ = align_yaw(est[ok], gt[ok])
         est = est @ Rz.T
     de = est[window:] - est[:-window]
     dg = gt[window:] - gt[:-window]
-    return float(np.sqrt(np.mean(np.sum((de - dg) ** 2, 1))))
+    return float(np.sqrt(np.mean(np.sum((de[usable] - dg[usable]) ** 2, 1))))
 
 
 def drift_pct(est: np.ndarray, gt: np.ndarray) -> float:
+    if not len(est) or not np.isfinite(est[-1]).all() or not np.isfinite(gt).all():
+        return float("nan")
     length = np.sum(np.linalg.norm(np.diff(gt, axis=0), axis=1))
     return float(100 * np.linalg.norm(est[-1] - gt[-1]) / max(length, 1e-9))
 
 
 def summary(est: np.ndarray, gt: np.ndarray, rate: float) -> dict:
+    est, gt = np.asarray(est, float), np.asarray(gt, float)
+    if est.ndim != 2 or est.shape[1:] != (3,) or gt.shape != est.shape:
+        raise ValueError("estimated and reference positions must have matching (N, 3) shape")
+    if not np.isfinite(rate) or rate <= 0:
+        raise ValueError("rate must be positive and finite")
+    finite = np.isfinite(est).all(axis=1) & np.isfinite(gt).all(axis=1)
     return {
         "ate_m": ate(est, gt),
         "rte_1s_m": rte(est, gt, int(rate)),
         "rte_10s_m": rte(est, gt, int(10 * rate)),
         "drift_pct": drift_pct(est, gt),
-        "final_err_m": float(np.linalg.norm(est[-1] - gt[-1])),
+        "final_err_m": float(np.linalg.norm(est[-1] - gt[-1])) if len(est) else float("nan"),
+        "samples": len(est),
+        "finite_samples": int(finite.sum()),
+        "missing_samples": int((~finite).sum()),
+        "finite_fraction": float(finite.mean()) if len(est) else 0.0,
     }
 
 
@@ -69,7 +92,12 @@ def nees(est: np.ndarray, gt: np.ndarray, P: np.ndarray) -> np.ndarray:
     for i in range(len(e)):
         if np.all(np.isfinite(e[i])) and np.all(np.isfinite(P[i])):
             try:
-                out[i] = float(e[i] @ np.linalg.solve(P[i], e[i]))
+                if not np.allclose(P[i], P[i].T, atol=1e-12, rtol=1e-8):
+                    continue
+                # A finite indefinite matrix is not a valid uncertainty region.
+                L = np.linalg.cholesky(P[i])
+                whitened = np.linalg.solve(L, e[i])
+                out[i] = float(whitened @ whitened)
             except np.linalg.LinAlgError:
                 pass
     return out

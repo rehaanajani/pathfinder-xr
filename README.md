@@ -3,6 +3,11 @@
 **Samsung PRISM XR Hackathon 2026, Track 3: Path Finder, Trajectory Estimation Under Sensor Degradation.**
 Team California Burrito, SRM Institute of Science and Technology, Kattankulathur.
 
+**Estimator implementation update:** see [issue #1 completion notes](docs/ISSUE1_COMPLETION.md)
+for the current reference-free API, conservative model policy, input validation and validity semantics.
+The result tables and submission artifacts below predate this implementation; they are historical
+research evidence, not revalidated measurements of the current defaults or production certification.
+
 > Design robust trajectory-estimation techniques capable of maintaining reliable tracking and navigation
 > when sensor measurements become degraded or unreliable.
 
@@ -31,10 +36,11 @@ This system **finds which sensor is lying, stops trusting it, and keeps tracking
    cannot raise its own influence.
 5. **A self-check on the learned model.** While the camera is healthy, the filter compares the network's predictions
    with what the camera sees. If the network keeps being wrong on this kind of motion, its uncertainty is inflated
-   so it is trusted less once the camera drops out.
+   so it is trusted less once the camera drops out. A measured-inconsistent model is withheld without healthy
+   visual anchoring by default; unvalidated learned covariance cannot certify the pose during an outage.
 6. **A health signal out.** A tracking state, validity flag and reason codes, the IMU monitor state, and the
    filter's 3x3 position covariance (evaluate it as a chi-square(3) region, not as a scalar 3-sigma radius).
-   OpenXR today only reports a yes/no "position tracked" flag. The runtime interface is the reference-free
+   No OpenXR runtime/device integration is provided by this change. The runtime interface is the reference-free
    `pathfinder.estimator.StreamingEstimator`; benchmark runs start from the reference pose and are labelled so.
 
 ## Where this sits in a headset
