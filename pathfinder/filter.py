@@ -31,6 +31,31 @@ CHI2_3DOF_999 = 16.27
 CHI2_6DOF_999 = 22.46
 
 
+def saturation_mask(gyro, acc, rate=200.0, flat_tol=1e-6, top=0.95, win_s=2.0):
+    """Per sample: is any IMU axis pinned flat at the top of its recent range (clipped)?
+
+    A saturated axis repeats the same full-scale value; healthy MEMS noise never repeats exactly.
+    A sample counts when it equals its predecessor (within ``flat_tol``) AND its magnitude is at
+    least ``top`` x the largest magnitude of that axis over the last ``win_s`` seconds (causal),
+    and not every axis is frozen (that is a dropped packet held at its last value, not clipping)."""
+    x = np.hstack([np.asarray(gyro, float), np.asarray(acc, float)])
+    n = len(x)
+    flat = np.zeros_like(x, bool)
+    flat[1:] = np.abs(np.diff(x, axis=0)) <= flat_tol * np.maximum(1.0, np.abs(x[1:]))
+    w = max(1, int(win_s * rate))
+    from scipy.ndimage import maximum_filter1d
+    a = np.abs(x)
+    runmax = maximum_filter1d(a, size=w, axis=0, origin=(w - 1) // 2)   # trailing window
+    near_top = a >= top * np.maximum(runmax, 1e-9)
+    # Dropped packets repeat the whole sample (all six axes frozen); clipping freezes only the
+    # clipped axes while the others keep moving. Only the latter counts as saturation.
+    hit = (flat & near_top & (a > 1e-6)).any(1) & ~flat.all(1)
+    # A single flat pair can happen by chance at low resolution; need 3 in a row.
+    run3 = np.zeros(n, bool)
+    run3[2:] = hit[2:] & hit[1:-1] & hit[:-2]
+    return run3
+
+
 def skew(v):
     return np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
 
@@ -67,7 +92,14 @@ class FilterConfig:
     v_limit_std: float = 0.3      # m/s, how firmly the limit is applied
     outage_v_std: float = 0.0     # m/s; 0 = off. Zero-velocity prior std at IMU confidence 1
     vis_gap_s: float = 0.5
-    speed_limit_with_model: bool = False  # validation: with the learned model running the limit did not
+    speed_limit_with_model: bool = False
+    # Saturation guard: a clipped IMU reading sits flat at the top of its range. While that is seen
+    # (from the data alone), keep the speed limit on even with the learned model, distrust the
+    # model (its input is clipped), and widen IMU process noise.
+    saturation_guard: bool = False
+    sat_model_inflate: float = 100.0   # learned-update variance multiplier while saturated
+    sat_imu_conf: float = 0.3          # IMU confidence cap while saturated
+    sat_hold_s: float = 0.5            # keep the guard on this long after the last clipped sample  # validation: with the learned model running the limit did not
                                           # help (it already bounds velocity), so it switches itself off
     yaw_frame: bool = False       # with cloning: measure displacement in the clone's yaw frame,
                                   # with the rotation Jacobian (TLIO, Liu et al. 2020, eq. 9-10)
@@ -98,6 +130,7 @@ class FilterLog:
     disp_rejected: int = 0
     disp_std: list = field(default_factory=list)
     v_limited: int = 0
+    sat_samples: int = 0
     v_prior: int = 0
     vo_used: int = 0
     vo_rejected: int = 0
@@ -451,6 +484,14 @@ def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = 
     hist_R = np.zeros((N, 3, 3))
     out = np.zeros((N, 3))
     W = getattr(predictor, "window", 200)
+    sat_recent = np.zeros(N, bool)
+    if cfg.saturation_guard:
+        sat = saturation_mask(gyro, acc, 1.0 / dt)
+        hold = int(cfg.sat_hold_s / dt)
+        idx = np.flatnonzero(sat)
+        for i in idx:                                    # extend each hit forward by the hold time
+            sat_recent[i:i + hold + 1] = True
+        log.sat_samples = int(sat.sum())
     every = getattr(predictor, "every", 20)
     for k in range(start, N):
         out[k] = f.p
@@ -479,6 +520,8 @@ def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = 
                 gw, aw = gw @ Rz, aw @ Rz
             d, cov = predictor(np.concatenate([gw, aw], 1))
             cov = cov * cfg.disp_cov_scale
+            if cfg.saturation_guard and sat_recent[k0:k].any():
+                cov = cov * cfg.sat_model_inflate
             log.disp_std.append(float(np.sqrt(np.trace(cov))))
             if cfg.cloning:
                 f.displacement_update_clone(d, cov, k0, log, k)
@@ -493,10 +536,13 @@ def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = 
                 f.vo_update(("vo", int(vo["frame_idx"][j - 1])), vo["t"][j], vo["R"][j], vo["cov_t"][j],
                             vo["cov_r"][j], log, k)
             f.add_clone(("vo", k), 2)
-        if cfg.speed_limit and (predictor is None or cfg.speed_limit_with_model) and (k - start) % 20 == 0:
+        if cfg.speed_limit and (predictor is None or cfg.speed_limit_with_model or sat_recent[k]) \
+                and (k - start) % 20 == 0:
             f.speed_check(k, 1.0 if imu_conf is None else float(imu_conf[k]), log)
         if k < N - 1:
             c = 1.0 if imu_conf is None else float(imu_conf[k])
+            if sat_recent[k]:
+                c = min(c, cfg.sat_imu_conf)
             f.propagate(gyro[k], acc[k], dt, c)
     out[:start] = seq.p[:start]
     return out, log
