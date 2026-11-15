@@ -11,7 +11,8 @@
              (OpenXR POSITION_TRACKED_BIT)
     valid:   the position is finite and its uncertainty is below ``valid_std_m``
              (OpenXR POSITION_VALID_BIT: keep rendering with it, but it may be inferred)
-    reason:  "ok" | "visual_outage" | "imu_saturated" | "imu_disagreement" | "too_uncertain"
+    reason:  "ok" | "visual_outage" | "imu_saturated" | "imu_disagreement" | "imu_dropout" | "too_uncertain"
+             (imu_dropout: a non-finite, all-zero or out-of-range IMU reading in the last 0.5 s)
 
 Causal: every output uses only data pushed so far. It reproduces ``filter.run`` sample for sample
 (tests/test_stream.py), so the offline benchmark numbers describe this live code path.
@@ -22,7 +23,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .filter import ESKF, FilterConfig, FilterLog, saturation_mask
+from .filter import ESKF, T_EPS, FilterConfig, FilterLog, ImuCleaner, saturation_mask
 
 
 @dataclass
@@ -43,7 +44,11 @@ class StreamingTracker:
         n = max(self.W, int(2.0 * rate)) + 2
         self.hist = deque(maxlen=n)                 # (p, Pp, R, gyro, acc) per sample
         self.sat_hist = deque(maxlen=n)             # saturated-recently flag per sample
-        self.raw = deque(maxlen=int(2.0 * rate) + 1)
+        # 2 s window for the running max, plus the 2 earlier samples the 3-in-a-row rule looks at (#16)
+        self.raw = deque(maxlen=int(2.0 * rate) + 3)
+        self.clean = ImuCleaner()
+        self.imu_bad_hold = int(round(0.5 * rate))   # samples a bad IMU reading keeps `valid` off
+        self.last_bad_k = -10 ** 9
         self.k = 0
         self.last_sat_k = -10 ** 9
         self.pending_cam, self.pending_vo = [], []
@@ -52,7 +57,14 @@ class StreamingTracker:
 
     # ---- inputs -------------------------------------------------------------------------------
     def push_camera_fix(self, fix, health):
-        self.pending_cam.append((np.asarray(fix, float), float(health)))
+        fix = np.asarray(fix, float)
+        try:
+            health = float(health)
+        except (TypeError, ValueError):
+            return
+        if fix.shape != (3,) or not (np.isfinite(fix).all() and np.isfinite(health)):
+            return                                       # #14: drop non-finite fixes / health here
+        self.pending_cam.append((fix, float(np.clip(health, 0.0, 1.0))))
 
     def push_vo(self, t_rel, R_rel, cov_t, cov_r):
         """Relative pose since the previous push_vo call (None for t_rel = first frame / no solve)."""
@@ -60,7 +72,9 @@ class StreamingTracker:
 
     def push_imu(self, gyro, acc, conf: float = 1.0):
         f, cfg, k = self.f, self.cfg, self.k
-        gyro, acc = np.asarray(gyro, float), np.asarray(acc, float)
+        gyro, acc, imu_ok, imu_held = self.clean(gyro, acc)     # same rule as filter.run (#13)
+        if not imu_ok:
+            self.last_bad_k = k
         # Saturation: decided from the last 2 s of raw samples (same rule as the offline filter).
         self.raw.append(np.r_[gyro, acc])
         sat_now = False
@@ -77,10 +91,9 @@ class StreamingTracker:
         self.log.p_std.append(out["position_std_m"])
         self.log.p_cov.append(out["position_cov"])
 
-        for fix, health in self.pending_cam:
-            if not np.any(np.isnan(fix)):
-                f.camera_update(fix, health, self.log, k)
-        self.pending_cam = []
+        pending, self.pending_cam = self.pending_cam, []      # cleared even if an update fails (#14)
+        for fix, health in pending:
+            f.camera_update(fix, health, self.log, k)
 
         if self.predictor is not None and k >= self.W and k % self.every == 0:
             h = list(self.hist)[-self.W - 1:-1]                       # samples k-W .. k-1
@@ -115,7 +128,7 @@ class StreamingTracker:
                 and k % 20 == 0:
             f.speed_check(k, conf, self.log)
         c = min(conf, cfg.sat_imu_conf) if sat_recent else conf
-        f.propagate(gyro, acc, self.dt, c)
+        f.propagate_sample(gyro, acc, self.dt, c, imu_ok, imu_held)
         self.k += 1
         self.out = out
         return out
@@ -130,9 +143,12 @@ class StreamingTracker:
             std = max(std, np.sqrt(3.0) * cfg.outage_std_rate * f.outage_time(self.k))
         t = self.k * self.dt
         last_vis = max(getattr(f, "last_good_cam_t", -1e9), getattr(f, "last_vo_t", -1e9))
-        tracked = t - last_vis <= cfg.vis_gap_s
-        valid = bool(np.isfinite(f.p).all() and std < self.scfg.valid_std_m)
-        if not valid:
+        tracked = t - last_vis <= cfg.vis_gap_s + T_EPS
+        imu_bad = self.k - self.last_bad_k <= self.imu_bad_hold
+        valid = bool(np.isfinite(f.p).all() and std < self.scfg.valid_std_m and not imu_bad)
+        if imu_bad:
+            reason = "imu_dropout"
+        elif not valid:
             reason = "too_uncertain"
         elif sat_recent:
             reason = "imu_saturated"
