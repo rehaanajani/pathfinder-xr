@@ -23,3 +23,9 @@ Conclusions
 4. The rest is training: ours is 10 epochs / 12 min on a laptop GPU; TLIO trained about 4 h on a DGX.
 
 Scripts: `oracle_displacement.py`, `true_rotation.py`, `cloning_compare.py` (run from the repo root).
+
+# Issue #1: estimator correctness (15 Nov 2026)
+
+`imu_fdi_evaluation.py` (+ `.json`): false-alarm, detection and isolation statistics of the causal IMU
+monitor on synthetic data. `issue1/`: before/after probes and every intermediate result, including failed
+attempts. Interpretation and limits: `docs/ESTIMATOR.md`. All synthetic; no hardware or TLIO/TUM-VI re-run.

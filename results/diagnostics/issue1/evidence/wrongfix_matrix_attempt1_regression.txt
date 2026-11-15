@@ -1,0 +1,31 @@
+Attempt 1 (hard camera gate + timed episodes, episode ends as soon as one fix passes the gate).
+Preserved failed attempt. Shipped ours_cfg(), 3 IMUs, seeds 0-3, synthetic head_walk 60 s.
+Regression: "repeated 3x2s / none" max error 2.436 m (baseline 1.065 m), and "wrong const 20s / oracle"
+mean 0.273 m with 1-2 re-anchors onto the wrong fix.
+
+Root cause (traced, seed 0-3): with no learned model the position covariance grows while fixes are
+rejected (sd 0.058 -> 0.26 m in 1 s). The persistent wrong fix (0.8 m) then falls inside the gate,
+the episode is closed as "episode_end_agree", the wrong fix is accepted and marks last_good_t. When
+the camera returns to the truth at 17 s it now disagrees with the (wrong) state, so it is classified
+as a new "jump" and held out; covariance grows again and the cycle repeats.
+
+wrong const 5s           oracle fault mean 0.008 max 0.022 | 2-10 s after 0.013 | last 10 s 0.014 | reanchors [0, 0, 0, 0]
+wrong const 5s           none   fault mean 0.602 max 0.908 | 2-10 s after 0.029 | last 10 s 0.027 | reanchors [0, 0, 0, 0]
+wrong const 10s          oracle fault mean 0.020 max 0.688 | 2-10 s after 0.017 | last 10 s 0.017 | reanchors [0, 0, 0, 1]
+wrong const 10s          none   fault mean 0.662 max 0.908 | 2-10 s after 0.031 | last 10 s 0.028 | reanchors [0, 0, 0, 0]
+wrong const 20s          oracle fault mean 0.273 max 0.766 | 2-10 s after 0.145 | last 10 s 0.023 | reanchors [0, 2, 1, 1]
+wrong const 20s          none   fault mean 0.691 max 0.908 | 2-10 s after 0.028 | last 10 s 0.028 | reanchors [0, 0, 0, 0]
+wrong walk 10s (bench)   oracle fault mean 0.027 max 1.010 | 2-10 s after 0.026 | last 10 s 0.017 | reanchors [0, 0, 0, 1]
+wrong walk 10s (bench)   none   fault mean 0.776 max 1.134 | 2-10 s after 0.032 | last 10 s 0.028 | reanchors [0, 0, 0, 0]
+gradual drift 10s        oracle fault mean 0.080 max 0.148 | 2-10 s after 0.015 | last 10 s 0.014 | reanchors [0, 0, 0, 0]
+gradual drift 10s        none   fault mean 0.104 max 0.194 | 2-10 s after 0.028 | last 10 s 0.027 | reanchors [0, 0, 0, 0]
+isolated jump 0.15s      oracle fault mean 0.009 max 0.016 | 2-10 s after 0.014 | last 10 s 0.014 | reanchors [0, 0, 0, 0]
+isolated jump 0.15s      none   fault mean 0.015 max 0.019 | 2-10 s after 0.026 | last 10 s 0.027 | reanchors [0, 0, 0, 0]
+repeated 3x2s            oracle fault mean 0.013 max 0.038 | 2-10 s after 0.014 | last 10 s 0.014 | reanchors [0, 0, 0, 0]
+repeated 3x2s            none   fault mean 0.423 max 2.436 | 2-10 s after 0.031 | last 10 s 0.028 | reanchors [0, 0, 0, 0]
+blackout 10s             oracle fault mean 0.007 max 0.022 | 2-10 s after 0.014 | last 10 s 0.013 | reanchors [0, 0, 0, 0]
+blackout 10s             none   fault mean 0.216 max 1.016 | 2-10 s after 0.026 | last 10 s 0.025 | reanchors [0, 0, 0, 0]
+blackout 10s + bias      oracle fault mean 0.044 max 0.159 | 2-10 s after nan | last 10 s 0.020 | reanchors [0, 0, 0, 0]
+blackout 10s + bias      none   fault mean 1.733 max 22.983 | 2-10 s after nan | last 10 s 0.030 | reanchors [0, 0, 0, 0]
+dark 10s                 oracle fault mean 0.021 max 0.089 | 2-10 s after 0.013 | last 10 s 0.013 | reanchors [0, 0, 0, 0]
+dark 10s                 none   fault mean 0.532 max 1.358 | 2-10 s after 0.027 | last 10 s 0.025 | reanchors [0, 0, 0, 0]

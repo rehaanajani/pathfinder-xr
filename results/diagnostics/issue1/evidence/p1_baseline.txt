@@ -1,0 +1,17 @@
+== 1. imu confidence passed to the filter (3 IMUs, parity path)
+clean                          conf min=1.00 mean=1.000 | detected: pre-fault 0.000 in-fault 0.010 | dropped per IMU in-fault [0.01 0.   0.  ]
+imu_noise_all                  conf min=1.00 mean=1.000 | detected: pre-fault 0.000 in-fault 1.000 | dropped per IMU in-fault [0.27 0.38 0.35]
+one_imu_bias                   conf min=1.00 mean=1.000 | detected: pre-fault 0.000 in-fault 1.000 | dropped per IMU in-fault [1. 0. 0.]
+one_imu_stuck                  conf min=1.00 mean=1.000 | detected: pre-fault 0.000 in-fault 1.000 | dropped per IMU in-fault [1. 0. 0.]
+blackout_plus_vibration_all    conf min=1.00 mean=1.000 | detected: pre-fault 0.000 in-fault 1.000 | dropped per IMU in-fault [0.26 0.39 0.35]
+blackout_plus_spikes_all       conf min=1.00 mean=1.000 | detected: pre-fault 0.000 in-fault 0.780 | dropped per IMU in-fault [0.3  0.27 0.21]
+blackout_plus_saturation_all   conf min=1.00 mean=1.000 | detected: pre-fault 0.000 in-fault 0.010 | dropped per IMU in-fault [0.01 0.   0.  ]
+blackout_plus_dropout_all      conf min=1.00 mean=1.000 | detected: pre-fault 0.000 in-fault 0.070 | dropped per IMU in-fault [0.01 0.06 0.  ]
+dark_plus_imu_drift            conf min=1.00 mean=1.000 | detected: pre-fault 0.995 in-fault 1.000 | dropped per IMU in-fault [0.   0.84 0.16]
+== 2. parity false alarms on CLEAN data, nominal p_fa=1e-4
+K=3 ideal co-located copies: false-alarm rate per window mean=0.0205 max=0.1168
+K=5 ideal co-located copies: false-alarm rate per window mean=0.0288 max=0.1354
+== 3. same, but IMUs physically offset (lever arms) -- not compensated in fuse_imus
+lever arm ▒2 cm, no faults: windows flagged faulty mean=0.756 max=0.861
+lever arm ▒5 cm, no faults: windows flagged faulty mean=0.909 max=0.964
+lever arm ▒10 cm, no faults: windows flagged faulty mean=0.946 max=0.968

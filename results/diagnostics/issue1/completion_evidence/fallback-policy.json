@@ -1,0 +1,437 @@
+{
+  "manifest": {
+    "data": "TLIO validation split; simulated position fixes and redundant IMUs",
+    "split": "val",
+    "initialization": "truth_init_diagnostic",
+    "python": "3.13.5",
+    "sequences": [
+      "175729529774207",
+      "177568983090293",
+      "178577832990152",
+      "181717792538459",
+      "203347623516637",
+      "225800518293160"
+    ],
+    "seed_policy": "validation-list index",
+    "clip_s": 60.0,
+    "source_sha256": {
+      "pathfinder\\__init__.py": "d8d6ba8e3a053e5808cc5246b1ddecfade3e759c0d827a20404021d63b019180",
+      "pathfinder\\camera.py": "5be84724f9b722e6661361e52384d4284f91b807b8a1fdf57551365c5224739b",
+      "pathfinder\\data_tlio.py": "470d1d8fbf168bef09507035d77020782abc6dc8fccec4f3e73f2be7a8915486",
+      "pathfinder\\data_tumvi.py": "004dc0458e9d91059e5b97063737ce8d43197abe9db8e841680b0a5454384467",
+      "pathfinder\\estimator.py": "2762cbeaa593e9cc6b20f45b9c7563c7c5fb7ccdad11aefc3eb7fcf4fcd8f7c9",
+      "pathfinder\\faults.py": "d9e49bcb91f7ff2078f9861f2813c9f8b05f6b59eba69c48e9bec9207f8d3950",
+      "pathfinder\\filter.py": "3bbd992f10eac3dd4ff64771e026e644ac0031a1732ef6733805c8fb7caa5eee",
+      "pathfinder\\imu_health.py": "f19bb94cfc74b851093cc1488a08b636276d1b9fb0f527bda8a2be0d4e41e3f6",
+      "pathfinder\\imu_vote.py": "b859f2b7068473adf178acda2c934f1c2c3ec790e931c7761933e567a949da10",
+      "pathfinder\\integrator.py": "d56ce0a9d686d00f2ba0e78835234cbae1d10f2095196c456222362074a8d03e",
+      "pathfinder\\metrics.py": "2c07c7f2599a7315ea65cb328da40f6d519d6bd75e55b3d645b6b938d9002514",
+      "pathfinder\\model.py": "a3fb8d9041b101c328ba908e0457fc80eef08e783980a60bea0b95facdf42a73",
+      "pathfinder\\parity.py": "e11c3534a191c3c1d1e16945f45cf248549a6c8be892ebd5edcb671bb3b957d8",
+      "pathfinder\\pipeline.py": "6eacc60046c29e4ec4b57f9570de4ffef2440ded883d776a81d944657215335a",
+      "pathfinder\\predictor.py": "b855789554abd70cfbfc4ac804aa3a3028fe681aa04ce71864b1e2ceef78165f",
+      "pathfinder\\real_camera.py": "f3c99e455262489ebc744d96fa0fc612f9ba19ac22d9f32917fac49466b9b11c",
+      "pathfinder\\sequence.py": "0545a4e7a6f3862c6f2ec47d76b9dfb35e078b25d4c8e2579f855ee38654cba9",
+      "pathfinder\\synthetic.py": "fb4f520d7ace3100aaf9e675606f357b21eb90d8b40a27eb22792cb8999aaf41"
+    },
+    "checkpoint_sha256": "611e97fdad4ac7735a3086179e059edb772f6d93d13a40c3b88b8d4bfec3eba3",
+    "dataset_sha256": {
+      "175729529774207": "53438e5d130da77da9ff799deb4461a8e7302593aaa04fc4e33c38bd63d5b1f1",
+      "177568983090293": "5b004c2af1a079758cf75afe22a9d338a292de3cae5cb509c28572ff515f99a1",
+      "178577832990152": "84aa7eb112f2ed44db07c599a3f96eab0beeabbcc658cb9cbfd38fa874152d06",
+      "181717792538459": "044318f24966698cec7cb1e3f7926a2140c66ac92cc16d8273ba53fabbd4f691",
+      "203347623516637": "4ae2cf10bfd932184dd90a75edade008282b7d3af507e5ab881b71e3a0fd2325",
+      "225800518293160": "27fc6b1b00303e835d4ed15b6078950e397bdceb068c4cae812121b09147eaa5"
+    },
+    "config": {
+      "sigma_g": 0.005,
+      "sigma_a": 0.08,
+      "sigma_bg": 0.0001,
+      "sigma_ba": 0.001,
+      "min_health": 0.005,
+      "recover_health": 0.6,
+      "recover_after_s": 1.0,
+      "recover_after_jump_s": 10.0,
+      "outage_gap_s": 0.5,
+      "consistency_alpha": 0.001,
+      "min_episode_fixes": 3,
+      "anchor_min_s": 1.0,
+      "step_back_ratio": 0.25,
+      "provisional_factor": 2.0,
+      "max_jump_holdout_s": 30.0,
+      "jump_cover": 1.0,
+      "max_episode_fixes": 600,
+      "episode_end_lr": 100.0,
+      "outage_envelope": 100.0,
+      "model_check_up": 0.1,
+      "model_check_down": 0.003,
+      "model_doubt_scale": 10.0,
+      "model_max_scale": 10.0,
+      "model_covariance_validated": false,
+      "model_during_visual_tracking": false,
+      "use_health": true,
+      "trust": [
+        [
+          0.002321632661125575,
+          0.033342716396917015,
+          0.07507487691122716,
+          0.14524462122237145,
+          0.27473400820229393,
+          0.42149227258139216,
+          0.5950532905429756,
+          0.7840562520871255,
+          0.9137351705281255,
+          0.9996374849772447
+        ],
+        [
+          0.5419630767415394,
+          0.49285800400512375,
+          0.4767278875412202,
+          0.41017079327805256,
+          0.3531957700671933,
+          0.32378200867032264,
+          0.2793833831516874,
+          0.13059425763613264,
+          0.10495919092646454,
+          0.05893567883918004
+        ]
+      ],
+      "cloning": false,
+      "disp_cov_scale": 1.0,
+      "yaw_frame": false,
+      "adaptive_q": true,
+      "q_up": 0.2,
+      "q_down": 0.01,
+      "q_max": 400.0,
+      "bias_q_gain": 10.0,
+      "use_gate": true,
+      "gate": 16.27,
+      "gate_mode": "soft",
+      "soft_power": 2.0,
+      "fix_std": 0.03,
+      "low_conf_inflate": 25.0,
+      "max_imu_gap_s": 0.02,
+      "gap_sigma_g": 0.5,
+      "gap_sigma_a": 2.0,
+      "max_valid_pos_std": 1.0,
+      "disp_rate_tol": 0.05
+    },
+    "scope": "development comparison; thresholds not selected on test; no final generalization claim"
+  },
+  "summary": {
+    "clean": {
+      "safe_default": {
+        "mean_ate_m": 0.027958984490754332,
+        "median_ate_m": 0.028110290558197203
+      }
+    },
+    "camera_blackout": {
+      "safe_default": {
+        "mean_ate_m": 0.1448837315634424,
+        "median_ate_m": 0.10911438573742317
+      }
+    },
+    "camera_wrong_fix": {
+      "safe_default": {
+        "mean_ate_m": 0.3755304125022532,
+        "median_ate_m": 0.11106543039137107
+      }
+    },
+    "blackout_plus_saturation_all": {
+      "safe_default": {
+        "mean_ate_m": 0.4922483439128434,
+        "median_ate_m": 0.20046686804003
+      }
+    }
+  },
+  "per_run": [
+    {
+      "sequence": "175729529774207",
+      "scenario": "clean",
+      "mode": "safe_default",
+      "ate_m": 0.028313562006715448,
+      "fault_max_error_m": 0.06103635215786845,
+      "fault_997_coverage": 1.0,
+      "fault_valid_fraction": 1.0,
+      "model_used": 0,
+      "model_withheld": 591,
+      "camera_recoveries": 0
+    },
+    {
+      "sequence": "175729529774207",
+      "scenario": "camera_blackout",
+      "mode": "safe_default",
+      "ate_m": 0.13741907282882537,
+      "fault_max_error_m": 0.6723804195403644,
+      "fault_997_coverage": 0.629,
+      "fault_valid_fraction": 0.0405,
+      "model_used": 105,
+      "model_withheld": 486,
+      "camera_recoveries": 1
+    },
+    {
+      "sequence": "175729529774207",
+      "scenario": "camera_wrong_fix",
+      "mode": "safe_default",
+      "ate_m": 0.13412565042925906,
+      "fault_max_error_m": 0.6583032650328385,
+      "fault_997_coverage": 0.2955,
+      "fault_valid_fraction": 0.0,
+      "model_used": 110,
+      "model_withheld": 481,
+      "camera_recoveries": 1
+    },
+    {
+      "sequence": "175729529774207",
+      "scenario": "blackout_plus_saturation_all",
+      "mode": "safe_default",
+      "ate_m": 0.6836909159639255,
+      "fault_max_error_m": 2.3042899445071674,
+      "fault_997_coverage": 0.71,
+      "fault_valid_fraction": 0.0405,
+      "model_used": 120,
+      "model_withheld": 471,
+      "camera_recoveries": 1
+    },
+    {
+      "sequence": "177568983090293",
+      "scenario": "clean",
+      "mode": "safe_default",
+      "ate_m": 0.02790701910967896,
+      "fault_max_error_m": 0.06075305965929045,
+      "fault_997_coverage": 1.0,
+      "fault_valid_fraction": 1.0,
+      "model_used": 0,
+      "model_withheld": 591,
+      "camera_recoveries": 0
+    },
+    {
+      "sequence": "177568983090293",
+      "scenario": "camera_blackout",
+      "mode": "safe_default",
+      "ate_m": 0.08873603741385533,
+      "fault_max_error_m": 0.3454406211219225,
+      "fault_997_coverage": 0.669,
+      "fault_valid_fraction": 0.0405,
+      "model_used": 95,
+      "model_withheld": 496,
+      "camera_recoveries": 0
+    },
+    {
+      "sequence": "177568983090293",
+      "scenario": "camera_wrong_fix",
+      "mode": "safe_default",
+      "ate_m": 0.08800521035348306,
+      "fault_max_error_m": 0.34091606603847546,
+      "fault_997_coverage": 0.677,
+      "fault_valid_fraction": 0.0,
+      "model_used": 100,
+      "model_withheld": 491,
+      "camera_recoveries": 0
+    },
+    {
+      "sequence": "177568983090293",
+      "scenario": "blackout_plus_saturation_all",
+      "mode": "safe_default",
+      "ate_m": 0.23095136757096654,
+      "fault_max_error_m": 1.4508711821909153,
+      "fault_997_coverage": 0.709,
+      "fault_valid_fraction": 0.0405,
+      "model_used": 95,
+      "model_withheld": 496,
+      "camera_recoveries": 0
+    },
+    {
+      "sequence": "178577832990152",
+      "scenario": "clean",
+      "mode": "safe_default",
+      "ate_m": 0.02861578126254018,
+      "fault_max_error_m": 0.046877470901195824,
+      "fault_997_coverage": 1.0,
+      "fault_valid_fraction": 1.0,
+      "model_used": 0,
+      "model_withheld": 591,
+      "camera_recoveries": 0
+    },
+    {
+      "sequence": "178577832990152",
+      "scenario": "camera_blackout",
+      "mode": "safe_default",
+      "ate_m": 0.4132095001289125,
+      "fault_max_error_m": 1.843144312414655,
+      "fault_997_coverage": 0.16,
+      "fault_valid_fraction": 0.0405,
+      "model_used": 105,
+      "model_withheld": 486,
+      "camera_recoveries": 1
+    },
+    {
+      "sequence": "178577832990152",
+      "scenario": "camera_wrong_fix",
+      "mode": "safe_default",
+      "ate_m": 1.6319947366194827,
+      "fault_max_error_m": 1.7844145121727697,
+      "fault_997_coverage": 0.1645,
+      "fault_valid_fraction": 0.0,
+      "model_used": 300,
+      "model_withheld": 291,
+      "camera_recoveries": 1
+    },
+    {
+      "sequence": "178577832990152",
+      "scenario": "blackout_plus_saturation_all",
+      "mode": "safe_default",
+      "ate_m": 1.7688182668622758,
+      "fault_max_error_m": 6.680217774957593,
+      "fault_997_coverage": 0.2205,
+      "fault_valid_fraction": 0.0405,
+      "model_used": 114,
+      "model_withheld": 477,
+      "camera_recoveries": 1
+    },
+    {
+      "sequence": "181717792538459",
+      "scenario": "clean",
+      "mode": "safe_default",
+      "ate_m": 0.02892942640449952,
+      "fault_max_error_m": 0.057886497540384815,
+      "fault_997_coverage": 1.0,
+      "fault_valid_fraction": 0.99,
+      "model_used": 0,
+      "model_withheld": 591,
+      "camera_recoveries": 0
+    },
+    {
+      "sequence": "181717792538459",
+      "scenario": "camera_blackout",
+      "mode": "safe_default",
+      "ate_m": 0.04104531498581551,
+      "fault_max_error_m": 0.1160531255904836,
+      "fault_997_coverage": 0.665,
+      "fault_valid_fraction": 0.0405,
+      "model_used": 95,
+      "model_withheld": 496,
+      "camera_recoveries": 0
+    },
+    {
+      "sequence": "181717792538459",
+      "scenario": "camera_wrong_fix",
+      "mode": "safe_default",
+      "ate_m": 0.039955622647372194,
+      "fault_max_error_m": 0.11607690315946455,
+      "fault_997_coverage": 0.651,
+      "fault_valid_fraction": 0.0,
+      "model_used": 100,
+      "model_withheld": 491,
+      "camera_recoveries": 0
+    },
+    {
+      "sequence": "181717792538459",
+      "scenario": "blackout_plus_saturation_all",
+      "mode": "safe_default",
+      "ate_m": 0.04187913929793075,
+      "fault_max_error_m": 0.15769879459734262,
+      "fault_997_coverage": 0.883,
+      "fault_valid_fraction": 0.0405,
+      "model_used": 95,
+      "model_withheld": 496,
+      "camera_recoveries": 0
+    },
+    {
+      "sequence": "203347623516637",
+      "scenario": "clean",
+      "mode": "safe_default",
+      "ate_m": 0.026336246822394882,
+      "fault_max_error_m": 0.057778064665748224,
+      "fault_997_coverage": 1.0,
+      "fault_valid_fraction": 1.0,
+      "model_used": 0,
+      "model_withheld": 591,
+      "camera_recoveries": 0
+    },
+    {
+      "sequence": "203347623516637",
+      "scenario": "camera_blackout",
+      "mode": "safe_default",
+      "ate_m": 0.12949273406099102,
+      "fault_max_error_m": 0.4213428232444581,
+      "fault_997_coverage": 0.5005,
+      "fault_valid_fraction": 0.0405,
+      "model_used": 115,
+      "model_withheld": 476,
+      "camera_recoveries": 1
+    },
+    {
+      "sequence": "203347623516637",
+      "scenario": "camera_wrong_fix",
+      "mode": "safe_default",
+      "ate_m": 0.29943814790804674,
+      "fault_max_error_m": 0.4563322091938276,
+      "fault_997_coverage": 0.4355,
+      "fault_valid_fraction": 0.0,
+      "model_used": 300,
+      "model_withheld": 291,
+      "camera_recoveries": 1
+    },
+    {
+      "sequence": "203347623516637",
+      "scenario": "blackout_plus_saturation_all",
+      "mode": "safe_default",
+      "ate_m": 0.16998236850909343,
+      "fault_max_error_m": 0.5742277706870194,
+      "fault_997_coverage": 0.635,
+      "fault_valid_fraction": 0.0405,
+      "model_used": 115,
+      "model_withheld": 476,
+      "camera_recoveries": 1
+    },
+    {
+      "sequence": "225800518293160",
+      "scenario": "clean",
+      "mode": "safe_default",
+      "ate_m": 0.027651871338697016,
+      "fault_max_error_m": 0.05343305845062626,
+      "fault_997_coverage": 1.0,
+      "fault_valid_fraction": 0.99,
+      "model_used": 0,
+      "model_withheld": 591,
+      "camera_recoveries": 0
+    },
+    {
+      "sequence": "225800518293160",
+      "scenario": "camera_blackout",
+      "mode": "safe_default",
+      "ate_m": 0.05939972996225466,
+      "fault_max_error_m": 0.17697442773608876,
+      "fault_997_coverage": 0.1995,
+      "fault_valid_fraction": 0.0405,
+      "model_used": 95,
+      "model_withheld": 496,
+      "camera_recoveries": 0
+    },
+    {
+      "sequence": "225800518293160",
+      "scenario": "camera_wrong_fix",
+      "mode": "safe_default",
+      "ate_m": 0.05966310705587595,
+      "fault_max_error_m": 0.175126022883427,
+      "fault_997_coverage": 0.1935,
+      "fault_valid_fraction": 0.0,
+      "model_used": 100,
+      "model_withheld": 491,
+      "camera_recoveries": 0
+    },
+    {
+      "sequence": "225800518293160",
+      "scenario": "blackout_plus_saturation_all",
+      "mode": "safe_default",
+      "ate_m": 0.05816800527286803,
+      "fault_max_error_m": 0.17697442773608876,
+      "fault_997_coverage": 0.2715,
+      "fault_valid_fraction": 0.0405,
+      "model_used": 95,
+      "model_withheld": 496,
+      "camera_recoveries": 0
+    }
+  ]
+}

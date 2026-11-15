@@ -1,0 +1,17 @@
+== 1. IMU quality passed to the filter (3 IMUs): per-window state histogram and extra process noise, 20-30 s
+clean                          states {'nominal': 100} | q_add_a mean 0 | dropped per IMU [0. 0. 0.]
+imu_noise_all                  states {'isolated': 33, 'unisolated': 5, 'common_mode': 62} | q_add_a mean 0.0018 | dropped per IMU [0.18 0.24 0.29]
+one_imu_bias                   states {'isolated': 100} | q_add_a mean 4.97e-06 | dropped per IMU [1. 0. 0.]
+one_imu_stuck                  states {'isolated': 100} | q_add_a mean 4.97e-06 | dropped per IMU [1. 0. 0.]
+blackout_plus_vibration_all    states {'common_mode': 100} | q_add_a mean 0.00314 | dropped per IMU [0. 0. 0.]
+blackout_plus_spikes_all       states {'nominal': 23, 'isolated': 72, 'common_mode': 5} | q_add_a mean 0.00846 | dropped per IMU [0.29 0.32 0.3 ]
+blackout_plus_saturation_all   states {'nominal': 26, 'common_mode': 74} | q_add_a mean 2.96 | dropped per IMU [0. 0. 0.]
+blackout_plus_dropout_all      states {'nominal': 94, 'lost': 6} | q_add_a mean 0.24 | dropped per IMU [0.06 0.06 0.06]
+dark_plus_imu_drift            states {'unisolated': 100} | q_add_a mean 0.143 | dropped per IMU [0. 0. 0.]
+== 2. false alarms on CLEAN data, nominal p_fa=1e-4 (tested = calibrated windows)
+K=3: 0 alarms / 4600 windows = 0.00000
+K=5: 1 alarms / 4552 windows = 0.00022
+== 3. lever arms, no faults: share of windows not NOMINAL, without vs with ImuGeometry
++-2 cm: co-located assumption 0.146 | with geometry 0.0035
++-5 cm: co-located assumption 0.263 | with geometry 0.0052
++-10 cm: co-located assumption 0.349 | with geometry 0.0050
