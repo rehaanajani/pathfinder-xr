@@ -50,3 +50,35 @@ def summary(est: np.ndarray, gt: np.ndarray, rate: float) -> dict:
         "drift_pct": drift_pct(est, gt),
         "final_err_m": float(np.linalg.norm(est[-1] - gt[-1])),
     }
+
+
+# ---------------------------------------------------------------------------------------------
+# Uncertainty evaluation (scoring only: uses the reference, never called by the estimator).
+#
+# For a d-dimensional Gaussian error e ~ N(0, P), the squared Mahalanobis distance e^T P^-1 e
+# follows chi2(d). A scalar test |e| <= 3 sqrt(trace(P)) is NOT a 99.7 % region in 3-D: its
+# probability depends on the shape of P and is not tied to any chi-square level. Coverage is
+# therefore reported as the share of samples inside the chi2(3) region at a stated level.
+# Consecutive samples are strongly correlated, so the effective sample size is far below N; treat
+# the reported coverage as descriptive, not as a test with N independent draws.
+
+def nees(est: np.ndarray, gt: np.ndarray, P: np.ndarray) -> np.ndarray:
+    """Normalised estimation error squared per sample (NaN where P or est is not finite)."""
+    e = est - gt
+    out = np.full(len(e), np.nan)
+    for i in range(len(e)):
+        if np.all(np.isfinite(e[i])) and np.all(np.isfinite(P[i])):
+            try:
+                out[i] = float(e[i] @ np.linalg.solve(P[i], e[i]))
+            except np.linalg.LinAlgError:
+                pass
+    return out
+
+
+def coverage(nees_vals: np.ndarray, dof: int = 3, levels=(0.5, 0.9, 0.99, 0.997)) -> dict:
+    """Empirical share of finite samples inside the chi2(dof) region at each nominal level."""
+    from scipy.stats import chi2
+    v = nees_vals[np.isfinite(nees_vals)]
+    if len(v) == 0:
+        return {lv: float("nan") for lv in levels}
+    return {lv: float(np.mean(v <= chi2.ppf(lv, dof))) for lv in levels}

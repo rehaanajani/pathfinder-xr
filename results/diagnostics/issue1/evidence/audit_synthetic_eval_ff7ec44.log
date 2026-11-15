@@ -1,0 +1,22 @@
+2 sequences x 60s, methods: ['imu_only', 'naive_fusion', 'tlio_style', 'ours_no_model', 'ours_tlio_model', 'ours']
+42 runs on 6 processes
+clean                        imu_only=4.68  naive_fusion=0.03  tlio_style=6.36  ours_no_model=0.03  ours_tlio_model=0.03  ours=0.03
+camera_blackout              imu_only=4.68  naive_fusion=0.17  tlio_style=6.36  ours_no_model=0.10  ours_tlio_model=1.58  ours=1.43
+camera_dark                  imu_only=4.68  naive_fusion=0.25  tlio_style=6.36  ours_no_model=0.25  ours_tlio_model=0.25  ours=0.25
+camera_blur                  imu_only=4.68  naive_fusion=0.23  tlio_style=6.36  ours_no_model=0.23  ours_tlio_model=0.22  ours=0.22
+camera_wrong_fix             imu_only=4.68  naive_fusion=0.31  tlio_style=6.36  ours_no_model=0.32  ours_tlio_model=0.31  ours=0.31
+imu_noise_all                imu_only=21.70  naive_fusion=0.03  tlio_style=6.30  ours_no_model=0.03  ours_tlio_model=0.03  ours=0.03
+one_imu_bias                 imu_only=56.14  naive_fusion=0.03  tlio_style=6.30  ours_no_model=0.03  ours_tlio_model=0.03  ours=0.03
+one_imu_stuck                imu_only=383.06  naive_fusion=0.15  tlio_style=187.84  ours_no_model=0.03  ours_tlio_model=0.03  ours=0.03
+one_imu_spikes               imu_only=42.20  naive_fusion=0.04  tlio_style=5.74  ours_no_model=0.03  ours_tlio_model=0.03  ours=0.03
+one_imu_saturation           imu_only=95.47  naive_fusion=0.04  tlio_style=5.98  ours_no_model=0.03  ours_tlio_model=0.03  ours=0.03
+blackout_plus_one_imu_bias   imu_only=137.09  naive_fusion=1.58  tlio_style=6.28  ours_no_model=0.08  ours_tlio_model=1.57  ours=1.43
+dark_plus_imu_drift          imu_only=336.82  naive_fusion=0.25  tlio_style=6.30  ours_no_model=0.30  ours_tlio_model=0.30  ours=0.30
+blackout_plus_vibration_all  imu_only=35.00  naive_fusion=0.68  tlio_style=6.28  ours_no_model=0.87  ours_tlio_model=0.99  ours=1.42
+blackout_plus_spikes_all     imu_only=135.14  naive_fusion=2.47  tlio_style=5.85  ours_no_model=0.95  ours_tlio_model=1.43  ours=1.57
+blackout_plus_saturation_all imu_only=223.22  naive_fusion=11.32  tlio_style=6.43  ours_no_model=11.36  ours_tlio_model=4.96  ours=5.96
+blackout_plus_dropout_all    imu_only=241.82  naive_fusion=3.70  tlio_style=6.18  ours_no_model=3.84  ours_tlio_model=2.94  ours=2.87
+blackout sweep (error at end of blackout, m): {"imu_only": [2.3167651880589575, 2.512166103082171, 3.1537890582439165, 4.391569349042195, 7.120619828761878], "naive_fusion": [0.02178464225992479, 0.05521370085123829, 0.2735642044425052, 1.0293390143604548, 4.077584878491018], "tlio_style": [9.958405951420268, 9.425202310643332, 11.10589090694523, 14.822406456887006, 7.213823212505972], "ours_no_model": [0.0251668050655466, 0.045313275501296414, 0.16182066211382423, 0.584327012184554, 2.292309828983951], "ours_tlio_model": [0.06714924989367513, 0.45964713587332007, 2.7413294612990353, 7.718442814718222, 7.658836136077092], "ours": [0.0786432518619549, 0.495301357836761, 2.520128970010486, 7.3589598411057064, 9.780975633786865]}
+isolation: {"bias": {"2": 0.0, "3": 1.0, "5": 1.0}, "small bias": {"2": 0.0, "3": 1.0, "5": 1.0}, "slow drift": {"2": 0.0, "3": 0.9971509971509972, "5": 0.9971509971509972}, "stuck": {"2": 0.9971509971509972, "3": 1.0, "5": 1.0}, "spikes": {"2": 1.0, "3": 1.0, "5": 1.0}, "noise": {"2": 0.8404558404558404, "3": 1.0, "5": 1.0}}
+done in 288s -> results/report.html
+exit=0

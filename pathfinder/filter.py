@@ -1,33 +1,69 @@
 """Error-state Kalman filter that fuses IMU, camera fixes and learned displacement.
 
-Nominal state: rotation R (body->world), velocity v, position p, gyro bias bg, accel bias ba.
-Error state (15): [dtheta, dv, dp, dbg, dba], with R_true = R * Exp(dtheta).
+Conventions (shared with ``sequence.py``): world frame z-up, gravity (0, 0, -9.81) m/s^2; IMU gyro in
+rad/s and specific force f = R^T (a - g) in m/s^2, both in the body frame; R is body -> world.
+Nominal state: rotation R, velocity v, position p, gyro bias bg, accel bias ba.
+Error state (15): [dtheta, dv, dp, dbg, dba] with R_true = R Exp(dtheta) (right / body-frame
+perturbation). Stochastic clones add [dtheta_i, dp_i] (6) per kept past pose.
 
-Sources of trust:
-  * IMU: process noise grows when the voting layer is unsure (``imu_conf`` < 1).
-  * Camera fix: noise scales with 1 / health, frames below ``min_health`` are skipped.
-  * Learned displacement: the network's own predicted covariance.
-  * Every update passes a chi-square gate (Mahalanobis distance), so a confident but wrong
-    measurement (camera locked on the wrong thing) is rejected instead of pulling the path.
+Prediction holds each IMU sample constant until the next timestamp (variable dt is supported).
+Updates use a Joseph-form covariance update, linear solves instead of explicit inverses, and the
+error-reset Jacobian G = I - [dtheta/2]x after every rotation injection (Sola 2017, eq. 287).
+
+Sources of trust
+  * IMU: process noise = filter noise density x legacy confidence scaling + the extra density
+    measured by the IMU monitor (``imu_health``): excess noise, unattributed disagreement, lost
+    sensors. See that module for what is and is not observable.
+  * Camera fix: noise from the calibrated health -> error table (or 1 / health). Every fix passes a
+    chi-square gate on the innovation. A fix outside the gate is rejected outright (no "soft"
+    partial pull: under a persistent wrong fix a soft pull drags the state until the fix looks
+    consistent, which is how a wrong camera used to legitimise itself).
+  * Learned displacement: the network's own covariance x a self-check scale x a calibration factor.
+
+Camera supervision (all durations in seconds of measurement time, not frame counts)
+  nominal        healthy fixes are being accepted
+  degraded       fixes are accepted but with low health (large noise)
+  outage         no accepted fix for more than ``outage_gap_s``
+  suspect_jump   healthy fixes disagree while the filter was anchored a moment ago: the camera most
+                 likely jumped (wrong match, moving object). Fixes are rejected for at least
+                 ``recover_after_jump_s``.
+  recovering     healthy fixes disagree after an outage: the inertial estimate most likely drifted.
+                 Fixes are rejected for at least ``recover_after_s``.
+In both disagreement episodes the filter only re-anchors to the camera when the episode's
+innovations are mutually consistent (constant offset plus linear trend, chi-square test on the
+residuals at ``consistency_alpha``), i.e. the camera is tracking *something* rigidly. A recovering
+episode is downgraded to suspect_jump if its offset is larger than the inertial drift envelope
+(``outage_envelope`` x the filter's position covariance) allows. Re-anchoring inflates position and
+velocity covariance by the observed offset and trend before the update. None of this can tell a
+rigid wrong fix that lasts longer than the hold-out from a genuine correction: there is no second
+absolute position source. That case is reported (``cam_recovered`` events, ``reanchored`` reasons).
+
+Adaptive process noise (``adaptive_q``, covariance matching after Mehra 1970) is fed only by
+healthy fixes that *passed* the gate outside a disagreement episode, so a rejected fix can never
+raise its own future influence. It is capped at ``q_max`` and decays at ``q_down``. It still cannot
+distinguish slow visual drift inside the gate from IMU model error; see the docs.
 
 Learned displacement d = p(t) - p(t - w), two forms:
-  * default: a measurement on the current position with the past position held at its
-    estimate (noise inflated by the past position covariance);
-  * ``cloning=True, yaw_frame=True``: TLIO's form. Past poses are cloned into the state, the
-    network sees the window in the clone's yaw frame, and the measurement
-    h = Rz(yaw_i)^T (p - p_i) carries a Jacobian on the clone's yaw, so the network corrects
-    heading drift instead of only position.
+  * default: a measurement on the current position with the past position held at its estimate
+    (noise inflated by the past position covariance; cross-covariance ignored, so conservative);
+  * ``cloning=True`` (optionally ``yaw_frame=True``, TLIO eq. 9-10): past poses are cloned into the
+    state and h = Rz(yaw_i)^T (p - p_i) carries Jacobians on the clone.
+Overlapping windows are correlated; ``disp_cov_scale`` is the validation-calibrated correction.
 """
 
 from dataclasses import dataclass, field
 
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot
+from scipy.stats import chi2
 
 from . import GRAVITY
 
 G = np.array([0.0, 0.0, -GRAVITY])
 CHI2_3DOF_999 = 16.27
+
+CAM_NONE, CAM_NOMINAL, CAM_DEGRADED, CAM_OUTAGE, CAM_SUSPECT, CAM_RECOVERING = range(6)
+CAM_STATE_NAMES = ("none", "nominal", "degraded", "outage", "suspect_jump", "recovering")
 
 
 def skew(v):
@@ -36,66 +72,154 @@ def skew(v):
 
 @dataclass
 class FilterConfig:
-    sigma_g: float = 0.005        # gyro noise, rad/s/sqrt(Hz)-ish per step scaling
-    sigma_a: float = 0.08         # accel noise
-    sigma_bg: float = 1e-4        # bias random walk
+    sigma_g: float = 0.005        # gyro white-noise density used by the filter, rad/s/sqrt(Hz)
+    sigma_a: float = 0.08         # accel white-noise density, m/s^2/sqrt(Hz)
+    sigma_bg: float = 1e-4        # bias random walks
     sigma_ba: float = 1e-3
     min_health: float = 0.005     # only frames with essentially nothing visible are ignored
-    recover_health: float = 0.6   # frames this healthy can re-anchor a drifted estimate
-    recover_after: int = 10       # after an outage: re-anchor after 1 s of healthy disagreement
-    recover_after_jump: int = 100 # after a sudden camera jump: hold out for 10 s
-    outage_gap: int = 100         # samples (0.5 s) without a good frame counts as an outage
+    recover_health: float = 0.6   # frames this healthy can start / end disagreement episodes
+    recover_after_s: float = 1.0  # after an outage: re-anchor after 1 s of consistent disagreement
+    recover_after_jump_s: float = 10.0  # after a sudden camera jump: hold out at least 10 s
+    outage_gap_s: float = 0.5     # no accepted healthy fix for this long counts as an outage
+    consistency_alpha: float = 1e-3   # episode innovations must fit offset + trend at this level
+    min_episode_fixes: int = 3
+    anchor_min_s: float = 1.0         # healthy fixes accepted this long = anchored (a later disagreement is a jump)
+    step_back_ratio: float = 0.25     # after a jump: camera moved back by >= half the offset (Mahalanobis) = recovery
+    provisional_factor: float = 2.0   # a re-anchor that ended a jump stays provisional this x the jump hold-out
+    max_jump_holdout_s: float = 30.0  # a consistent healthy camera is re-anchored after this at the latest
+    jump_cover: float = 1.0           # jump re-anchor needs nis <= gate * jump_cover (state cannot rule it out)
+    max_episode_fixes: int = 600      # memory bound per episode (oldest dropped)
+    episode_end_lr: float = 100.0     # "camera unbiased again" must be this much likelier than "offset persists"
+    outage_envelope: float = 100.0    # recovering offset must fit (envelope x P_pos + R)
     model_check_up: float = 0.1     # learned-model self-check: how fast trust drops (per update)
     model_check_down: float = 0.003 # ... and how slowly it comes back
+    model_doubt_scale: float = 10.0 # self-check scale above which the model is "distrusted" (see model_distrusted)
+    model_max_scale: float | None = None  # optional: withhold learned updates without camera above this scale
     use_health: bool = True       # off = naive fusion that trusts every frame equally
     trust: tuple | None = None    # (health, std_m) table from camera.calibrate_trust
     cloning: bool = False         # TLIO-style stochastic cloning of past (rotation, position)
     disp_cov_scale: float = 1.0   # calibration of the network's claimed variance (>1: it is overconfident)
-    yaw_frame: bool = False       # with cloning: measure displacement in the clone's yaw frame,
-                                  # with the rotation Jacobian (TLIO, Liu et al. 2020, eq. 9-10)
-    adaptive_q: bool = False      # inflate IMU process noise when healthy camera disagrees
+    yaw_frame: bool = False       # with cloning: displacement in the clone's yaw frame (TLIO eq. 9-10)
+    adaptive_q: bool = False      # inflate IMU process noise when accepted healthy fixes disagree
     q_up: float = 0.2
     q_down: float = 0.01
     q_max: float = 400.0
     bias_q_gain: float = 1.0
     use_gate: bool = True
     gate: float = CHI2_3DOF_999
-    gate_mode: str = "soft"       # "soft" = robust down-weighting, "hard" = reject + re-anchor
+    gate_mode: str = "soft"       # learned displacement only: "soft" = robust down-weighting, "hard" = reject
     soft_power: float = 2.0
     fix_std: float = 0.03
-    low_conf_inflate: float = 25.0   # process-noise multiplier when IMU confidence is 0
+    low_conf_inflate: float = 25.0   # legacy imu_conf input: process-noise std multiplier at conf 0
+    max_imu_gap_s: float = 0.02      # longer IMU gaps are propagated in sub-steps with envelope noise
+    gap_sigma_g: float = 0.5         # motion envelope while IMU data is missing, rad/s/sqrt(Hz)
+    gap_sigma_a: float = 2.0         # ... m/s^2/sqrt(Hz)
+    max_valid_pos_std: float = 1.0   # largest position std (m, worst axis) still reported as valid
+    disp_rate_tol: float = 0.05      # learned window skipped if its sample spacing deviates more
 
 
 @dataclass
 class FilterLog:
     p: list = field(default_factory=list)
-    p_std: list = field(default_factory=list)
+    p_std: list = field(default_factory=list)   # sqrt(trace(P_pos)): a scalar summary, NOT a 3-sigma radius
     cam_used: int = 0
     cam_rejected: int = 0
     cam_skipped: int = 0
     cam_recovered: int = 0
+    cam_invalid: int = 0
+    cam_late: int = 0
     disp_used: int = 0
     disp_rejected: int = 0
+    disp_skipped: int = 0
+    disp_withheld: int = 0                      # skipped by the optional activation policy
     disp_std: list = field(default_factory=list)
     model_scale: list = field(default_factory=list)
+    q_scale: list = field(default_factory=list)  # adaptive process-noise scale per output sample
+    events: list = field(default_factory=list)  # (t, kind, detail) for re-anchors and episodes
+
+
+@dataclass
+class _Episode:
+    origin: str                   # "jump" or "outage"
+    t_start: float
+    ts: list = field(default_factory=list)
+    ys: list = field(default_factory=list)
+    Rs: list = field(default_factory=list)
+    Ps: list = field(default_factory=list)
+
+    def add(self, t, y, R, P, cap: int = 600):
+        self.ts.append(t)
+        self.ys.append(y)
+        self.Rs.append(R)
+        self.Ps.append(P)
+        if len(self.ts) > cap:
+            del self.ts[0], self.ys[0], self.Rs[0], self.Ps[0]
+
+    def fit(self):
+        """Weighted polynomial fit of the episode's innovations; returns (b, rate, chi2 residual, dof).
+
+        After a jump the camera is the suspect and a rigid wrong fix is an offset plus a linear trend
+        (order 1). After an outage the inertial estimate is the suspect: its error grows with velocity
+        error and accelerometer bias, i.e. quadratically over the episode (order 2). b and rate are
+        evaluated at the newest fix.
+        """
+        n = len(self.ts)
+        order = 2 if self.origin == "outage" else 1
+        ts = np.array(self.ts)
+        tau = ts - ts.mean()
+        m = 3 * (order + 1)
+        A = np.zeros((m, m))
+        rhs = np.zeros(m)
+        Ws = [np.linalg.inv(R) for R in self.Rs]
+        basis = lambda x: np.hstack([x ** j * np.eye(3) for j in range(order + 1)])
+        for i in range(n):
+            J = basis(tau[i])
+            A += J.T @ Ws[i] @ J
+            rhs += J.T @ Ws[i] @ self.ys[i]
+        th = np.linalg.lstsq(A, rhs, rcond=None)[0]
+        r2 = 0.0
+        for i in range(n):
+            e = self.ys[i] - basis(tau[i]) @ th
+            r2 += float(e @ Ws[i] @ e)
+        x = ts[-1] - ts.mean()
+        b = basis(x) @ th
+        rate = th[3:6] + (2 * x * th[6:9] if order == 2 else 0.0)
+        return b, rate, r2, max(3 * n - m, 1)
 
 
 class ESKF:
-    def __init__(self, cfg: FilterConfig, p0, v0, q0, P0_scale: float = 1e-4):
+    def __init__(self, cfg: FilterConfig, p0, v0, q0, P0_scale: float = 1e-4, P0=None):
         self.cfg = cfg
         self.R = Rot.from_quat(q0)
         self.v = np.array(v0, float)
         self.p = np.array(p0, float)
         self.bg = np.zeros(3)
         self.ba = np.zeros(3)
-        self.P = np.eye(15) * P0_scale
-        self.P[9:12, 9:12] = np.eye(3) * 1e-4
-        self.P[12:15, 12:15] = np.eye(3) * 1e-2
+        if P0 is not None:
+            self.P = np.array(P0, float)
+        else:
+            self.P = np.eye(15) * P0_scale
+            self.P[9:12, 9:12] = np.eye(3) * 1e-4
+            self.P[12:15, 12:15] = np.eye(3) * 1e-2
         self.clone_k: list[int] = []      # stochastic cloning: past poses kept in the state
         self.clone_p: list[np.ndarray] = []
         self.clone_R: list = []           # error state per clone: [dtheta (3), dp (3)]
+        self.q_scale = 1.0
+        self.model_scale = 1.0
+        self.last_good_t = -np.inf        # last accepted healthy camera fix
+        self.last_used_t = -np.inf        # last accepted camera fix of any health
+        self.last_used_healthy = False
+        self.episode: _Episode | None = None
+        self.good_since = None
+        self.provisional_until = -np.inf
+        self._nis_b = 0.0
+        self.diverged = False
+        self.last_nis = np.nan
 
-    def propagate(self, gyro, acc, dt, imu_conf: float = 1.0):
+    # ------------------------------------------------------------------ prediction
+    def propagate(self, gyro, acc, dt, imu_conf: float = 1.0, q_add_g: float = 0.0, q_add_a: float = 0.0):
+        if not (np.isfinite(dt) and dt > 0):
+            raise ValueError(f"propagation step must be positive and finite, got {dt}")
         w = gyro - self.bg
         f = acc - self.ba
         Rm = self.R.as_matrix()
@@ -105,19 +229,19 @@ class ESKF:
         self.R = self.R * Rot.from_rotvec(w * dt)
 
         F = np.eye(15)
-        F[0:3, 0:3] -= skew(w) * dt
+        F[0:3, 0:3] = Rot.from_rotvec(w * dt).as_matrix().T      # exact for constant w over dt
         F[0:3, 9:12] = -np.eye(3) * dt
         F[3:6, 0:3] = -Rm @ skew(f) * dt
         F[3:6, 12:15] = -Rm * dt
+        F[6:9, 0:3] = -0.5 * Rm @ skew(f) * dt * dt
         F[6:9, 3:6] = np.eye(3) * dt
+        F[6:9, 12:15] = -0.5 * Rm * dt * dt
         c = self.cfg
-        k = 1.0 + (c.low_conf_inflate - 1.0) * (1.0 - np.clip(imu_conf, 0, 1))
+        k = 1.0 + (c.low_conf_inflate - 1.0) * (1.0 - float(np.clip(imu_conf, 0, 1)))
+        q = self.q_scale if c.adaptive_q else 1.0
         Q = np.zeros(15)
-        # Adaptive process noise (Mehra 1970 style): q_scale grows when healthy camera fixes keep
-        # disagreeing with the IMU prediction more than the filter expected.
-        q = getattr(self, "q_scale", 1.0) if c.adaptive_q else 1.0
-        Q[0:3] = (c.sigma_g * k) ** 2 * dt * q
-        Q[3:6] = (c.sigma_a * k) ** 2 * dt * q
+        Q[0:3] = ((c.sigma_g * k) ** 2 * q + q_add_g) * dt
+        Q[3:6] = ((c.sigma_a * k) ** 2 * q + q_add_a) * dt
         Q[9:12] = c.sigma_bg ** 2 * dt * q * c.bias_q_gain
         Q[12:15] = c.sigma_ba ** 2 * dt * q * c.bias_q_gain
         P = self.P
@@ -125,41 +249,68 @@ class ESKF:
         if P.shape[0] > 15:                       # clones are static; only cross terms move
             P[:15, 15:] = F @ P[:15, 15:]
             P[15:, :15] = P[:15, 15:].T
+        self.P = 0.5 * (P + P.T)
+        self._check()
 
-    def _update(self, y, H, Rmeas):
+    # ------------------------------------------------------------------ updates
+    def _check(self):
+        if not (np.all(np.isfinite(self.P)) and np.all(np.isfinite(self.p)) and np.all(np.isfinite(self.v))):
+            self.diverged = True
+
+    def _inject(self, dx):
         n = self.P.shape[0]
-        S = H @ self.P @ H.T + Rmeas
-        nis = float(y @ np.linalg.solve(S, y))
-        self.last_nis = nis
-        accepted = True
-        if self.cfg.use_gate and nis > self.cfg.gate:
-            if self.cfg.gate_mode == "hard":
-                return False
-            # Soft gate (robust Kalman): inflate the measurement noise so its pull is capped,
-            # growing with how surprising it is. Far-off measurements barely move the state.
-            Rmeas = Rmeas * (nis / self.cfg.gate) ** self.cfg.soft_power
-            S = H @ self.P @ H.T + Rmeas
-            accepted = False
-        K = self.P @ H.T @ np.linalg.inv(S)
-        dx = K @ y
-        I_KH = np.eye(n) - K @ H
-        self.P = I_KH @ self.P @ I_KH.T + K @ Rmeas @ K.T
-        self.P = 0.5 * (self.P + self.P.T)          # keep it symmetric (long cloned runs drift)
+        Gm = np.eye(n)
+        Gm[0:3, 0:3] -= skew(0.5 * dx[0:3])
         self.R = self.R * Rot.from_rotvec(dx[0:3])
-        self.v += dx[3:6]
-        self.p += dx[6:9]
-        self.bg += dx[9:12]
-        self.ba += dx[12:15]
+        self.v = self.v + dx[3:6]
+        self.p = self.p + dx[6:9]
+        self.bg = self.bg + dx[9:12]
+        self.ba = self.ba + dx[12:15]
         for i in range(len(self.clone_p)):
             o = 15 + 6 * i
             self.clone_R[i] = self.clone_R[i] * Rot.from_rotvec(dx[o:o + 3])
             self.clone_p[i] = self.clone_p[i] + dx[o + 3:o + 6]
-        return accepted
+            Gm[o:o + 3, o:o + 3] -= skew(0.5 * dx[o:o + 3])
+        self.P = Gm @ self.P @ Gm.T
 
-    def _update_position(self, z, Rmeas):
+    def nis(self, y, H, Rmeas):
+        S = H @ self.P @ H.T + Rmeas
+        return float(y @ np.linalg.solve(S, y))
+
+    def _update(self, y, H, Rmeas, mode: str = "soft"):
+        """mode: "soft" (robust down-weighting outside the gate), "hard" (reject), "off" (no gate).
+        Returns "accepted", "softened" or "rejected"."""
+        if not (np.all(np.isfinite(y)) and np.all(np.isfinite(Rmeas))):
+            return "rejected"
+        n = self.P.shape[0]
+        S = H @ self.P @ H.T + Rmeas
+        S = 0.5 * (S + S.T)
+        nis = float(y @ np.linalg.solve(S, y))
+        self.last_nis = nis
+        result = "accepted"
+        if mode != "off" and self.cfg.use_gate and nis > self.cfg.gate:
+            if mode == "hard":
+                return "rejected"
+            Rmeas = Rmeas * (nis / self.cfg.gate) ** self.cfg.soft_power
+            S = H @ self.P @ H.T + Rmeas
+            S = 0.5 * (S + S.T)
+            result = "softened"
+        K = np.linalg.solve(S, H @ self.P).T          # K = P H^T S^-1 (S, P symmetric)
+        dx = K @ y
+        I_KH = np.eye(n) - K @ H
+        self.P = I_KH @ self.P @ I_KH.T + K @ Rmeas @ K.T
+        self.P = 0.5 * (self.P + self.P.T)
+        self._inject(dx)
+        self._check()
+        return result
+
+    def _pos_H(self):
         H = np.zeros((3, self.P.shape[0]))
         H[:, 6:9] = np.eye(3)
-        return self._update(z - self.p, H, Rmeas)
+        return H
+
+    def _update_position(self, z, Rmeas, mode="soft"):
+        return self._update(z - self.p, self._pos_H(), Rmeas, mode)
 
     def add_clone(self, k: int, max_clones: int):
         """Stochastic cloning (Roumeliotis & Burdick 2002): copy the current pose into the state."""
@@ -186,18 +337,15 @@ class ESKF:
         c, s_ = np.cos(g), np.sin(g)
         return np.array([[c, -s_, 0.0], [s_, c, 0.0], [0.0, 0.0, 1.0]])
 
-    def displacement_update_clone(self, d, cov, k0, log, k: int = 0):
-        """Learned displacement d = p(k) - p(k0), with p(k0) a clone in the state (as in TLIO)."""
-        if k0 not in self.clone_k:
-            return
+    def clone_measurement(self, k0):
+        """h and H for d = p(k) - p(k0) with p(k0) a clone (yaw frame if configured)."""
         i = self.clone_k.index(k0)
         n = self.P.shape[0]
         o = 15 + 6 * i
         H = np.zeros((3, n))
         if self.cfg.yaw_frame:
-            # d is in the clone's local gravity-aligned frame: h = Rz(yaw_i)^T (p - p_i).
-            # A yaw error dgamma at the clone gives dh = -[e_z]x h dgamma. With the clone's
-            # rotation right-perturbed, R Exp(dtheta), and yaw = atan2(R10, R00):
+            # h = Rz(yaw_i)^T (p - p_i). A yaw error dgamma gives dh = -[e_z]x h dgamma. With the
+            # clone's rotation right-perturbed, R Exp(dtheta), and yaw = atan2(R10, R00):
             # dgamma/dtheta_j = (R00 dR10 - R10 dR00) / (R00^2 + R10^2), dR = R [e_j]x.
             A = self.clone_yaw(k0).T
             h = A @ (self.p - self.clone_p[i])
@@ -211,155 +359,336 @@ class ESKF:
             h = self.p - self.clone_p[i]
         H[:, 6:9] = A
         H[:, o + 3:o + 6] = -A
+        return h, H
+
+    def _anchored(self, t):
+        return t - self.last_good_t <= self.cfg.outage_gap_s and self.episode is None
+
+    def _model_check(self, y, S, t):
+        # Self-check of the learned model: while healthy fixes are being accepted the state is
+        # anchored by the camera, so a large innovation means the *model* is wrong on this motion.
+        # Lose trust fast, regain slowly. Not run during camera disagreement episodes, so a
+        # suspect camera cannot poison it.
+        if not self._anchored(t):
+            return
+        ratio = float(y @ np.linalg.solve(S, y)) / 3.0
+        target = max(ratio, 1.0)
+        a = self.cfg.model_check_up if target > self.model_scale else self.cfg.model_check_down
+        self.model_scale = (1 - a) * self.model_scale + a * target
+
+    def model_distrusted(self):
+        """The self-check says the network is far outside its claimed uncertainty on this motion.
+
+        model_scale is an EWMA (weight model_check_up ~ 0.1, i.e. ~10 updates) of NIS/3. For a
+        consistent model its 99.9 % quantile is about 2 (chi2(30)/30), so model_doubt_scale = 10 is
+        well outside anything a consistent model produces. Statistical choice, not fitted to a test set.
+        """
+        return self.model_scale > self.cfg.model_doubt_scale
+
+    def _model_cov(self, cov, t, log):
+        """Covariance actually used for a learned update, or None if the update is withheld."""
+        c = self.cfg
+        if self.episode is not None and self.episode.origin == "jump" and self.model_distrusted():
+            # Camera and state disagree and the camera is being held out. If the self-check has
+            # already measured the network as inconsistent, its updates would be the only thing
+            # keeping the state covariance tight enough to veto the camera; a distrusted model must not
+            # arbitrate. The state falls back to inertial-only, whose covariance grows honestly, until
+            # the episode ends. (Reproduced: synthetic camera_wrong_fix with the models-v1 network went
+            # to 4.8 m ATE without this rule, baseline_evidence/synthetic_eval_after.txt.)
+            log.disp_skipped += 1
+            log.disp_withheld += 1
+            return None
+        if c.model_max_scale is not None and self.model_scale > c.model_max_scale and not self._anchored(t):
+            # Optional activation policy (off by default, not yet validated on real data): a model
+            # the self-check has measured as badly inconsistent is not used without the camera.
+            log.disp_skipped += 1
+            log.disp_withheld += 1
+            return None
+        return cov * self.model_scale
+
+    def displacement_update_clone(self, d, cov, k0, log, t: float = 0.0):
+        """Learned displacement d = p(k) - p(k0), with p(k0) a clone in the state (as in TLIO)."""
+        if k0 not in self.clone_k:
+            log.disp_skipped += 1
+            return
+        if not (np.all(np.isfinite(d)) and np.all(np.isfinite(cov))):
+            log.disp_skipped += 1
+            return
+        h, H = self.clone_measurement(k0)
         y = d - h
-        anchored = k - getattr(self, "last_good_cam_k", -10 ** 9) <= self.cfg.outage_gap
-        if anchored:
-            S = H @ self.P @ H.T + cov
-            ratio = float(y @ np.linalg.solve(S, y)) / 3.0
-            cur = getattr(self, "model_scale", 1.0)
-            target = max(ratio, 1.0)
-            a = self.cfg.model_check_up if target > cur else self.cfg.model_check_down
-            self.model_scale = (1 - a) * cur + a * target
-        cov = cov * getattr(self, "model_scale", 1.0)
-        if self._update(y, H, cov):
+        self._model_check(y, H @ self.P @ H.T + cov, t)
+        cov = self._model_cov(cov, t, log)
+        if cov is None:
+            return
+        if self._update(y, H, cov, self.cfg.gate_mode) == "accepted":
             log.disp_used += 1
         else:
             log.disp_rejected += 1
 
-    def camera_update(self, fix, health, log: FilterLog, k: int = 0):
-        c = self.cfg
-        if c.use_health:
-            if c.trust is not None:
-                # Calibrated on training data: measured fix error for this health level.
-                std = float(np.interp(health, c.trust[0], c.trust[1]))
-            else:
-                if health < c.min_health:
-                    log.cam_skipped += 1
-                    return
-                std = c.fix_std / max(health, 0.02)
+    def displacement_update(self, d, cov, p_past, P_past_pos, log: FilterLog, t: float = 0.0):
+        if not (np.all(np.isfinite(d)) and np.all(np.isfinite(cov)) and np.all(np.isfinite(p_past))):
+            log.disp_skipped += 1
+            return
+        z = p_past + d
+        y = z - self.p
+        self._model_check(y, self.P[6:9, 6:9] + cov + P_past_pos, t)
+        cov = self._model_cov(cov, t, log)
+        if cov is None:
+            return
+        if self._update_position(z, cov + P_past_pos, self.cfg.gate_mode) == "accepted":
+            log.disp_used += 1
         else:
-            std = c.fix_std
+            log.disp_rejected += 1
+
+    # ------------------------------------------------------------------ camera supervision
+    def camera_std(self, health):
+        c = self.cfg
+        if not c.use_health:
+            return c.fix_std
+        if c.trust is not None:
+            # Calibrated on training data: measured fix error for this health level.
+            return float(np.interp(health, c.trust[0], c.trust[1]))
+        if health < c.min_health:
+            return None
+        return c.fix_std / max(health, 0.02)
+
+    def camera_state(self, t):
+        if self.episode is not None:
+            return CAM_SUSPECT if self.episode.origin == "jump" else CAM_RECOVERING
+        if t - self.last_used_t > self.cfg.outage_gap_s:
+            return CAM_OUTAGE
+        return CAM_NOMINAL if (self.last_used_healthy and t - self.last_good_t <= self.cfg.outage_gap_s) \
+            else CAM_DEGRADED
+
+    def camera_update(self, fix, health, log: FilterLog, t: float = 0.0):
+        """Returns one of: invalid, skipped, accepted, rejected, reanchored."""
+        c = self.cfg
+        fix = np.asarray(fix, float)
+        if fix.shape != (3,) or not np.all(np.isfinite(fix)) or not np.isfinite(health):
+            log.cam_invalid += 1
+            return "invalid"
+        health = float(np.clip(health, 0.0, 1.0))
+        std = self.camera_std(health)
+        if std is None:
+            log.cam_skipped += 1
+            return "skipped"
         Rm = np.eye(3) * std ** 2
         healthy = health >= c.recover_health
-        if c.adaptive_q and healthy:
-            # Use the innovation of healthy frames to check whether the IMU model is too optimistic.
-            H = np.zeros((3, self.P.shape[0])); H[:, 6:9] = np.eye(3)
-            y = fix - self.p
-            S = H @ self.P @ H.T + Rm
-            ratio = float(y @ np.linalg.solve(S, y)) / 3.0
-            cur = getattr(self, "q_scale", 1.0)
-            target = float(np.clip(ratio, 1.0, c.q_max))
-            a = c.q_up if target > cur else c.q_down
-            self.q_scale = (1 - a) * cur + a * target
-        if self._update_position(fix, Rm):
+        H = self._pos_H()
+        y = fix - self.p
+        Ppos = self.P[6:9, 6:9].copy()
+        S = Ppos + Rm
+        nis = float(y @ np.linalg.solve(S, y))
+        mode = "off" if not c.use_gate else "hard"
+        if self.episode is None and (not c.use_gate or nis <= c.gate):
+            if c.adaptive_q and healthy:
+                # Covariance matching on an innovation that passed the gate (never a rejected one).
+                ratio = nis / 3.0
+                target = float(np.clip(ratio, 1.0, c.q_max))
+                a = c.q_up if target > self.q_scale else c.q_down
+                self.q_scale = (1 - a) * self.q_scale + a * target
+            self._update(y, H, Rm, mode)
             log.cam_used += 1
-            self.cam_fail_streak = 0
+            self.last_used_t = t
+            self.last_used_healthy = healthy
             if healthy:
-                self.last_good_cam_k = k
-            return
+                if t - self.last_good_t > c.outage_gap_s or self.good_since is None:
+                    self.good_since = t             # start of the current run of healthy fixes
+                self.last_good_t = t
+            return "accepted"
+        if self.episode is not None:
+            if self.episode.origin == "outage":
+                # Recovering: the state is the suspect, so agreement with it is all that is needed.
+                end, step_back = nis <= c.gate, False
+            else:
+                lr_ok, step_back = self._episode_over(y, Rm, Ppos, S, nis, t)
+                end = nis <= c.gate and lr_ok
+            if end:
+                # The camera agrees again AND (after a jump) the jump offset no longer explains it.
+                log.events.append((t, "episode_end_agree", self.episode.origin))
+                self.episode = None
+                return self.camera_update(fix, health, log, t)
+            if step_back and healthy:
+                # The camera left the suspicious offset and moved back towards the inertial
+                # prediction, but the inertial estimate has drifted beyond the gate meanwhile.
+                # Treat the rest as a recovery after an outage: re-anchor only after recover_after_s
+                # of mutually consistent fixes.
+                log.events.append((t, "episode_step_back", "jump->outage"))
+                self.episode = _Episode("outage", t)
         log.cam_rejected += 1
         if not healthy:
-            return
-        streak = getattr(self, "cam_fail_streak", 0)
-        if streak == 0:
-            # Why does a healthy camera disagree with us? If we just came back from an outage,
-            # we are the one that drifted. If the camera was agreeing a moment ago and suddenly
-            # jumped, it has probably locked onto the wrong thing.
-            gap = k - getattr(self, "last_good_cam_k", -10 ** 9)
-            self.streak_origin = "outage" if gap > c.outage_gap else "jump"
-        self.cam_fail_streak = streak + 1
-        needed = c.recover_after if self.streak_origin == "outage" else c.recover_after_jump
-        if self.cam_fail_streak >= needed:
-            # Re-anchor: open our position uncertainty to the size of the disagreement, then
-            # take the camera fix with the gate off.
-            y = fix - self.p
-            self.P[6:9, 6:9] += np.eye(3) * float(y @ y)
-            gate, self.cfg.use_gate = self.cfg.use_gate, False
-            self._update_position(fix, Rm)
-            self.cfg.use_gate = gate
-            self.cam_fail_streak = 0
-            self.last_good_cam_k = k
-            log.cam_recovered += 1
+            return "rejected"                       # low-health frames never steer recovery
+        if self.episode is None:
+            # Why does a healthy camera disagree? If we just came back from an outage, we probably
+            # drifted. If it was agreeing a moment ago and suddenly jumped, it is probably wrong.
+            # "Agreeing a moment ago" needs a sustained run of accepted healthy fixes, not a single one:
+            # after degraded vision a lone healthy fix can scrape through the gate while the state is
+            # still wrong, and the next healthy fixes must not then be treated as a camera jump.
+            origin = self._classify_origin(t, y, Ppos, Rm)
+            self.episode = _Episode(origin, t)
+            log.events.append((t, "episode_start", origin))
+        ep = self.episode
+        ep.add(t, y, Rm, Ppos, c.max_episode_fixes)
+        needed = c.recover_after_s if ep.origin == "outage" else c.recover_after_jump_s
+        n = len(ep.ts)
+        if n >= c.min_episode_fixes + (2 if ep.origin == "outage" else 0):
+            b, rate, r2, dof = ep.fit()
+            if r2 > chi2.ppf(1 - c.consistency_alpha, dof):
+                # Not a rigid offset any more. If, after a jump, the camera moved most of the way back
+                # to the inertial prediction, it is a (partial) recovery: continue as "outage" with the
+                # short consistency hold-out. Otherwise the camera is scattering: start again.
+                # The restarted episode is classified like a new one: once the state has not been
+                # anchored for longer than outage_gap_s, the inertial estimate is the suspect, so a
+                # camera that changes its offset is treated as a possible recovery (short, consistency-
+                # checked hold-out), not as a second jump that needs another full jump hold-out.
+                # Inside an episode `last_good_t` is stale by construction, so the restart is not
+                # classified by elapsed time. It becomes "outage" only on evidence: the camera moved
+                # back towards the prediction, or the state's own uncertainty can no longer rule the
+                # camera out (nis within the gate). With independent evidence keeping P_pos tight
+                # (learned displacement), a wandering wrong fix stays a jump.
+                origin, t0 = ep.origin, t
+                if ep.origin == "jump" and nis < c.step_back_ratio * self._nis_b:
+                    origin = "outage"
+                if origin != ep.origin:
+                    log.events.append((t, "episode_step_back", f"{ep.origin}->{origin}"))
+                else:
+                    log.events.append((t, "episode_inconsistent", ep.origin))
+                    if origin == "jump":
+                        # The camera has disagreed since ep.t_start; the hold-out keeps counting from
+                        # there, while the consistency fit uses only the new segment.
+                        t0 = ep.t_start
+                self.episode = _Episode(origin, t0)
+                self.episode.add(t, y, Rm, Ppos)
+                return "rejected"
+            # After a jump the hold-out alone is not evidence: a rigid wrong fix that outlasts it
+            # would be taken. Also require that the state's own uncertainty can no longer rule the
+            # camera out (nis within the gate). While independent evidence (learned displacement,
+            # small inertial drift) keeps P_pos tight, a large persistent offset stays rejected.
+            # Test the episode's fitted offset b (many fixes, precise), not one fix: a single
+            # lower-health frame claims a large noise and can make any offset look plausible.
+            Cb = np.mean(ep.Rs, 0) / n
+            nis_ep = float(b @ np.linalg.solve(Ppos + Cb, b))
+            covered = ep.origin == "outage" or nis_ep <= c.gate * c.jump_cover
+            elapsed = t - ep.t_start
+            # Past the jump hold-out the camera has been rigidly self-consistent; it is still kept out
+            # while the state's covariance rules it out. That covariance can be held tight by a
+            # learned model that is confidently wrong, and with no third position source both are
+            # suspect, so the hold-out is capped at max_jump_holdout_s.
+            forced = ep.origin == "jump" and elapsed >= c.max_jump_holdout_s - 1e-9
+            if elapsed >= needed - 1e-9 and (covered or forced):
+                # Re-anchor: open position / velocity uncertainty to the observed disagreement, then
+                # take the fix without the gate.
+                self.P[6:9, 6:9] += np.outer(b, b)
+                self.P[3:6, 3:6] += np.outer(rate, rate)
+                self._update(y, H, Rm, "off")
+                log.cam_recovered += 1
+                log.events.append((t, "reanchored_forced" if (forced and not covered) else "reanchored", ep.origin))
+                self.episode = None
+                self.last_good_t = self.last_used_t = t
+                self.good_since = t
+                self.last_used_healthy = True
+                if ep.origin == "jump":
+                    self.provisional_until = t + c.provisional_factor * c.recover_after_jump_s
+                return "reanchored"
+        return "rejected"
 
-    def displacement_update(self, d, cov, p_past, P_past_pos, log: FilterLog, k: int = 0):
-        z = p_past + d
-        # Self-check of the learned model: while the camera is healthy our state is anchored,
-        # so a large innovation here means the *model* is wrong on this kind of motion. Track
-        # how far off it is relative to its own claimed uncertainty and scale its covariance.
-        anchored = k - getattr(self, "last_good_cam_k", -10 ** 9) <= self.cfg.outage_gap
+    def _classify_origin(self, t, y, Ppos, Rm):
+        """"jump" if the state was anchored by a sustained run of accepted healthy fixes until a
+        moment ago (the camera is the suspect), else "outage" (the inertial estimate is the suspect),
+        unless the offset exceeds what inertial drift can explain."""
+        c = self.cfg
+        # "Agreeing a moment ago" needs a sustained run of accepted healthy fixes, not a single one:
+        # after degraded vision a lone healthy fix can scrape through the gate while the state is still
+        # wrong, and the next healthy fixes must not then be treated as a camera jump.
+        # A re-anchor that ended a *jump* episode is provisional: it may have been onto a wrong fix
+        # that outlasted the hold-out. Until recover_after_jump_s has passed, a later disagreement is
+        # treated as a possible recovery (consistency-checked, envelope-bounded), not as a new jump.
+        anchored = (t - self.last_good_t <= c.outage_gap_s and self.good_since is not None
+                    and self.last_good_t - self.good_since >= c.anchor_min_s - 1e-9
+                    and t >= self.provisional_until)
         if anchored:
-            y = z - self.p
-            S = self.P[6:9, 6:9] + cov + P_past_pos
-            ratio = float(y @ np.linalg.solve(S, y)) / 3.0
-            cur = getattr(self, "model_scale", 1.0)
-            target = max(ratio, 1.0)
-            # Lose trust fast, regain it slowly: one bad stretch should be remembered.
-            a = self.cfg.model_check_up if target > cur else self.cfg.model_check_down
-            self.model_scale = (1 - a) * cur + a * target
-        cov = cov * getattr(self, "model_scale", 1.0)
-        if self._update_position(z, cov + P_past_pos):
-            log.disp_used += 1
+            return "jump"
+        if self.model_distrusted():
+            # The drift envelope below rests on P_pos, which a distrusted learned model has held
+            # artificially tight while the camera was away: it cannot be used to call the camera wrong.
+            return "outage"
+        env = c.outage_envelope * Ppos + Rm
+        return "jump" if float(y @ np.linalg.solve(env, y)) > c.gate else "outage"
+
+    def _episode_over(self, y, Rm, Ppos, S0, nis0, t):
+        """Two-hypothesis test for ending a disagreement episode.
+
+        H0: the camera is unbiased again, y ~ N(0, P_pos + R).
+        H1: the episode's offset b persists, y ~ N(b_pred, R + var(b_pred) + inertial drift since the
+            episode started).
+        Passing the chi-square gate is not enough: while fixes are rejected the inertial covariance
+        grows, and a persistent wrong fix eventually falls inside the gate (this is what let a
+        repeated wrong fix take over in the first implementation, see docs/ESTIMATOR.md). The episode
+        ends only if H0 is ``episode_end_lr`` times more likely than H1.
+        """
+        ep = self.episode
+        n = len(ep.ts)
+        if n == 0:
+            return True, False
+        if n >= self.cfg.min_episode_fixes:
+            b, rate, _, _ = ep.fit()
+            b = b + rate * (t - ep.ts[-1])
+            Cb = np.mean(ep.Rs, 0) / n * 4.0 + ep.Rs[-1]   # extrapolated offset: conservative variance
         else:
-            log.disp_rejected += 1
+            b = ep.ys[-1]
+            Cb = ep.Rs[-1]
+        # Change of the inertial error since the last episode fix. This is NOT P_pos(t) - P_pos(t_last):
+        # that difference is dominated by the cross-covariance of an error that already existed.
+        # The increment is (velocity error) x dt; bound it by the current velocity covariance with a
+        # factor 2 in std for the unmodelled acceleration error. The offset fit absorbs a mean trend.
+        dt_last = max(t - ep.ts[-1], 0.0)
+        growth = 4.0 * self.P[3:6, 3:6] * dt_last ** 2
+        S1 = Rm + Cb + growth
+        e1 = y - b
+        nis1 = float(e1 @ np.linalg.solve(S1, e1))
+        log_lr = 0.5 * (nis1 - nis0) + 0.5 * (np.linalg.slogdet(S1)[1] - np.linalg.slogdet(S0)[1])
+        self._nis_b = float(b @ np.linalg.solve(S0, b))
+        step_back = nis1 > self.cfg.gate and nis0 < self.cfg.step_back_ratio * self._nis_b
+        return log_lr > np.log(self.cfg.episode_end_lr), step_back
+
+    def position_cov(self):
+        return self.P[6:9, 6:9].copy()
 
 
 def run(seq, gyro, acc, imu_conf=None, cam=None, disp=None, cfg: FilterConfig = FilterConfig(),
-        start: int = 0):
-    """Run the filter over a sequence.
+        start: int = 0, *, imu_quality=None, init="truth", return_outputs: bool = False):
+    """Offline replay of one sequence through the streaming estimator (same code path as live use).
 
-    gyro, acc: (N,3) fused IMU stream. imu_conf: (N,) or None.
-    cam: dict from camera.visual_fixes (idx, fix, health) or None.
-    disp: dict with idx (end sample), window (samples), d (M,3), cov (M,3,3) or None.
+    gyro, acc: (N, 3) fused IMU stream. imu_conf: legacy (N,) confidence in [0, 1] or None.
+    imu_quality: dict with per-sample ``q_add_g``, ``q_add_a``, ``state`` from ``ImuMonitor``.
+    cam: dict from camera.visual_fixes (idx, fix, health) or None. disp: learned predictor or None.
+    init: ``"truth"`` = **diagnostic / benchmark** start from the reference pose at ``start``;
+          ``"reference_free"`` or a ``ReferenceFreeInit`` = uses only IMU and camera data.
+    Returns (positions (N, 3), FilterLog). Samples without a valid estimate are NaN.
     """
-    N = len(seq.t)
-    dt = seq.dt
-    f = ESKF(cfg, seq.p[start], seq.v[start], seq.q[start])
-    log = FilterLog()
-    cam_at = {} if cam is None else {int(i): j for j, i in enumerate(cam["idx"])}
-    disp_at = {} if disp is None or callable(disp) else {int(i): j for j, i in enumerate(disp["idx"])}
-    predictor = disp if callable(disp) else None
-    hist_p = np.zeros((N, 3))
-    hist_Pp = np.zeros((N, 3, 3))
-    hist_R = np.zeros((N, 3, 3))
-    out = np.zeros((N, 3))
-    W = getattr(predictor, "window", 200)
-    every = getattr(predictor, "every", 20)
-    for k in range(start, N):
-        out[k] = f.p
-        hist_p[k] = f.p
-        hist_Pp[k] = f.P[6:9, 6:9]
-        hist_R[k] = f.R.as_matrix()
-        log.p_std.append(float(np.sqrt(np.trace(f.P[6:9, 6:9]))))
-        if k in cam_at:
-            j = cam_at[k]
-            if not np.any(np.isnan(cam["fix"][j])):
-                f.camera_update(cam["fix"][j], cam["health"][j], log, k)
-        if k in disp_at:
-            j = disp_at[k]
-            k0 = k - disp["window"]
-            if k0 >= start:
-                f.displacement_update(disp["d"][j], disp["cov"][j], hist_p[k0], hist_Pp[k0], log)
-        if predictor is not None and k - start >= W and (k - start) % every == 0:
-            k0 = k - W
-            # Gravity-align the last second with the filter's OWN orientation history.
-            Rs = hist_R[k0:k]
-            gw = np.einsum("nij,nj->ni", Rs, gyro[k0:k])
-            aw = np.einsum("nij,nj->ni", Rs, acc[k0:k])
-            if cfg.cloning and cfg.yaw_frame and k0 in f.clone_k:
-                Rz = f.clone_yaw(k0)              # into the clone's yaw frame (row vectors: v @ Rz)
-                gw, aw = gw @ Rz, aw @ Rz
-            d, cov = predictor(np.concatenate([gw, aw], 1))
-            cov = cov * cfg.disp_cov_scale
-            log.disp_std.append(float(np.sqrt(np.trace(cov))))
-            if cfg.cloning:
-                f.displacement_update_clone(d, cov, k0, log, k)
-            else:
-                f.displacement_update(d, cov, hist_p[k0], hist_Pp[k0], log, k)
-            log.model_scale.append(getattr(f, "model_scale", 1.0))
-        if predictor is not None and cfg.cloning and (k - start) % every == 0:
-            f.add_clone(k, W // every + 1)
-        if k < N - 1:
-            c = 1.0 if imu_conf is None else float(imu_conf[k])
-            f.propagate(gyro[k], acc[k], dt, c)
-    out[:start] = seq.p[:start]
-    return out, log
+    from .estimator import ReferenceFreeInit, TruthInit, replay
+    if isinstance(disp, dict):
+        raise NotImplementedError("precomputed displacement dicts are no longer supported; pass a predictor")
+    t = np.asarray(seq.t, float)
+    if init == "truth":
+        init_obj = TruthInit(seq.p[start], seq.v[start], seq.q[start])
+    elif init == "reference_free":
+        init_obj = ReferenceFreeInit()
+    else:
+        init_obj = init
+    sl = slice(start, None)
+    q = None if imu_quality is None else {k: np.asarray(v)[sl] for k, v in imu_quality.items()
+                                          if k in ("q_add_g", "q_add_a", "state")}
+    conf = None if imu_conf is None else np.asarray(imu_conf)[sl]
+    cam_s = None
+    if cam is not None:
+        keep = np.asarray(cam["idx"]) >= start
+        cam_s = {"t": t[np.asarray(cam["idx"])[keep]], "fix": np.asarray(cam["fix"])[keep],
+                 "health": np.asarray(cam["health"])[keep]}
+    out, log, outputs = replay(t[sl], np.asarray(gyro)[sl], np.asarray(acc)[sl], cfg, init_obj, cam=cam_s,
+                               predictor=disp, imu_quality=q, imu_conf=conf)
+    full = np.full((len(t), 3), np.nan)
+    full[start:] = out
+    if return_outputs:
+        return full, log, outputs
+    return full, log

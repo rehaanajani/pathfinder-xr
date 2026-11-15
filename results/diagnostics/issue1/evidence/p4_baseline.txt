@@ -1,0 +1,13 @@
+camera_wrong_fix TLIO test, before upgrades: naive 0.310 ours 0.278 | committed now: naive 0.310 ours 0.296
+dark_plus_imu_drift TLIO test, before upgrades: naive 0.224 ours 0.275 | committed now: naive 0.224 ours 0.245
+clean TLIO test, before upgrades: naive 0.031 ours 0.029 | committed now: naive 0.031 ours 0.040
+camera_blackout TLIO test, before upgrades: naive 0.428 ours 0.194 | committed now: naive 0.428 ours 0.196
+== wrong-fix scenario (benchmark default: offset [0.6,-0.4,0], 10 s), synthetic walk, oracle displacement as in tests/test_filter.py
+naive (no health, no gate)                 oracle model: mean error while camera is wrong 0.831 m (offset injected is 0.72 m); re-anchors [0, 0, 0, 0]
+naive (no health, no gate)                 no model    : mean error while camera is wrong 0.833 m (offset injected is 0.72 m); re-anchors [0, 0, 0, 0]
+FilterConfig() as used by the unit test    oracle model: mean error while camera is wrong 0.155 m (offset injected is 0.72 m); re-anchors [1, 1, 1, 1]
+FilterConfig() as used by the unit test    no model    : mean error while camera is wrong 0.849 m (offset injected is 0.72 m); re-anchors [0, 0, 0, 0]
+ours_cfg() as used by the benchmark        oracle model: mean error while camera is wrong 0.798 m (offset injected is 0.72 m); re-anchors [0, 0, 0, 0]
+ours_cfg() as used by the benchmark        no model    : mean error while camera is wrong 0.836 m (offset injected is 0.72 m); re-anchors [0, 0, 0, 0]
+ours_cfg() with adaptive_q=False           oracle model: mean error while camera is wrong 0.498 m (offset injected is 0.72 m); re-anchors [0, 0, 0, 1]
+ours_cfg() with adaptive_q=False           no model    : mean error while camera is wrong 0.841 m (offset injected is 0.72 m); re-anchors [0, 0, 0, 0]

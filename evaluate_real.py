@@ -102,7 +102,7 @@ def main():
                 cam_naive = RC.visual_fixes_real(seq, ft, fp, faults, seed=int(st), health_w=hw)
                 avg_g, avg_a = bad.gyro.mean(0), bad.acc.mean(0)
                 fg, fa, info = fuse_imus(bad)
-                conf = np.repeat(info["confidence"], 20)[: len(seq.t)]
+                q = info["quality"]
                 rows = {}
                 est = strapdown(avg_g, avg_a, seq.dt, seq.p[0], seq.v[0], seq.q[0])
                 rows["imu_only"] = metrics.ate(est, seq.p)
@@ -111,9 +111,9 @@ def main():
                 est, _ = run(seq, avg_g, avg_a, None, None, model, FilterConfig())
                 rows["learned_imu_only"] = metrics.ate(est, seq.p)
                 cfg = FilterConfig(trust=trust, adaptive_q=True, bias_q_gain=10.0)
-                est, _ = run(seq, fg, fa, conf, cam_naive, None, cfg)
+                est, _ = run(seq, fg, fa, None, cam_naive, None, cfg, imu_quality=q)
                 rows["ours_no_model"] = metrics.ate(est, seq.p)
-                est, _ = run(seq, fg, fa, conf, cam_naive, model, cfg)
+                est, _ = run(seq, fg, fa, None, cam_naive, model, cfg, imu_quality=q)
                 rows["ours"] = metrics.ate(est, seq.p)
                 results.setdefault(name, []).append({"room": test, "start": st, **rows})
             r = results[name][-len(STARTS):]

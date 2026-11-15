@@ -1,0 +1,16 @@
+clean                        imu_only=4.68  naive_fusion=0.03  tlio_style=6.31  ours_no_model=0.03  ours_tlio_model=0.03  ours=0.03   valid ours=1.00
+camera_blackout              imu_only=4.68  naive_fusion=0.18  tlio_style=6.31  ours_no_model=0.11  ours_tlio_model=1.82  ours=1.69   valid ours=1.00
+camera_dark                  imu_only=4.68  naive_fusion=0.25  tlio_style=6.31  ours_no_model=0.25  ours_tlio_model=0.25  ours=0.25   valid ours=1.00
+camera_blur                  imu_only=4.68  naive_fusion=0.23  tlio_style=6.31  ours_no_model=0.26  ours_tlio_model=0.24  ours=0.25   valid ours=1.00
+camera_wrong_fix             imu_only=4.68  naive_fusion=0.31  tlio_style=6.31  ours_no_model=0.11  ours_tlio_model=4.17  ours=4.79   valid ours=1.00
+imu_noise_all                imu_only=21.70  naive_fusion=0.03  tlio_style=6.28  ours_no_model=0.03  ours_tlio_model=0.03  ours=0.03   valid ours=1.00
+one_imu_bias                 imu_only=56.14  naive_fusion=0.03  tlio_style=6.27  ours_no_model=0.03  ours_tlio_model=0.03  ours=0.03   valid ours=1.00
+one_imu_stuck                imu_only=383.06  naive_fusion=0.15  tlio_style=186.34  ours_no_model=0.03  ours_tlio_model=0.03  ours=0.03   valid ours=1.00
+one_imu_spikes               imu_only=42.20  naive_fusion=0.04  tlio_style=5.66  ours_no_model=0.03  ours_tlio_model=0.03  ours=0.03   valid ours=1.00
+one_imu_saturation           imu_only=95.47  naive_fusion=0.04  tlio_style=6.06  ours_no_model=0.03  ours_tlio_model=0.03  ours=0.03   valid ours=1.00
+blackout_plus_one_imu_bias   imu_only=137.09  naive_fusion=1.54  tlio_style=6.22  ours_no_model=0.10  ours_tlio_model=1.82  ours=1.69   valid ours=1.00
+dark_plus_imu_drift          imu_only=336.82  naive_fusion=0.25  tlio_style=6.25  ours_no_model=0.25  ours_tlio_model=0.24  ours=0.25   valid ours=1.00
+blackout_plus_vibration_all  imu_only=35.00  naive_fusion=0.69  tlio_style=6.27  ours_no_model=0.67  ours_tlio_model=1.42  ours=1.84   valid ours=1.00
+blackout_plus_spikes_all     imu_only=135.14  naive_fusion=2.47  tlio_style=5.83  ours_no_model=0.26  ours_tlio_model=1.79  ours=1.71   valid ours=1.00
+blackout_plus_saturation_all imu_only=223.22  naive_fusion=11.30  tlio_style=6.24  ours_no_model=11.28  ours_tlio_model=1.90  ours=1.88   valid ours=0.86
+blackout_plus_dropout_all    imu_only=241.82  naive_fusion=3.68  tlio_style=6.16  ours_no_model=3.83  ours_tlio_model=2.28  ours=2.15   valid ours=0.91

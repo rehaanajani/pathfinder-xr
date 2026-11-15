@@ -63,18 +63,22 @@ def test_vote_drops_stuck_imu_even_with_two():
 
 
 def test_parity_isolates_small_bias_that_voting_misses():
+    # The fault starts after the causal warm-up (>= 2.6 s for three IMUs). The original test put it
+    # at 2 s, inside the calibration that used to be computed from the first second of the *whole*
+    # recording; a fault inside the warm-up is covered by tests/test_imu_health.py.
     from pathfinder.parity import ParityFDI
-    s = head_walk(10, n_imus=3)
-    bad = apply_imu_faults(s, [Fault("imu_bias", 2, 1e9, 1, {"gyro": [0.02, 0, 0], "acc": [0.3, 0, 0]})])
+    s = head_walk(13, n_imus=3)
+    bad = apply_imu_faults(s, [Fault("imu_bias", 5, 1e9, 1, {"gyro": [0.02, 0, 0], "acc": [0.3, 0, 0]})])
     w, D, info = ParityFDI(3).run(bad.gyro, bad.acc, s.rate)
-    after = w[:, 30:]
+    after = w[:, 60:]
     assert after[1].mean() < 0.1 and after[0].mean() > 0.9 and after[2].mean() > 0.9
 
 
 def test_parity_detects_but_cannot_isolate_with_two_imus():
     from pathfinder.parity import ParityFDI
-    s = head_walk(10, n_imus=2)
-    bad = apply_imu_faults(s, [Fault("imu_bias", 2, 1e9, 0, {"gyro": [0.1, 0, 0], "acc": [1.0, 0, 0]})])
+    # Fault after the causal warm-up (see the note in the test above).
+    s = head_walk(13, n_imus=2)
+    bad = apply_imu_faults(s, [Fault("imu_bias", 5, 1e9, 0, {"gyro": [0.1, 0, 0], "acc": [1.0, 0, 0]})])
     w, D, info = ParityFDI(2).run(bad.gyro, bad.acc, s.rate)
-    assert info["detected"][30:].mean() > 0.9
-    assert np.allclose(w[:, 30:], 0.5)
+    assert info["detected"][60:].mean() > 0.9
+    assert np.allclose(w[:, 60:], 0.5)
