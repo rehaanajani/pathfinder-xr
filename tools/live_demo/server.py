@@ -39,6 +39,7 @@ DT_NS = int(1e9 / RATE)
 Y_UP_TO_Z_UP = R.from_matrix([[1, 0, 0], [0, 0, -1], [0, 1, 0]])    # ARCore world (y up) -> ours (z up)
 STATE = {"paths": {"arcore": [], "standard": [], "ours": []}, "info": {}}
 LOCK = threading.Lock()
+OURS_SET: dict = {}                 # optional FilterConfig overrides for Path Finder (analyze.py --set)
 
 
 class Live:
@@ -57,7 +58,7 @@ class Live:
             self.predictor = Predictor("models/dispnet_faults/best.pt")
 
     def _start(self, p, q):
-        ours = replace(ours_cfg(), trust=None)
+        ours = replace(ours_cfg(), trust=None, **OURS_SET)
         std = FilterConfig(use_health=False, use_gate=False)
         self.trk = {"standard": StreamingTracker(std, p, q),
                     "ours": StreamingTracker(ours, p, q, predictor=self.predictor)}
@@ -226,7 +227,12 @@ def main():
     ap.add_argument("--model", action="store_true", help="also use the learned motion model")
     ap.add_argument("--replay", help="replay a saved session instead of a live phone")
     ap.add_argument("--port", type=int, default=8080)
+    ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
+                    help="FilterConfig override for Path Finder, e.g. outage_tighten_s=3")
     args = ap.parse_args()
+    for it in args.set:
+        k, v = it.split("=", 1)
+        OURS_SET[k] = type(getattr(FilterConfig(), k))(v)
     live = Live(args.model)
     threading.Thread(target=ThreadingHTTPServer(("127.0.0.1", args.port), Web).serve_forever, daemon=True).start()
     print(f"open http://localhost:{args.port}", flush=True)
