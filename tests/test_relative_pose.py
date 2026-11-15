@@ -105,7 +105,9 @@ def _start_frame_nees(seq, out, i0):
 
 def test_vision_only_relative_fusion_bounds_drift_and_stays_consistent():
     seq = synthetic.head_walk(40, seed=3)
-    _, log_vo, out = _run(seq, vo_fixture(seq))
+    # The fixture's VO noise is drawn from exactly the covariance it reports, so asserting a validated
+    # VO covariance is true here by construction (never for a real front end without held-out evidence).
+    _, log_vo, out = _run(seq, vo_fixture(seq), vo_covariance_validated=True)
     _, _, out_imu = replay(seq.t, seq.gyro[0], seq.acc[0], FilterConfig(), ReferenceFreeInit(), cam=None)
     e_vo, i0 = _start_frame_error(seq, out)
     e_imu, _ = _start_frame_error(seq, out_imu)
@@ -122,6 +124,12 @@ def test_vision_only_relative_fusion_bounds_drift_and_stays_consistent():
     assert 3.5 < nis.mean() < 9.0
     assert out["reasons"][-1] & REASONS["POSITION_FRAME_ARBITRARY"]
     assert out["valid"][i0 + 200:].mean() > 0.95
+    # Default: VO covariance not validated -> best-effort poses, explicitly invalid with a reason.
+    _, _, out_default = _run(seq, vo_fixture(seq))
+    assert not out_default["valid"].any()
+    started = out_default["track_state"] != 0
+    assert np.all(out_default["reasons"][started] & REASONS["COVARIANCE_UNRELIABLE"])
+    np.testing.assert_allclose(out_default["p"], out["p"])
 
 
 def test_restart_needs_new_keyframe_and_outage_is_reported():

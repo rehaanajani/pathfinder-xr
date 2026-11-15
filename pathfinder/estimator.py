@@ -462,8 +462,10 @@ class StreamingEstimator:
             f.add_clone(k, self.W // self.every + 1)
 
         Rm = f.R.as_matrix()
-        self.hist.append((t, Rm, f.p.copy(), f.P[6:9, 6:9].copy(),
-                          gyro if finite else self.held[0], acc if finite else self.held[1], lost))
+        g_in, a_in = (gyro, acc) if finite else (self.held[0], self.held[1])
+        if c.model_input_bias_corrected:
+            g_in, a_in = g_in - f.bg, a_in - f.ba
+        self.hist.append((t, Rm, f.p.copy(), f.P[6:9, 6:9].copy(), g_in, a_in, lost))
         self.k += 1
         return self._output(t, imu_state, lost, reasons)
 
@@ -524,6 +526,9 @@ class StreamingEstimator:
         # An unvalidated learned covariance cannot certify an unanchored pose. Degraded vision
         # also lacks demonstrated covariance calibration in this release, even without a model.
         unreliable = ((distrusted or uncalibrated_model) and cam != CAM_NOMINAL) or cam == CAM_DEGRADED
+        # Visual-odometry covariance is fitted on development data only (see FilterConfig).
+        if self.camera_mode == "relative" and not c.vo_covariance_validated:
+            unreliable = True
         if unreliable:
             reasons |= REASONS["COVARIANCE_UNRELIABLE"]
         self.log.p.append(f.p.copy())

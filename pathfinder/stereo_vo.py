@@ -7,8 +7,10 @@ triangulation + RANSAC PnP), with these changes:
   radtan), instead of ``cv2.fisheye`` for every camera;
 * every relative pose carries a covariance from the PnP information matrix, including the
   stereo-depth uncertainty of each landmark (not a constant);
-* events follow the estimator's keyframe protocol: a ``kf`` event clones the pose at every frame with a
-  usable stereo map, a ``rel`` event is the IMU motion since the previous keyframe. After a failure
+* events follow the estimator's keyframe protocol: a ``kf`` event clones the pose at a frame with a
+  usable stereo map, a ``rel`` event is the IMU motion since the previous keyframe (``kf_every``
+  frames of KLT tracking, then one PnP solve);
+* landmarks are anchored on their left-image ray (see ``triangulate``). After a failure
   (no relative solve), the next frame is still a keyframe, so recovery has an anchor and the first
   measurement after it is relative to a pose that the filter actually has.
 
@@ -39,7 +41,9 @@ class VOConfig:
     stereo_rep_px: float = 1.0   # max stereo reprojection error accepted for a landmark
     pixel_std: float = 0.5       # assumed corner localisation noise, px (floor of the residual scale)
     max_rot_rad: float = 0.6     # larger frame-to-frame rotations are treated as failed solves
-    max_trans_m: float = 0.5     # ... and translations (5 m/s at 10 Hz)
+    max_trans_m: float = 0.5     # ... and translations (5 m/s at 10 Hz); both per tracked frame
+    kf_every: int = 1            # frames tracked against one keyframe before the next relative solve
+    kf_min_track_ratio: float = 0.5   # ... or earlier, when fewer than this fraction of its tracks survive
 
 
 def _se3(R, t):
@@ -56,7 +60,9 @@ class StereoVO:
         self.f = rig.cam0.focal
         self.lk = dict(winSize=(21, 21), maxLevel=3,
                        criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01))
-        self.prev = None          # (img0, pts2d (N, 2) px, X (N, 3) cam0, Sigma_X (N, 3, 3), kf_id)
+        # (last image, tracked px (N, 2), keyframe landmarks X (N, 3) in keyframe cam0, Sigma_X, kf_id,
+        #  landmarks at the keyframe, frames since the keyframe)
+        self.prev = None
         self.kf_id = 0
         self.stats = {"frames": 0, "rel": 0, "fail_track": 0, "fail_pnp": 0, "fail_stereo": 0, "fail_motion": 0}
 
@@ -110,7 +116,13 @@ class StereoVO:
         rep = np.linalg.norm(x1[:, :2] / x1[:, 2:3] - n1, axis=1) * rig.cam1.focal
         lo, hi = cfg.depth_range
         keep = (X[:, 2] > lo) & (X[:, 2] < hi) & (rep < cfg.stereo_rep_px) & (x1[:, 2] > lo)
-        pts, X = pts[keep], X[keep]
+        pts, X, n0 = pts[keep], X[keep], n0[keep]
+        # Anchor each landmark on its left-image ray (keep the triangulated depth). DLT triangulation
+        # splits any residual epipolar error between the two views, so X would not reproject onto its
+        # own left pixel: on TUM-VI room1 that offset is systematic (vertical) and produced a constant
+        # ~0.02 deg/frame pitch bias against the gyro. With the anchor, zero motion gives exactly zero
+        # PnP residual at the identity, as it must.
+        X = np.c_[n0, np.ones(len(n0))] * X[:, 2:3]
         # Landmark covariance: lateral pixel noise and stereo depth noise sigma_z = z^2 sigma_d / (f b),
         # with sigma_d = sqrt(2) pixel_std (one corner in each image).
         z = np.linalg.norm(X, axis=1)
@@ -199,16 +211,27 @@ class StereoVO:
         return T0[:3, 3], T0[:3, :3], 0.5 * (cov + cov.T)
 
     def step(self, t, img0, img1) -> list:
-        """One stereo pair (uint8 grey, timestamp on the IMU clock). Returns estimator events."""
+        """One stereo pair (uint8 grey, timestamp on the IMU clock). Returns estimator events.
+
+        Features of the current keyframe are tracked frame to frame (KLT); every ``kf_every`` frames (or
+        when too few tracks survive) the pose relative to the keyframe is solved once by PnP against the
+        keyframe's stereo landmarks, a ``rel`` event is emitted, and the current frame becomes the next
+        keyframe (``kf`` event, same timestamp, after the ``rel``). Consecutive relative measurements
+        therefore use disjoint stereo triangulations, so their errors are not shared through common
+        landmarks (no measurement is fused twice)."""
         cfg = self.cfg
         self.stats["frames"] += 1
         events = []
+        new_kf = self.prev is None
         if self.prev is not None:
-            img_p, pts_p, X_p, S_p, kf_p = self.prev
+            img_p, pts_p, X_p, S_p, kf_p, n_kf, k = self.prev
             q, ok = self._klt(img_p, img0, pts_p)
+            k += 1
             if ok.sum() < cfg.min_inliers:
                 self.stats["fail_track"] += 1
-            else:
+                new_kf = True
+            elif k >= cfg.kf_every or ok.sum() < cfg.kf_min_track_ratio * n_kf:
+                new_kf = True
                 sol = self._pnp(X_p[ok], S_p[ok], q[ok])
                 if sol is None:
                     self.stats["fail_pnp"] += 1
@@ -216,22 +239,25 @@ class StereoVO:
                     T_cc_cp, cov_c, n_in, rms_px = sol
                     dp, dR, cov6 = self._imu_relative(T_cc_cp, cov_c)
                     ang = np.linalg.norm(Rot.from_matrix(dR).as_rotvec())
-                    if ang > cfg.max_rot_rad or np.linalg.norm(dp) > cfg.max_trans_m or not np.isfinite(cov6).all():
+                    if ang > cfg.max_rot_rad * k or np.linalg.norm(dp) > cfg.max_trans_m * k                             or not np.isfinite(cov6).all():
                         self.stats["fail_motion"] += 1
                     else:
                         health = float(np.clip((n_in - cfg.min_inliers) / (cfg.good_inliers - cfg.min_inliers), 0, 1))
                         events.append({"t": float(t), "kind": "rel", "kf": kf_p, "dp": dp, "dR": dR, "cov": cov6,
                                        "health": health, "inliers": int(n_in), "tracked": int(ok.sum()),
-                                       "rms_px": rms_px})
+                                       "rms_px": rms_px, "frames": int(k)})
                         self.stats["rel"] += 1
-        pts, X, S = self.triangulate(img0, img1)
-        if len(pts) >= cfg.min_inliers:
-            self.kf_id += 1
-            events.append({"t": float(t), "kind": "kf", "kf": self.kf_id, "landmarks": int(len(pts))})
-            self.prev = (img0, pts, X, S, self.kf_id)
-        else:
-            self.stats["fail_stereo"] += 1
-            self.prev = None              # nothing to track from: the next usable frame restarts
+            else:
+                self.prev = (img0, q[ok], X_p[ok], S_p[ok], kf_p, n_kf, k)
+        if new_kf:
+            pts, X, S = self.triangulate(img0, img1)
+            if len(pts) >= cfg.min_inliers:
+                self.kf_id += 1
+                events.append({"t": float(t), "kind": "kf", "kf": self.kf_id, "landmarks": int(len(pts))})
+                self.prev = (img0, pts, X, S, self.kf_id, len(pts), 0)
+            else:
+                self.stats["fail_stereo"] += 1
+                self.prev = None              # nothing to track from: the next usable frame restarts
         return events
 
 

@@ -136,6 +136,14 @@ class FilterConfig:
     vo_cov_scale: float = 1.0        # calibration of the visual front end's claimed relative-pose covariance
     vo_gate: float = CHI2_6DOF_999   # hard chi-square gate on the 6-DoF relative-pose innovation
     vo_max_clones: int = 3           # camera keyframe clones kept in the state
+    # The front end's covariance (PnP information x residual scale x vo_cov_scale) has been fitted on
+    # development data only. Like the learned model's, it certifies nothing until held-out coverage
+    # evidence exists: relative-mode outputs are COVARIANCE_UNRELIABLE / invalid unless asserted.
+    vo_covariance_validated: bool = False
+    # TLIO training windows are offline bias-compensated; raw-IMU devices (e.g. TUM-VI) are not. When
+    # true, the learned model sees IMU samples minus the filter's current bias estimate. Off by default
+    # (issue #1 behaviour on the bias-compensated TLIO data).
+    model_input_bias_corrected: bool = False
 
     def __post_init__(self):
         positive = ("fix_std", "gate", "max_imu_gap_s", "max_valid_pos_std", "disp_cov_scale",
@@ -431,11 +439,14 @@ class ESKF:
 
         dp (3,) metres and dR (3x3) are the IMU pose now in the keyframe's IMU frame, cov6 the front
         end's covariance of [dp, dtheta] (rotation as a right perturbation of dR). Returns
-        "no_anchor", "invalid", "accepted" or "rejected". A relative measurement does not observe
+        "no_anchor", "skipped", "invalid", "accepted" or "rejected". A relative measurement does not observe
         absolute position or heading, so it never re-anchors the world frame."""
         if key not in self.clone_k:
             log.vo_no_anchor += 1
             return "no_anchor"
+        if self.cfg.use_health and not health >= self.cfg.min_health:
+            log.cam_skipped += 1               # front end reports essentially nothing usable
+            return "skipped"
         dR = np.asarray(dR, float)
         cov6 = np.asarray(cov6, float) * self.cfg.vo_cov_scale
         if (np.shape(dp) != (3,) or not np.all(np.isfinite(dp)) or dR.shape != (3, 3) or not np.isfinite(dR).all()

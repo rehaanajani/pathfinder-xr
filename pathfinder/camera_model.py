@@ -169,10 +169,14 @@ class RigCalibration:
             T_c1_c0 = np.array(c["cam1"]["T_cn_cnm1"], float)
         else:
             T_c1_c0 = np.array(c["cam1"]["T_cam_imu"], float) @ np.linalg.inv(T_c0_i)
+        # An absent time shift is NOT a measured zero: it is recorded as an assumption so the
+        # evaluation can report the measured offset (tools/check_sync.py) next to it.
+        shift_source = "file" if "timeshift_cam_imu" in c["cam0"] else "absent_assumed_zero"
         shift = float(c["cam0"].get("timeshift_cam_imu", 0.0))
         shift1 = float(c["cam1"].get("timeshift_cam_imu", shift))
         if abs(shift1 - shift) > 1e-4:
             raise ValueError("cameras with different IMU time shifts are not supported")
         import hashlib
         return RigCalibration(RigCalibration._camera(c["cam0"]), RigCalibration._camera(c["cam1"]), T_c0_i,
-                              T_c1_c0, shift, str(path), {"sha256": hashlib.sha256(text.encode()).hexdigest()})
+                              T_c1_c0, shift, str(path), {"sha256": hashlib.sha256(text.encode()).hexdigest(),
+                                                           "time_shift_source": shift_source})
