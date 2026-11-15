@@ -34,7 +34,8 @@ stand still on held-out EuRoC and TUM-VI is the target; Debadrita's entry does i
 | EuRoC data | Done on Mayank's and Debadrita's machines (all 11); still fetching on Rehaan's |
 | Their degradation script | Stand-in `tools/degrade_imu.py`; organisers' script not received |
 | Their scoring | Done: `tools/score_track3.py` and Mayank's `evo`-based `tests/stress/track3_eval.py` |
-| **Packaging** | **Not started**: Dockerfile, `team_name.zip` (trajectory + `metadata.json` + `src/` + README), PPT `SRMIST_CaliforniaBurrito`, video ≤ 3 min, public/shared repo, Google Form |
+| Packaging (code) | Done: `src/Dockerfile`, `src/README.md`, `tools/make_bundle.py <input>` -> `dist/CaliforniaBurrito.zip` (trajectory + `metadata.json` + `src/`); CI builds the image and runs the contract tests on Linux |
+| **Packaging (rest)** | **Not done**: the real `estimated_trajectory.txt` (needs the organisers' input file), PPT `SRMIST_CaliforniaBurrito`, video ≤ 3 min, repo made public/shared, Google Form |
 
 ## Open issues
 
@@ -45,6 +46,6 @@ entry. Fix them when that line is reconciled with `main`.
 
 1. Done: `src/main.cpp`. The network is now the default in both entries (`--model none` = old filter); with it the
    C++ entry beats stand still on MH_05 + room3 (ATE 3.81 vs 4.04 m, checkpoints 3.43 vs 3.68 m).
-2. Dockerfile, bundle script, `src/README.md`, `metadata.json`.
+2. Done: Dockerfile, bundle script, `src/README.md`, `metadata.json`, CI.
 3. PPT and video.
 4. Reconcile the demo line with `main`; fix #13-#19.
