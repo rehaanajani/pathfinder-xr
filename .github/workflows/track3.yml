@@ -1,0 +1,37 @@
+name: track3-entry
+on:
+  push:
+    paths: ["src/**", "tests/stress/test_main_contract.py", ".github/workflows/track3.yml"]
+  pull_request:
+    paths: ["src/**", "tests/stress/test_main_contract.py", ".github/workflows/track3.yml"]
+jobs:
+  entry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install numpy scipy pytest
+      - name: Build the C++ entry
+        run: make -C src
+      - name: Contract tests, C++ (one pose per row, bad rows, 8 MB, 20 ms/s)
+        run: PF_ENTRY=cpp python -m pytest -q tests/stress/test_main_contract.py
+      - name: Contract tests, Python (all but the RAM budget)
+        run: python -m pytest -q tests/stress/test_main_contract.py -k "not peak_ram"
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t pathfinder src/
+      - name: Run the image on a synthetic IMU file
+        run: |
+          mkdir -p data/imu0
+          python3 -c "
+          import math
+          rows=['#timestamp [ns],w_x,w_y,w_z,a_x,a_y,a_z']
+          for i in range(4000):
+              t=1403636579758555392+i*5000000
+              rows.append(f'{t},{0.01*math.sin(i/50):.6f},0.002,0.001,{0.1*math.cos(i/80):.6f},0.03,9.81')
+          open('data/imu0/data.csv','w').write(chr(10).join(rows)+chr(10))"
+          docker run --rm -v "$PWD/data:/data" pathfinder /data -o /data/estimated_trajectory.txt
+          test "$(grep -vc '^#' data/estimated_trajectory.txt)" = 4000
