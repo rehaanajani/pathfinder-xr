@@ -54,7 +54,9 @@ def main():
             subprocess.run([sys.executable, str(ROOT / "tools" / "degrade_imu.py"), str(src), str(d), "--seed", str(seed),
                             "--death", a.death, "--dropout-mode", a.dropout_mode], check=True, capture_output=True)
             est = d / "estimated_trajectory.txt"
-            r = subprocess.run([sys.executable, str(ROOT / "src" / "main.py"), str(d), "-o", str(est), *extra],
+            entry = [str(ROOT / "src" / "pathfinder")] if os.environ.get("PF_ENTRY") == "cpp" \
+                else [sys.executable, str(ROOT / "src" / "main.py")]          # PF_ENTRY=cpp: the C++ build
+            r = subprocess.run([*entry, str(d), "-o", str(est), *extra],
                                capture_output=True, text=True)
             if r.returncode != 0:
                 print(spec, seed, "FAILED", r.stderr[-400:]); continue

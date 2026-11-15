@@ -18,6 +18,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 MAIN = ROOT / "src" / "main.py"
+# PF_ENTRY=cpp runs the same tests against the C++ build (make -C src) instead of main.py.
+ENTRY = [str(ROOT / "src" / "pathfinder")] if os.environ.get("PF_ENTRY") == "cpp" else [sys.executable, str(MAIN)]
 pytestmark = pytest.mark.skipif(not MAIN.exists(), reason="src/main.py not on this branch yet")
 
 HEADER = "#timestamp [ns],w_RS_S_x [rad s^-1],w_RS_S_y [rad s^-1],w_RS_S_z [rad s^-1]," \
@@ -44,8 +46,8 @@ def write_csv(path, ts, g, a, header=HEADER, eol="\n", fmt="{:.6f}"):
 def run(csv, out, extra=()):
     """Returns (CompletedProcess, peak_rss_bytes or None, wall_s)."""
     import time
-    cmd = ["/usr/bin/time", "-l", sys.executable, str(MAIN), str(csv), "-o", str(out), *extra] \
-        if sys.platform == "darwin" else [sys.executable, str(MAIN), str(csv), "-o", str(out), *extra]
+    cmd = ["/usr/bin/time", "-l", *ENTRY, str(csv), "-o", str(out), *extra] \
+        if sys.platform == "darwin" else [*ENTRY, str(csv), "-o", str(out), *extra]
     t = time.perf_counter()
     p = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT, env={**os.environ, "OMP_NUM_THREADS": "1"})
     wall = time.perf_counter() - t

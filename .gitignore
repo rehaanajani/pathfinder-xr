@@ -14,3 +14,4 @@ deck/*.jpg
 deck/*.pdf
 .claude/
 runs/
+src/pathfinder
