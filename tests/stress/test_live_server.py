@@ -76,7 +76,6 @@ def test_global_shuffle_does_not_crash():
     assert r["crash"] is None
 
 
-@pytest.mark.xfail(strict=True, reason="rehaanajani/pathfinder-xr#18")
 def test_truncated_last_line_in_replay_and_analyze(tmp_path):
     txt = phone.raw_text("B")
     cut = txt[: len(txt) - 40]                       # last line cut mid-way
@@ -87,7 +86,6 @@ def test_truncated_last_line_in_replay_and_analyze(tmp_path):
     S.replay(S.Live(), str(f), speed=1e9)
 
 
-@pytest.mark.xfail(strict=True, reason="rehaanajani/pathfinder-xr#18")
 def test_malformed_lines_do_not_kill_the_server():
     """One bad line from the phone (missing field / wrong type) must not stop the tracker."""
     lines = phone.load_lines("B")[:6000]
