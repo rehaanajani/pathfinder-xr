@@ -19,9 +19,10 @@ Pipeline (single pass over the samples, single thread, standard library only):
      bias drift can't run the position away.
   5. Dropouts and the final IMU failure: dead reckoning from the last trusted state — constant turn rate decaying
      to zero, velocity decaying with a time constant, never faster than the speed limit.
-  6. Optional (--model src/velnet_weights.bin, needs numpy): a small learned network reads the last 1 s of
+  6. Learned velocity (default when src/velnet_weights.bin is present, needs numpy; --model none turns it off): a
+     small learned network reads the last 1 s of
      gravity-aligned IMU and its velocity is used as a measurement; this also switches the filter to the
-     "learned" preset (see PRESETS and docs/LEARNED_VELOCITY.md). Without --model nothing changes.
+     "learned" preset (see PRESETS and docs/LEARNED_VELOCITY.md). --model none --preset physics is the original filter.
 """
 
 import argparse
@@ -527,7 +528,9 @@ def args(argv=None):
                     help="s; time constant of the pull of position back to the start point (0 = off)")
     ap.add_argument("--blind-vel-tau", type=float, default=1.5)
     ap.add_argument("--blind-turn-tau", type=float, default=0.5)
-    ap.add_argument("--model", default=None, help="weights.bin of the learned velocity network (src/velnet.py)")
+    ap.add_argument("--model", default="auto",
+                    help="weights of the learned velocity network (src/velnet.py); 'auto' (default) = velnet_weights.bin "
+                         "next to this script if present, 'none' = physics only")
     ap.add_argument("--model-every", type=int, default=20, help="healthy samples between network updates")
     ap.add_argument("--model-min-valid", type=float, default=0.25, help="fraction of the window that must be healthy")
     ap.add_argument("--model-ref", type=float, default=0.1, help="m; displacement std at which the position gain halves")
@@ -546,6 +549,11 @@ def args(argv=None):
                     help="default values of the options below that depend on it: 'physics' (original filter) or "
                          "'learned' (retuned for the velocity network; the default when --model is given)")
     a = ap.parse_args(argv)
+    if a.model == "auto":
+        cand = Path(__file__).resolve().parent / "velnet_weights.bin"
+        a.model = str(cand) if cand.exists() else None
+    elif a.model in ("none", ""):
+        a.model = None
     for k, v in PRESETS[a.preset or ("learned" if a.model else "physics")].items():
         if getattr(a, k) is None:
             setattr(a, k, v)
