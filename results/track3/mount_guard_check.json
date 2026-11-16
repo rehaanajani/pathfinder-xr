@@ -1,0 +1,135 @@
+{
+  "normal_all_quiet_and_identical": true,
+  "rotated_switched": 14,
+  "recordings": 16,
+  "rows": [
+    {
+      "recording": "euroc:MH_01_easy",
+      "seed": 1,
+      "guard_message_normal": false,
+      "identical_to_guard_off": true,
+      "switches_when_rotated_90x": false,
+      "rotated_message": "mount guard: start-up specific force 10.71 m/s^2 is not gravity alone; keeping the body-frame network"
+    },
+    {
+      "recording": "euroc:MH_02_easy",
+      "seed": 1,
+      "guard_message_normal": false,
+      "identical_to_guard_off": true,
+      "switches_when_rotated_90x": true,
+      "rotated_message": "IMU mount 25 deg from the training mounts: using velnet_weights_world.bin"
+    },
+    {
+      "recording": "euroc:MH_03_medium",
+      "seed": 1,
+      "guard_message_normal": false,
+      "identical_to_guard_off": true,
+      "switches_when_rotated_90x": false,
+      "rotated_message": ""
+    },
+    {
+      "recording": "euroc:MH_04_difficult",
+      "seed": 1,
+      "guard_message_normal": false,
+      "identical_to_guard_off": true,
+      "switches_when_rotated_90x": true,
+      "rotated_message": "IMU mount 31 deg from the training mounts: using velnet_weights_world.bin"
+    },
+    {
+      "recording": "euroc:MH_05_difficult",
+      "seed": 1,
+      "guard_message_normal": false,
+      "identical_to_guard_off": true,
+      "switches_when_rotated_90x": true,
+      "rotated_message": "IMU mount 30 deg from the training mounts: using velnet_weights_world.bin"
+    },
+    {
+      "recording": "euroc:V1_01_easy",
+      "seed": 1,
+      "guard_message_normal": false,
+      "identical_to_guard_off": true,
+      "switches_when_rotated_90x": true,
+      "rotated_message": "IMU mount 30 deg from the training mounts: using velnet_weights_world.bin"
+    },
+    {
+      "recording": "euroc:V1_02_medium",
+      "seed": 1,
+      "guard_message_normal": false,
+      "identical_to_guard_off": true,
+      "switches_when_rotated_90x": true,
+      "rotated_message": "IMU mount 29 deg from the training mounts: using velnet_weights_world.bin"
+    },
+    {
+      "recording": "euroc:V1_03_difficult",
+      "seed": 1,
+      "guard_message_normal": false,
+      "identical_to_guard_off": true,
+      "switches_when_rotated_90x": true,
+      "rotated_message": "IMU mount 31 deg from the training mounts: using velnet_weights_world.bin"
+    },
+    {
+      "recording": "euroc:V2_01_easy",
+      "seed": 1,
+      "guard_message_normal": false,
+      "identical_to_guard_off": true,
+      "switches_when_rotated_90x": true,
+      "rotated_message": "IMU mount 25 deg from the training mounts: using velnet_weights_world.bin"
+    },
+    {
+      "recording": "euroc:V2_02_medium",
+      "seed": 1,
+      "guard_message_normal": false,
+      "identical_to_guard_off": true,
+      "switches_when_rotated_90x": true,
+      "rotated_message": "IMU mount 26 deg from the training mounts: using velnet_weights_world.bin"
+    },
+    {
+      "recording": "euroc:V2_03_difficult",
+      "seed": 1,
+      "guard_message_normal": false,
+      "identical_to_guard_off": true,
+      "switches_when_rotated_90x": true,
+      "rotated_message": "IMU mount 25 deg from the training mounts: using velnet_weights_world.bin"
+    },
+    {
+      "recording": "tumvi:room1",
+      "seed": 1,
+      "guard_message_normal": false,
+      "identical_to_guard_off": true,
+      "switches_when_rotated_90x": true,
+      "rotated_message": "IMU mount 88 deg from the training mounts: using velnet_weights_world.bin"
+    },
+    {
+      "recording": "tumvi:room2",
+      "seed": 1,
+      "guard_message_normal": false,
+      "identical_to_guard_off": true,
+      "switches_when_rotated_90x": true,
+      "rotated_message": "IMU mount 89 deg from the training mounts: using velnet_weights_world.bin"
+    },
+    {
+      "recording": "tumvi:room3",
+      "seed": 1,
+      "guard_message_normal": false,
+      "identical_to_guard_off": true,
+      "switches_when_rotated_90x": true,
+      "rotated_message": "IMU mount 88 deg from the training mounts: using velnet_weights_world.bin"
+    },
+    {
+      "recording": "tumvi:room4",
+      "seed": 1,
+      "guard_message_normal": false,
+      "identical_to_guard_off": true,
+      "switches_when_rotated_90x": true,
+      "rotated_message": "IMU mount 88 deg from the training mounts: using velnet_weights_world.bin"
+    },
+    {
+      "recording": "tumvi:room6",
+      "seed": 1,
+      "guard_message_normal": false,
+      "identical_to_guard_off": true,
+      "switches_when_rotated_90x": true,
+      "rotated_message": "IMU mount 89 deg from the training mounts: using velnet_weights_world.bin"
+    }
+  ]
+}
