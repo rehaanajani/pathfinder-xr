@@ -77,15 +77,14 @@ def load_streams(name: str, root: Path = ROOT) -> Streams:
         if not fname or fname in (".", "..") or any(c in fname for c in ("/", "\\", ":")):
             raise ValueError("camera filename must be a plain basename")
         a, b = m / "cam0" / "data" / fname.strip(), m / "cam1" / "data" / fname.strip()
+        # Directories inside the sequence (mav0, cam*, data) must be real: a linked directory could point
+        # anywhere. Where the sequence itself is stored (above mav0) is the user's choice and is not checked.
         for path in (a, b):
-            base = path.parent.resolve()
-            if not path.resolve().is_relative_to(base):
-                raise ValueError("camera path escapes its data directory")
-            if any(p.is_symlink() or getattr(p, "is_junction", lambda: False)()
-                   for p in (path, *path.parents)):
-                raise ValueError("camera paths must not traverse links")
-        # Only regular extracted files: archive symlinks (e.g. dso/cam*/images) are never followed.
-        if a.is_file() and b.is_file() and not a.is_symlink() and not b.is_symlink():
+            for p in (path.parent, path.parent.parent, m):
+                if p.is_symlink() or _is_junction(p):
+                    raise ValueError("camera paths must not traverse links")
+        # Only regular extracted files: linked frames (e.g. archive symlinks) are skipped, never followed.
+        if all(f.is_file() and not f.is_symlink() and not _is_junction(f) for f in (a, b)):
             pairs.append((a, b))
             keep.append(i)
     calib = d / "dso" / "camchain.yaml"
@@ -123,6 +122,10 @@ def load_reference(name: str, root: Path = ROOT) -> Reference:
         raise ValueError("reference poses must be finite with nonzero quaternions")
     q = q / norm
     return Reference(gt[:, 0] * 1e-9, gt[:, 1:4], q)
+
+
+def _is_junction(p):
+    return getattr(p, "is_junction", lambda: False)()
 
 
 def _check_times(t, name):
