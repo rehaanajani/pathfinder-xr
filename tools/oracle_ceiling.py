@@ -81,7 +81,7 @@ def main():
             rows.append(res)
             print(spec, seed, {k: round(res[k], 2) for k in ("ate_rmse_m", "checkpoints_m", "blind_mean_m", "dropout_m")},
                   flush=True)
-    keys = ["ate_rmse_m", "checkpoints_m", "blind_mean_m", "dropout_m", "rpe_1s_m"]
+    keys = ["ate_rmse_m", "checkpoints_m", "blind_mean_m", "dropout_m", "position_drift_1s_m"]
     print("MEAN", {k: round(float(np.nanmean([r.get(k, np.nan) for r in rows])), 2) for k in keys})
 
 

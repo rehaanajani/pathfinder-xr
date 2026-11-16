@@ -25,6 +25,7 @@
 #include <zlib.h>
 
 static const double G = 9.80665;
+static const double MOUNT_G_TOL = 0.05;     // see main.py
 // Gravity in the IMU frame at the start of the training recordings (EuRoC, TUM-VI); see main.py TRAIN_UP.
 static const double TRAIN_UP[2][3] = {{0.9412, -0.0101, -0.3376}, {0.0160, -0.0040, 0.9999}};
 static const double NaN = std::nan("");
@@ -332,7 +333,9 @@ static bool parse_line(const std::string& raw, Row& r) {
     if (fl) {
         double v;
         if (!py_float(p0, v) || !std::isfinite(v)) return false;
-        r.t = (long long)std::trunc(v);
+        v = std::trunc(v);
+        if (!(v >= -9223372036854775808.0 && v < 9223372036854775808.0)) return false;   // must fit in int64
+        r.t = (long long)v;
     } else if (!py_int(p0, r.t)) return false;
     double vals[6];
     for (int i = 0; i < 6; i++) {
@@ -552,6 +555,11 @@ struct PathFinder {
         }
         double ang = std::acos(std::max(-1.0, std::min(1.0, best))) * 180.0 / M_PI;
         if (ang <= A.mount_guard_deg) return;
+        if (std::fabs(n / G - 1.0) > MOUNT_G_TOL) {      // sustained acceleration tilts the mean; not a mount
+            std::fprintf(stderr, "mount guard: start-up specific force %.2f m/s^2 is not gravity alone; "
+                                 "keeping the body-frame network\n", n);
+            return;
+        }
         if (!fallback.load(A.fallback_model)) {           // unusable file: keep the body-frame network (as main.py)
             std::fprintf(stderr, "mount guard: cannot load %s; keeping the body-frame network\n", A.fallback_model.c_str());
             return;

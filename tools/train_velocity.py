@@ -79,7 +79,7 @@ def prep_one(job):
                    check=True, capture_output=True)
     rec = []
     entry.run(str(work), str(work / "est.txt"),
-              entry.args([str(work), "--preset", "learned", "--model-window", str(WINDOW), "--model-dec", str(DEC)]),
+              entry.args([str(work), "--preset", "learned", "--model", "none", "--model-input", "world", "--model-window", str(WINDOW), "--model-dec", str(DEC)]),
               rec=rec)
     n = len(rec)
     t = np.array([r[0] for r in rec], np.int64) * 1e-9                  # time of the last sample of each slot

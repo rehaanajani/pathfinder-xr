@@ -33,6 +33,7 @@ import zipfile
 from pathlib import Path
 
 G = 9.80665
+MOUNT_G_TOL = 0.05                            # |mean specific force| / g - 1 above which the mount guard holds off
 # Gravity ("up") in the IMU frame at the start of the recordings the body-frame network was trained on: EuRoC (all 11
 # sequences within ~6 deg of this) and TUM-VI (rooms 1-6). The mount guard compares a new file against these.
 TRAIN_UP = ((0.9412, -0.0101, -0.3376), (0.0160, -0.0040, 0.9999))
@@ -103,7 +104,9 @@ def parse_rows(f):
         parts = s.replace(";", ",").split(",")
         try:
             t = int(float(parts[0])) if "e" in parts[0].lower() or "." in parts[0] else int(parts[0])
-        except ValueError:
+        except (ValueError, OverflowError):
+            continue
+        if not -(1 << 63) <= t < (1 << 63):         # as the C++ entry: timestamps must fit in int64
             continue
         vals = []
         for x in parts[1:7]:
@@ -212,6 +215,10 @@ class PathFinder:
         cos = max(sum(u[i] * m[i] for i in range(3)) / norm3(m) for m in TRAIN_UP)
         self.mount_angle = math.degrees(math.acos(max(-1.0, min(1.0, cos))))
         if self.mount_angle > A.mount_guard_deg:
+            if abs(n / G - 1.0) > MOUNT_G_TOL:     # sustained acceleration tilts the mean; that is not a mount
+                print(f"mount guard: start-up specific force {n:.2f} m/s^2 is not gravity alone; "
+                      "keeping the body-frame network", file=sys.stderr)
+                return
             from velnet import VelNet
             try:
                 fb = VelNet(A.fallback_model)
@@ -228,6 +235,8 @@ class PathFinder:
     def zero_velocity(self, g, a):
         A = self.a
         w = A.zupt_window
+        if A.zupt_gyro_std > 0 and w <= 0:
+            return False
         if A.zupt_gyro_std > 0:
             # Still = the readings barely change (per-axis standard deviation over the window). Unlike a test on
             # the gyro magnitude this also works when the gyro has a large constant bias, and the window mean is

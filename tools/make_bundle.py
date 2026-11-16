@@ -56,6 +56,8 @@ def main():
         cmd += ["--extend-blind", str(a.extend_blind)]
     # Measure the estimator process alone (wait4 gives that one child's own usage; RUSAGE_CHILDREN would also
     # count the compiler that make just ran).
+    if not hasattr(os, "wait4"):
+        raise SystemExit("make_bundle.py measures the entry with os.wait4, which needs Linux or macOS")
     t0 = time.perf_counter()
     proc = subprocess.Popen(cmd)
     _, status, ru = os.wait4(proc.pid, 0)

@@ -47,6 +47,7 @@ def main():
     work = ROOT / "runs" / "track3" / a.tag
     work.mkdir(parents=True, exist_ok=True)
     rows = []
+    failed = []
     for spec in a.data:
         src, gt = source(spec)
         for seed in a.seeds:
@@ -59,7 +60,7 @@ def main():
             r = subprocess.run([*entry, str(d), "-o", str(est), *extra],
                                capture_output=True, text=True)
             if r.returncode != 0:
-                print(spec, seed, "FAILED", r.stderr[-400:]); continue
+                print(spec, seed, "FAILED", r.stderr[-400:]); failed.append({"data": spec, "seed": seed, "returncode": r.returncode}); continue
             res = score(est, gt, json.load(open(d / "truth.json")), d / "imu0" / "data.csv")
             res.update(data=spec, seed=seed)
             rows.append(res)
@@ -70,7 +71,9 @@ def main():
               + f"   {r.get('rows_match_input')}")
     if rows:
         print(f"{'MEAN':28s}" + "".join(f"{np.nanmean([r.get(k, np.nan) for r in rows]):14.2f}" for k in keys))
-    (ROOT / "runs" / "track3" / f"{a.tag}.json").write_text(json.dumps({"args": extra, "rows": rows}, indent=1))
+    (ROOT / "runs" / "track3" / f"{a.tag}.json").write_text(json.dumps({"args": extra, "rows": rows, "failed": failed}, indent=1))
+    if failed:
+        raise SystemExit(f"{len(failed)} run(s) failed; the mean above excludes them")
 
 
 if __name__ == "__main__":

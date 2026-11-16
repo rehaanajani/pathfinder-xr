@@ -77,7 +77,8 @@ def one(job):
             out["hold"] = {"mean_m": float(hold.mean()), "end_m": float(hold[-1]),
                            "rel_mean_m": float(tr.mean()), "rel_end_m": float(tr[-1])}
             k = np.argmin(abs(tg - (t0 * 1e-9 + tk)))
-            out["gt_speed_mps"] = float(np.linalg.norm(pg[min(k + 100, len(pg) - 1)] - pg[max(k - 100, 0)]) / 1.0)
+            ka, kb = np.searchsorted(tg, tg[k] - 0.5), min(np.searchsorted(tg, tg[k] + 0.5), len(pg) - 1)
+            out["gt_speed_mps"] = float(np.linalg.norm(pg[kb] - pg[ka]) / max(tg[kb] - tg[ka], 1e-9))
             out["gt_5s_travel_m"] = float(np.linalg.norm(pgi[blind][-1] - pgi[blind][0]))
     return out
 
