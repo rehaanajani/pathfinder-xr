@@ -460,8 +460,9 @@ class PathFinder:
             k = min(1.0, leak * dt)
             for i in range(3):
                 self.v[i] *= 1.0 - k
-        if A.pos_tau > 0:                         # bounded-space prior: position slowly reverts to the start point
-            k = min(1.0, dt / A.pos_tau)
+        tau = A.pos_tau_blind if (A.pos_tau_blind > 0 and self.bad_time > 1.0) else A.pos_tau
+        if tau > 0:                               # bounded-space prior: position slowly reverts to the start point
+            k = min(1.0, dt / tau)
             for i in range(3):
                 self.p[i] *= 1.0 - k
         sp = norm3(self.v)
@@ -654,9 +655,9 @@ def run(inp, out, a, rec=None):
 # (docs/LEARNED_VELOCITY.md) for use with the velocity network, whose input is rotated with this orientation.
 PRESETS = {
     "physics": {"kp": 1.0, "ki": 0.02, "kp_boost": 0.0, "tilt_lp": 0.0, "ki_calm": 0.0, "zupt_gyro_std": 0.0, "bias_rate": 0.2,
-                "prescan": 0.0, "pos_tau": 0.0},
+                "prescan": 0.0, "pos_tau": 0.0, "pos_tau_blind": 0.0, "model_pos_gain": 0.0, "model_ref": 0.1},
     "learned": {"kp": 0.3, "ki": 0.1, "kp_boost": 10.0, "tilt_lp": 0.1, "ki_calm": 0.5, "zupt_gyro_std": 0.01, "bias_rate": 3.0,
-                "prescan": 60.0, "pos_tau": 3.0},
+                "prescan": 60.0, "pos_tau": 7.0, "pos_tau_blind": 1.5, "model_pos_gain": 1.0, "model_ref": 0.3},
 }
 
 
@@ -692,6 +693,8 @@ def args(argv=None):
     ap.add_argument("--v-max", type=float, default=3.0)
     ap.add_argument("--pos-tau", type=float, default=None,
                     help="s; time constant of the pull of position back to the start point (0 = off)")
+    ap.add_argument("--pos-tau-blind", type=float, default=None,
+                    help="s; pull back to the start once the IMU has been unusable for > 1 s (0 = same as --pos-tau)")
     ap.add_argument("--blind-vel-tau", type=float, default=1.5)
     ap.add_argument("--blind-turn-tau", type=float, default=0.5)
     ap.add_argument("--model", default="auto",
@@ -699,9 +702,9 @@ def args(argv=None):
                          "next to this script if present, 'none' = physics only")
     ap.add_argument("--model-every", type=int, default=20, help="healthy samples between network updates")
     ap.add_argument("--model-min-valid", type=float, default=0.25, help="fraction of the window that must be healthy")
-    ap.add_argument("--model-ref", type=float, default=0.1, help="m; displacement std at which the position gain halves")
+    ap.add_argument("--model-ref", type=float, default=None, help="m; displacement std at which the position gain halves")
     ap.add_argument("--model-vref", type=float, default=1.0, help="m/s; velocity std at which the velocity gain halves")
-    ap.add_argument("--model-pos-gain", type=float, default=0.0)
+    ap.add_argument("--model-pos-gain", type=float, default=None)
     ap.add_argument("--model-vel-gain", type=float, default=1.0)
     ap.add_argument("--model-window", type=int, default=200, help=argparse.SUPPRESS)   # taken from the weights file;
     ap.add_argument("--model-dec", type=int, default=1, help=argparse.SUPPRESS)        # only set when recording

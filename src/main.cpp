@@ -77,9 +77,9 @@ struct Opt {
     double zupt_gyro = 0.04, zupt_acc = 0.15, zupt_tau = 0.05, zupt_gyro_std = NaN, zupt_acc_std = 0.15;
     double prescan = NaN, bias_rate = NaN, leak = 1.0, kp = NaN, ki = NaN, kp_boost = NaN, ki_calm = NaN;
     double tilt_lp = NaN, kp_boost_tau = 0.7, tilt_acc_tol = 1.5, acc_res_tau = 10.0, v_max = 3.0, pos_tau = NaN;
-    double blind_vel_tau = 1.5, blind_turn_tau = 0.5;
-    int model_every = 20; double model_min_valid = 0.25, model_ref = 0.1, model_vref = 1.0;
-    double model_pos_gain = 0.0, model_vel_gain = 1.0; int model_window = 200, model_dec = 1;
+    double blind_vel_tau = 1.5, blind_turn_tau = 0.5, pos_tau_blind = NaN;
+    int model_every = 20; double model_min_valid = 0.25, model_ref = NaN, model_vref = 1.0;
+    double model_pos_gain = NaN, model_vel_gain = 1.0; int model_window = 200, model_dec = 1;
     std::string model_input = "world";
     double yaw_q = 0.0, yaw_q_blind = 2.0, model_blind_tau = 0.7, acc_max = 16 * G, gyro_max = 35.0, acc_min = 1.0;
 };
@@ -107,7 +107,7 @@ static void parse_args(int argc, char** argv, Opt& a) {
         {"kp-boost", &a.kp_boost, nullptr, nullptr}, {"ki-calm", &a.ki_calm, nullptr, nullptr},
         {"tilt-lp", &a.tilt_lp, nullptr, nullptr}, {"kp-boost-tau", &a.kp_boost_tau, nullptr, nullptr},
         {"tilt-acc-tol", &a.tilt_acc_tol, nullptr, nullptr}, {"acc-res-tau", &a.acc_res_tau, nullptr, nullptr},
-        {"v-max", &a.v_max, nullptr, nullptr}, {"pos-tau", &a.pos_tau, nullptr, nullptr},
+        {"v-max", &a.v_max, nullptr, nullptr}, {"pos-tau", &a.pos_tau, nullptr, nullptr}, {"pos-tau-blind", &a.pos_tau_blind, nullptr, nullptr},
         {"blind-vel-tau", &a.blind_vel_tau, nullptr, nullptr}, {"blind-turn-tau", &a.blind_turn_tau, nullptr, nullptr},
         {"model-every", nullptr, &a.model_every, nullptr}, {"model-min-valid", &a.model_min_valid, nullptr, nullptr},
         {"model-ref", &a.model_ref, nullptr, nullptr}, {"model-vref", &a.model_vref, nullptr, nullptr},
@@ -167,7 +167,10 @@ static void parse_args(int argc, char** argv, Opt& a) {
     auto def = [](double& x, double phys, double learn, bool l) { if (std::isnan(x)) x = l ? learn : phys; };
     def(a.kp, 1.0, 0.3, L); def(a.ki, 0.02, 0.1, L); def(a.kp_boost, 0.0, 10.0, L); def(a.tilt_lp, 0.0, 0.1, L);
     def(a.ki_calm, 0.0, 0.5, L); def(a.zupt_gyro_std, 0.0, 0.01, L); def(a.bias_rate, 0.2, 3.0, L);
-    def(a.prescan, 0.0, 60.0, L); def(a.pos_tau, 0.0, 3.0, L);
+    def(a.prescan, 0.0, 60.0, L); def(a.pos_tau, 0.0, 7.0, L);
+    // Network coupling chosen on the organisers' degradation (16-17 Nov, validation, then held-out): trust the
+    // network's displacement for position, pull back to the start more gently, and firmly once the IMU is dead.
+    def(a.pos_tau_blind, 0.0, 1.5, L); def(a.model_pos_gain, 0.0, 1.0, L); def(a.model_ref, 0.1, 0.3, L);
 }
 
 // ------------------------------------------------------------------------------------------------ input
@@ -839,8 +842,9 @@ struct PathFinder {
             double k = std::min(1.0, leak * dt);
             for (int i = 0; i < 3; i++) v[i] *= 1.0 - k;
         }
-        if (A.pos_tau > 0) {
-            double k = std::min(1.0, dt / A.pos_tau);
+        double tau = (A.pos_tau_blind > 0 && bad_time > 1.0) ? A.pos_tau_blind : A.pos_tau;
+        if (tau > 0) {
+            double k = std::min(1.0, dt / tau);
             for (int i = 0; i < 3; i++) p[i] *= 1.0 - k;
         }
         double sp = norm3(v);
