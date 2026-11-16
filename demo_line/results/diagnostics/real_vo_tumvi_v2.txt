@@ -1,0 +1,11 @@
+TUM-VI rooms 1+2, real IMU + real stereo VO (with calibration-guided stereo matching), 4 non-overlapping
+60 s clips, faults at 20 s for 10 s, speed limit on. ATE (m), mean over clips.
+
+scenario                              vo_only   conventional      ours_1imu      ours_3imu  ours_1imu_net
+clean                                   0.209          0.171          0.187          0.187          0.920
+camera_blackout                         1.046          0.450          0.469          0.466          1.238
+camera_dark                             1.052          2.894          0.803          0.800          1.229
+camera_blur                             1.095          1.067          0.637          0.638          1.092
+dark_plus_imu_drift                     1.052          2.554          2.234          0.787          1.418
+blackout_plus_one_imu_bias              1.046         18.103          5.551          0.467          6.140
+blackout_plus_saturation_all            1.046         20.013          3.405          3.358         16.658

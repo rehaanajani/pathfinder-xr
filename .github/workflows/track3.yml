@@ -1,0 +1,45 @@
+name: track3-entry
+on:
+  push:
+    paths: ["src/**", "tests/stress/**", ".github/workflows/track3.yml"]
+  pull_request:
+    paths: ["src/**", "tests/stress/**", ".github/workflows/track3.yml"]
+jobs:
+  entry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install numpy scipy pytest
+      - name: Build the C++ entry
+        run: make -C src
+      - name: Contract, review-fix and mount-guard tests, C++ (one pose per row, bad rows, 8 MB, 20 ms/s)
+        run: PF_ENTRY=cpp python -m pytest -q tests/stress/test_main_contract.py tests/stress/test_review_fixes.py tests/stress/test_mount_guard.py
+      - name: Same tests, Python reference (the 8 MB budget applies to C++ only)
+        run: python -m pytest -q tests/stress/test_main_contract.py tests/stress/test_review_fixes.py tests/stress/test_mount_guard.py
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t pathfinder src/
+      - name: Run the image on a synthetic IMU file
+        run: |
+          mkdir -p data/imu0
+          python3 -c "
+          import math
+          rows=['#timestamp [ns],w_x,w_y,w_z,a_x,a_y,a_z']
+          for i in range(4000):
+              t=1403636579758555392+i*5000000
+              rows.append(f'{t},{0.01*math.sin(i/50):.6f},0.002,0.001,{0.1*math.cos(i/80):.6f},0.03,9.81')
+          open('data/imu0/data.csv','w').write(chr(10).join(rows)+chr(10))"
+          docker run --rm -v "$PWD/data:/data" pathfinder /data -o /data/estimated_trajectory.txt
+          test "$(grep -vc '^#' data/estimated_trajectory.txt)" = 4000
+      - name: The mount guard works inside the image (IMU flipped upside down)
+        run: |
+          mkdir -p flip/imu0
+          sed 's/,9.81$/,-9.81/' data/imu0/data.csv > flip/imu0/data.csv
+          docker run --rm -v "$PWD/flip:/data" pathfinder /data -o /data/est.txt 2> flip/err.txt
+          cat flip/err.txt
+          grep -q "using velnet_weights_world.bin" flip/err.txt
+          test "$(grep -vc '^#' flip/est.txt)" = 4000

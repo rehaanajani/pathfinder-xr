@@ -1,0 +1,18 @@
+Validation split, 12 recordings x 60 s, ATE (m): saturation guard off -> on (final detector, dropped packets excluded)
+scenario                                  ours     ours_no_model   naive
+clean                           0.041-> 0.041    0.028-> 0.028   0.031
+camera_blackout                 0.139-> 0.139    0.582-> 0.582   0.366
+camera_dark                     0.126-> 0.126    0.220-> 0.220   0.234
+camera_blur                     0.119-> 0.119    0.212-> 0.212   0.213
+camera_wrong_fix                0.230-> 0.230    0.329-> 0.329   0.313
+imu_noise_all                   0.041-> 0.041    0.031-> 0.031   0.031
+one_imu_bias                    0.047-> 0.047    0.029-> 0.029   0.032
+one_imu_stuck                   0.042-> 0.042    0.028-> 0.028   0.150
+one_imu_spikes                  0.043-> 0.043    0.028-> 0.028   0.036
+one_imu_saturation              0.041-> 0.041    0.028-> 0.028   0.035
+blackout_plus_one_imu_bias      0.155-> 0.155    0.644-> 0.644   2.234
+dark_plus_imu_drift             0.165-> 0.165    0.223-> 0.223   0.233
+blackout_plus_vibration_all     0.193-> 0.193    0.814-> 0.814   0.714
+blackout_plus_spikes_all        0.157-> 0.157    0.749-> 0.749   2.435
+blackout_plus_saturation_all    0.683-> 0.690    2.000-> 0.932   3.612
+blackout_plus_dropout_all       0.201-> 0.201    0.808-> 0.808   2.827

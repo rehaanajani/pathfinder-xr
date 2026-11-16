@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Path Finder demo</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #15181d; --muted: #5f6672; --line: #e3e6eb;
+    --truth: #15181d; --naive: #d9690f; --ours: #12805c; --off: #d93025; --track: #eef0f3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1114; --panel: #171a1f; --ink: #eef0f3; --muted: #9aa1ad; --line: #272b33;
+      --truth: #eef0f3; --naive: #f08a34; --ours: #34c38f; --off: #f36b5f; --track: #22262d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.5 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; }
+  main { max-width: 1120px; margin: 0 auto; padding: 28px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  canvas { width: 100%; display: block; border-radius: 8px; background: var(--track); }
+  label.k { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+            color: var(--muted); margin: 0 0 6px; }
+  select, input[type=range] { width: 100%; }
+  select { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+           background: var(--panel); color: var(--ink); }
+  .row { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line);
+           background: var(--ink); color: var(--panel); cursor: pointer; min-width: 84px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+  .stat { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .stat .v { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .stat .l { font-size: 12px; color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); margin-top: 10px; }
+  .sw { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+  .bars { margin-top: 14px; }
+  .bar { display: grid; grid-template-columns: 92px 1fr 44px; gap: 8px; align-items: center; font-size: 13px; margin: 6px 0; }
+  .bar .t { height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; }
+  .bar .f { height: 100%; border-radius: 4px; background: var(--ours); transition: width .1s linear; }
+  .bar .n { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .note { font-size: 13px; color: var(--muted); margin-top: 14px; }
+  .clock { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 64px; text-align: right; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Path Finder: tracking that survives sensor failure</h1>
+  <p class="sub">A real held-out headset recording from Meta's TLIO dataset. Pick a failure, press play, and compare
+    a standard camera + IMU filter with ours. Every path here was computed by <code>make_demo.py</code>.</p>
+  <div class="grid">
+    <div class="card">
+      <canvas id="map" width="900" height="640" aria-label="Top view of the walked path"></canvas>
+      <div class="legend">
+        <span><span class="sw" style="background:var(--truth)"></span>True path</span>
+        <span><span class="sw" style="background:var(--naive)"></span>Standard fusion</span>
+        <span><span class="sw" style="background:var(--ours)"></span>Ours</span>
+        <span><span class="sw" style="background:var(--off);height:6px;opacity:.35"></span>Sensor failing</span>
+      </div>
+    </div>
+    <div class="card">
+      <label class="k" for="case">Failure</label>
+      <select id="case"></select>
+      <div class="row">
+        <button id="play">Play</button>
+        <input id="time" type="range" min="0" max="100" value="100" aria-label="Time">
+        <span class="clock" id="clock">0.0 s</span>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="v" id="eN">-</div><div class="l">Standard fusion, error now (m)</div></div>
+        <div class="stat"><div class="v" id="eO">-</div><div class="l">Ours, error now (m)</div></div>
+        <div class="stat"><div class="v" id="aN">-</div><div class="l">Standard fusion, whole run (ATE, m)</div></div>
+        <div class="stat"><div class="v" id="aO">-</div><div class="l">Ours, whole run (ATE, m)</div></div>
+      </div>
+      <div class="bars" id="bars"></div>
+      <p class="note">Trust bars show how much our filter is relying on each sensor at this moment: the camera's
+        measured image health, and the vote weight of each IMU. A failing sensor drops to zero instead of
+        dragging the path off.</p>
+    </div>
+  </div>
+</main>
+<script>
+const D = __DATA__;
+const sel = document.getElementById('case'), slider = document.getElementById('time');
+const cv = document.getElementById('map'), ctx = cv.getContext('2d');
+Object.keys(D.cases).forEach(k => { const o = document.createElement('option'); o.textContent = k; sel.appendChild(o); });
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const N = D.truth.length;
+slider.max = N - 1; slider.value = N - 1;
+let playing = false, timer = null;
+
+function bounds(c) {
+  const pts = D.truth.concat(c.ours, c.naive);
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const [x, y] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  return { x0, x1, y0, y1 };
+}
+function failing(c, i) {
+  const camIdx = Math.min(c.cam_health.length - 1, i);
+  const camBad = c.cam_health[camIdx] < 0.3;
+  const wi = Math.min(c.imu_w[0].length - 1, Math.floor(i / 1));
+  const imuBad = c.imu_w.some(w => w[wi] < 0.5);
+  return camBad || imuBad;
+}
+function draw() {
+  const c = D.cases[sel.value], n = +slider.value;
+  const b = bounds(c), pad = 30, W = cv.width, H = cv.height;
+  const s = Math.min((W - 2 * pad) / (b.x1 - b.x0 || 1), (H - 2 * pad) / (b.y1 - b.y0 || 1));
+  const X = x => pad + (x - b.x0) * s, Y = y => H - pad - (y - b.y0) * s;
+  ctx.clearRect(0, 0, W, H);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  // failing stretches
+  ctx.strokeStyle = css('--off'); ctx.globalAlpha = .22; ctx.lineWidth = 16;
+  for (let i = 1; i <= n; i++) if (failing(c, i)) {
+    ctx.beginPath(); ctx.moveTo(X(D.truth[i-1][0]), Y(D.truth[i-1][1])); ctx.lineTo(X(D.truth[i][0]), Y(D.truth[i][1])); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  const line = (pts, col, w) => {
+    ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath();
+    for (let i = 0; i <= n; i++) { const [x, y] = pts[i]; i ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y)); }
+    ctx.stroke();
+    const [x, y] = pts[n]; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(X(x), Y(y), 5, 0, 7); ctx.fill();
+  };
+  line(D.truth, css('--truth'), 2.5);
+  line(c.naive, css('--naive'), 2);
+  line(c.ours, css('--ours'), 2.5);
+  document.getElementById('clock').textContent = D.t[n].toFixed(1) + ' s';
+  document.getElementById('eN').textContent = c.naive_err[n].toFixed(2);
+  document.getElementById('eO').textContent = c.ours_err[n].toFixed(2);
+  document.getElementById('aN').textContent = c.ate.naive.toFixed(2);
+  document.getElementById('aO').textContent = c.ate.ours.toFixed(2);
+  const wi = Math.min(c.imu_w[0].length - 1, n);
+  const rows = [['Camera', c.cam_health[Math.min(c.cam_health.length - 1, n)]]]
+    .concat(c.imu_w.map((w, k) => ['IMU ' + (k + 1), w[wi]]));
+  document.getElementById('bars').innerHTML = rows.map(([l, v]) =>
+    `<div class="bar"><span>${l}</span><div class="t"><div class="f" style="width:${Math.round(v*100)}%;background:${v < .3 ? css('--off') : css('--ours')}"></div></div><span class="n">${Math.round(v*100)}%</span></div>`).join('');
+}
+function play() {
+  if (playing) { playing = false; clearInterval(timer); document.getElementById('play').textContent = 'Play'; return; }
+  if (+slider.value >= N - 1) slider.value = 0;
+  playing = true; document.getElementById('play').textContent = 'Pause';
+  timer = setInterval(() => {
+    slider.value = Math.min(N - 1, +slider.value + 2); draw();
+    if (+slider.value >= N - 1) play();
+  }, 40);
+}
+sel.onchange = draw; slider.oninput = draw; document.getElementById('play').onclick = play;
+sel.value = 'Camera off 10 s' in D.cases ? 'Camera off 10 s' : sel.options[0].value;
+draw();
+</script>
+</body>
+</html>

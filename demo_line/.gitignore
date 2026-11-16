@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+local_data/
+models/*
+!models/camera_trust.json
+!models/camera_health_learned*.json
+results/runs/
+*.zip
+.DS_Store
+deck/unpacked/
+deck/*.jpg
+deck/*.pdf
+.claude/
+runs/

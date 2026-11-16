@@ -3,10 +3,39 @@
 **Samsung PRISM XR Hackathon 2026, Track 3: Path Finder, Trajectory Estimation Under Sensor Degradation.**
 Team California Burrito, SRM Institute of Science and Technology, Kattankulathur.
 
-**Estimator implementation update:** see [issue #1 completion notes](docs/ISSUE1_COMPLETION.md)
-for the current reference-free API, conservative model policy, input validation and validity semantics.
-The result tables and submission artifacts below predate this implementation; they are historical
-research evidence, not revalidated measurements of the current defaults or production certification.
+## The scored entry (start here)
+
+The task Samsung scores is IMU-only: a degraded EuRoC-format `imu0/data.csv` in, `estimated_trajectory.txt` (TUM
+format, one pose per IMU row, including the 5 s after the IMU dies) out, within 8 MB peak RAM and 20 ms per second of
+IMU on one thread. The entry is [`src/`](src/README.md):
+
+```bash
+docker build -t pathfinder src/
+docker run --rm -v "$PWD/data:/data" pathfinder /data -o /data/estimated_trajectory.txt
+```
+
+or without Docker: `make -C src && src/pathfinder <imu folder | zip | csv> -o estimated_trajectory.txt`.
+
+| | |
+|---|---|
+| Entry | `src/main.cpp` (C++17 + zlib); `src/main.py` is the readable reference with the same output |
+| Peak RAM / compute | 5.2 MB / 6 ms per second of IMU on a Windows 11 laptop, one thread (5.0 MB of that is the Windows runtime with no network; the earlier network measured 2.2 MB / 4 ms on an Apple M5) |
+| Output contract | 24 tests: one pose per row through NaN, frozen, zero and missing rows, cut files, unknown gravity (`PF_ENTRY=cpp pytest tests/stress/test_main_contract.py`) |
+| Accuracy, held-out EuRoC MH_05 + V2_03 + TUM-VI room6 | ATE 3.08 m vs 3.28 m standing still, 3.19 m for the retuned filter alone or with our earlier network, and 4.54 m for our original filter settings. The network reads body-frame IMU with gravity kept (AirIO style); it is worse than the earlier one on the handheld TUM-VI rooms and if the IMU were mounted another way ([details](docs/AIRIO.md), [earlier network](docs/LEARNED_VELOCITY.md)) |
+| Bundle | `python tools/make_bundle.py <input>` writes `dist/CaliforniaBurrito.zip` with `metadata.json` |
+| Slides | [`deck/SRMIST_CaliforniaBurrito.pptx`](deck/SRMIST_CaliforniaBurrito.pptx) |
+
+Brief: [`docs/TRACK3_BRIEF.md`](docs/TRACK3_BRIEF.md). Status: [`docs/TRACK3_STATUS.md`](docs/TRACK3_STATUS.md).
+What we tried and what did not work: [`docs/RESEARCH_REVIEW.md`](docs/RESEARCH_REVIEW.md).
+
+## The wider system (camera + several IMUs; not scored)
+
+The live phone demo, the real-VR-headset evaluation and the saturation / long-outage work live in [`demo_line/`](demo_line/README.md) with their own copy of the filter; the real-vision workstream (#26) is in the root `pathfinder/`.
+
+Everything below is the camera + multi-IMU tracker built before the official brief arrived. It is the material for the
+final demo. **Estimator implementation update:** see [issue #1 completion notes](docs/ISSUE1_COMPLETION.md) for the
+current reference-free API, model policy, input validation and validity semantics. The result tables below predate
+that implementation; they are historical research evidence, not revalidated measurements of the current defaults.
 
 **Real-vision update (issues #2/#3):** Path Finder now runs on motion estimated from **real stereo images**
 (`pathfinder/stereo_vo.py`), fused through clone-based relative-pose updates with the **real** IMU. It has been

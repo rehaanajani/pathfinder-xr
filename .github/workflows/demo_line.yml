@@ -1,0 +1,19 @@
+name: demo-line
+on:
+  push:
+    paths: ["demo_line/**", ".github/workflows/demo_line.yml"]
+  pull_request:
+    paths: ["demo_line/**", ".github/workflows/demo_line.yml"]
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: demo_line      # its own copy of pathfinder/; never run together with the root tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install numpy scipy pytest opencv-python-headless pyyaml pandas matplotlib
+      - run: OMP_NUM_THREADS=1 python -m pytest -q tests

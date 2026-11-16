@@ -13,5 +13,8 @@ deck/unpacked/
 deck/*.jpg
 deck/*.pdf
 .claude/
+runs/
+src/pathfinder
+src/pathfinder.exe
 !models/MODELS.json
 fresh-setup/

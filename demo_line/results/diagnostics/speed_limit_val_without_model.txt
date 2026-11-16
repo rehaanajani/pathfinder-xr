@@ -1,0 +1,19 @@
+Validation split, 12 recordings x 60 s, ours WITHOUT the learned network, ATE (m).
+scenario                             off        on prior_1.0 prior_2.0   naive
+clean                              0.028     0.028     0.028     0.028   0.031
+camera_blackout                    0.300     0.300     0.701     0.582   0.366
+camera_dark                        0.224     0.224     0.220     0.220   0.234
+camera_blur                        0.211     0.211     0.224     0.212   0.213
+camera_wrong_fix                   0.328     0.328     0.995     0.329   0.313
+imu_noise_all                      0.031     0.031     0.031     0.031   0.031
+one_imu_bias                       0.029     0.029     0.029     0.029   0.032
+one_imu_stuck                      0.028     0.028     0.028     0.028   0.150
+one_imu_spikes                     0.028     0.028     0.028     0.028   0.036
+one_imu_saturation                 0.028     0.028     0.028     0.028   0.035
+blackout_plus_one_imu_bias         0.329     0.329     0.747     0.644   2.234
+dark_plus_imu_drift                0.222     0.223     0.264     0.223   0.233
+blackout_plus_vibration_all        0.690     0.695     0.864     0.814   0.714
+blackout_plus_spikes_all           2.256     4.001     0.808     0.749   2.435
+blackout_plus_saturation_all      55.789     2.815     1.399     2.000   3.612
+blackout_plus_dropout_all         20.668     4.171     0.834     0.808   2.827
+geometric-mean ratio to naive: {'off': 1.009, 'on': 0.786, 'prior_1.0': 0.752, 'prior_2.0': 0.686}

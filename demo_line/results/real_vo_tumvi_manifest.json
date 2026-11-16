@@ -1,0 +1,27 @@
+{
+ "created": "2026-11-15 16:44:39 +0530",
+ "command": "evaluate_real_vo.py --dataset tumvi --workers 9 --set speed_limit=true --set outage_v_std=2.0 --set saturation_guard=true --set outage_tighten_s=3 --set outage_std_rate=0.15 --out results",
+ "args": {
+  "workers": 9,
+  "out": "results",
+  "dataset": "tumvi",
+  "set": [
+   "speed_limit=true",
+   "outage_v_std=2.0",
+   "saturation_guard=true",
+   "outage_tighten_s=3",
+   "outage_std_rate=0.15"
+  ]
+ },
+ "git_commit": "840933621170b49f48972579ea1993e94ff0ebaf",
+ "git_dirty": true,
+ "python": "3.11.17",
+ "platform": "macOS-27.2.1-arm64-arm-64bit",
+ "machine": "arm64",
+ "numpy": "2.4.6",
+ "scipy": "1.17.1",
+ "torch": "2.15.0",
+ "models": {
+  "models/dispnet_faults/best.pt": "611e97fdad4ac773"
+ }
+}
