@@ -168,10 +168,10 @@ static void parse_args(int argc, char** argv, Opt& a) {
     auto def = [](double& x, double phys, double learn, bool l) { if (std::isnan(x)) x = l ? learn : phys; };
     def(a.kp, 1.0, 0.3, L); def(a.ki, 0.02, 0.1, L); def(a.kp_boost, 0.0, 10.0, L); def(a.tilt_lp, 0.0, 0.1, L);
     def(a.ki_calm, 0.0, 0.5, L); def(a.zupt_gyro_std, 0.0, 0.01, L); def(a.bias_rate, 0.2, 3.0, L);
-    def(a.prescan, 0.0, 60.0, L); def(a.pos_tau, 0.0, 7.0, L);
+    def(a.prescan, 0.0, 60.0, L); def(a.pos_tau, 0.0, 3.0, L);
     // Network coupling chosen on the organisers' degradation (16-17 Nov, validation, then held-out): trust the
     // network's displacement for position, pull back to the start more gently, and firmly once the IMU is dead.
-    def(a.pos_tau_blind, 0.0, 1.5, L); def(a.pos_tau_nonet, 0.0, 3.0, L); def(a.model_pos_gain, 0.0, 1.0, L); def(a.model_ref, 0.1, 0.3, L);
+    def(a.pos_tau_blind, 0.0, 0.0, L); def(a.pos_tau_nonet, 0.0, 3.0, L); def(a.model_pos_gain, 0.0, 0.0, L); def(a.model_ref, 0.1, 0.1, L);
 }
 
 // ------------------------------------------------------------------------------------------------ input

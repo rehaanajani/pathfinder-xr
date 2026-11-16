@@ -692,7 +692,7 @@ PRESETS = {
     "physics": {"kp": 1.0, "ki": 0.02, "kp_boost": 0.0, "tilt_lp": 0.0, "ki_calm": 0.0, "zupt_gyro_std": 0.0, "bias_rate": 0.2,
                 "prescan": 0.0, "pos_tau": 0.0, "pos_tau_nonet": 0.0, "pos_tau_blind": 0.0, "model_pos_gain": 0.0, "model_ref": 0.1},
     "learned": {"kp": 0.3, "ki": 0.1, "kp_boost": 10.0, "tilt_lp": 0.1, "ki_calm": 0.5, "zupt_gyro_std": 0.01, "bias_rate": 3.0,
-                "prescan": 60.0, "pos_tau": 7.0, "pos_tau_nonet": 3.0, "pos_tau_blind": 1.5, "model_pos_gain": 1.0, "model_ref": 0.3},
+                "prescan": 60.0, "pos_tau": 3.0, "pos_tau_nonet": 3.0, "pos_tau_blind": 0.0, "model_pos_gain": 0.0, "model_ref": 0.1},
 }
 
 
