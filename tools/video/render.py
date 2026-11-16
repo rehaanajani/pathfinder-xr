@@ -141,6 +141,44 @@ def polyline(d, pts, col, width):
         d.line([tuple(p) for p in pts], fill=col, width=width, joint="curve")
 
 
+_FORMULA = {}
+
+
+def formula(tex, size=34, color=(225, 232, 248)):
+    """A LaTeX-style formula (matplotlib mathtext) as an RGBA image, cached."""
+    key = (tex, size, color)
+    if key not in _FORMULA:
+        import io
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        matplotlib.rcParams["mathtext.fontset"] = "cm"
+        fig = plt.figure(figsize=(0.01, 0.01), dpi=100)
+        fig.text(0, 0, f"${tex}$", fontsize=size, color=tuple(c / 255 for c in color))
+        buf = io.BytesIO()
+        fig.savefig(buf, dpi=100, transparent=True, bbox_inches="tight", pad_inches=0.05)
+        plt.close(fig)
+        buf.seek(0)
+        _FORMULA[key] = Image.open(buf).convert("RGBA")
+    return _FORMULA[key]
+
+
+def put_formulas(im, t, items, x, y, gap=22, start=0.8, step=1.4, size=34, anchor_center=False):
+    """Fade in a short stack of formulas, one after another."""
+    for i, tex in enumerate(items):
+        a = fade(t, start + step * i, 0.7)
+        if a <= 0:
+            continue
+        f = formula(tex, size)
+        fx = int(x - f.width / 2) if anchor_center else int(x)
+        alpha = f.getchannel("A").point(lambda v: int(v * a))
+        f2 = f.copy()
+        f2.putalpha(alpha)
+        im.paste(f2, (fx, int(y + (1 - a) * 10)), f2)
+        y += f.height + gap
+    return im
+
+
 # ----------------------------------------------------------------------------- data
 def load():
     import numpy as np
@@ -252,8 +290,12 @@ def sc_explode(t, dur):
     cur = float(err[m][-1]) if m.any() else 0.0
     text(d, (1290, 430), f"{cur / 1000:,.1f} km" if cur > 1000 else f"{cur:,.0f} m", 120, "Bold", RED, fade(t, 0.2))
     text(d, (1295, 580), "off, after " + f"{upto:,.0f} s", 34, "Regular", MUTED, fade(t, 0.3))
-    text(d, (1295, 640), "integrating the jammed IMU as is", 26, "Regular", MUTED, fade(t, 0.5))
+    text(d, (1295, 640), "integrating the IMU directly (clean data drifts the same)", 24, "Regular", MUTED, fade(t, 0.5))
     title_block(im, t, 0.1, [("Trust it, and the error explodes.", 56, "Semibold", INK)], y=110, x=160)
+    put_formulas(im, t, [r"\mathbf{p}(t)=\iint\left(R\,\mathbf{a}-\mathbf{g}\right)\,dt^{2}",
+                         r"\delta\theta=1^{\circ}\ \Rightarrow\ g\,\sin\delta\theta\approx0.17\ \mathrm{m/s^{2}}",
+                         r"\frac{1}{2}\,(0.17)\,(110\,\mathrm{s})^{2}\approx1\ \mathrm{km}"],
+                 1295, 700, start=2.5, step=1.8, size=32)
     return im
 
 
@@ -358,6 +400,9 @@ def sc_gravity(t, dur):
     text(d, (cx + 230, cy - 120), "up, found from the data", 30, "Medium", INK, fade(t, 0.6))
     text(d, (cx + 230, cy - 75), "gyro bias, estimated while still", 26, "Regular", MUTED, fade(t, 1.0))
     text(d, (cx + 230, cy - 35), "no ground truth, no calibration", 26, "Regular", MUTED, fade(t, 1.4))
+    put_formulas(im, t, [r"\hat{\mathbf{g}}=\frac{1}{N}\sum_{\mathrm{still}}\mathbf{a}_i,\qquad \mathbf{b}_{\omega}=\frac{1}{N}\sum_{\mathrm{still}}\boldsymbol{\omega}_i",
+                         r"\mathbf{e}=\hat{\mathbf{a}}\times R^{\top}\hat{\mathbf{z}},\qquad \boldsymbol{\omega}\leftarrow\boldsymbol{\omega}-\mathbf{b}_{\omega}+k_p\,\mathbf{e}"],
+                 cx + 200, cy + 30, start=1.6, step=1.6, size=26)
     return im
 
 
@@ -374,6 +419,11 @@ def sc_physics(t, dur):
         text(d, (520, y + (1 - a) * 14), h, 40, "Semibold", INK, a)
         text(d, (520, y + 50 + (1 - a) * 14), s, 26, "Regular", MUTED, a)
         d.rounded_rectangle([470, y + 10, 478, y + 70], 3, fill=tuple(int(v * a) for v in CYAN))
+    put_formulas(im, t, [r"q_{k+1}=q_k\otimes\exp\!\left(\frac{1}{2}\,\boldsymbol{\omega}\,\Delta t\right)",
+                         r"\mathbf{v}\leftarrow\mathbf{v}+\left(R\,\mathbf{a}-\mathbf{g}\right)\Delta t",
+                         r"\|\boldsymbol{\omega}\|<\epsilon\ \Rightarrow\ \mathbf{v}\rightarrow\mathbf{0}",
+                         r"\mathbf{p}\leftarrow\mathbf{p}\,e^{-\Delta t/\tau}"],
+                 1180, 470, gap=34, start=0.6, step=1.25, size=34)
     return im
 
 
@@ -404,6 +454,8 @@ def sc_network(t, dur):
     text(d, (xs[0], 460), "1 s of IMU", 26, "Medium", INK, fade(t, 0.3), anchor="mm")
     text(d, (xs[-1], 460), "velocity + how sure", 26, "Medium", GREEN, fade(t, 2.5), anchor="mm")
     text(d, (W / 2, 960), "runs inside the C++ entry: no ML runtime", 26, "Regular", MUTED, fade(t, 4.0), anchor="mm")
+    put_formulas(im, t, [r"(\hat{\mathbf{v}},\,\sigma)=f_{\theta}(\mathbf{x}_{t-1\,\mathrm{s}\,:\,t}),\qquad w=\frac{\sigma_{0}^{2}}{\sigma_{0}^{2}+\sigma^{2}}"],
+                 W / 2, 405, start=3.0, size=30, anchor_center=True)
     return im
 
 
@@ -427,6 +479,8 @@ def sc_coast(t, dur):
     text(d, (1450, 800), "5 s blind:", 30, "Semibold", INK, fade(t, 0.8))
     text(d, (1450, 845), "turn rate and speed decay", 24, "Regular", MUTED, fade(t, 1.0))
     text(d, (1450, 880), "from the last trusted state", 24, "Regular", MUTED, fade(t, 1.2))
+    put_formulas(im, t, [r"\boldsymbol{\omega}(t)=\boldsymbol{\omega}_0\,e^{-t/\tau_{\omega}},\quad \mathbf{v}(t)=\mathbf{v}_0\,e^{-t/\tau_{v}}"],
+                 1120, 470, start=1.0, size=30)
     return im
 
 
@@ -529,15 +583,18 @@ def sc_phone(t, dur):
     def draw(d):
         d.rounded_rectangle([200, 520, 200 + max(4, std * scale), 560], 10, fill=RED)
         d.rounded_rectangle([200, 700, 200 + max(4, ours * scale), 740], 10, fill=GREEN)
+        d.rounded_rectangle([200, 860, 200 + max(4, 1.78 * k * scale), 900], 10, fill=(200, 205, 220))
     im = add(im, [glow_layer(draw, 14, 1.4)])
     d = ImageDraw.Draw(im)
     title_block(im, t, 0.1, [("On a real Galaxy phone.", 56, "Semibold", INK),
-                             ("Camera covered for 48 s while walking.", 30, "Regular", MUTED)], y=140, x=200)
+                             ("Small room, camera covered for 48 s while walking.", 30, "Regular", MUTED)], y=140, x=200)
     text(d, (200, 470), "standard tracker", 28, "Medium", INK, fade(t, 0.8))
     text(d, (200, 650), "Path Finder", 28, "Medium", INK, fade(t, 0.8))
     text(d, (220 + std * scale, 540), f"{std:.0f} m", 44, "Bold", RED, fade(t, 1.0), anchor="lm")
     text(d, (230 + ours * scale, 720), f"{ours:.1f} m", 44, "Bold", GREEN, fade(t, 1.0), anchor="lm")
-    text(d, (200, 860), "error against ARCore when the camera came back; Galaxy M36, live", 22, "Regular", MUTED, fade(t, 2))
+    text(d, (200, 810), "freezing in place", 28, "Medium", INK, fade(t, 0.8))
+    text(d, (230 + 1.78 * k * scale, 880), f"{1.78 * k:.1f} m", 44, "Bold", (215, 220, 232), fade(t, 1.0), anchor="lm")
+    text(d, (200, 950), "error against ARCore when the camera came back. Room about 6 x 9 m; Galaxy M36, live", 22, "Regular", MUTED, fade(t, 2))
     return im
 
 
@@ -627,7 +684,8 @@ def main():
     sr = 48000
     clips, durs = [], []
     for i in range(len(SCENES)):
-        files = sorted((work / "audio").glob(f"s{i:02d}*.caf")) if i != 11 else sorted((work / "a11").glob("s0*.caf"))
+        alt = {2: "a02", 11: "a11", 12: "a12"}
+        files = sorted((work / alt[i]).glob("s*.caf")) if i in alt else sorted((work / "audio").glob(f"s{i:02d}*.caf"))
         voice = np.concatenate([read_audio(f, ff, sr) for f in files])
         lead = int(0.35 * sr)
         clip = np.concatenate([np.zeros(lead, np.float32), voice, np.zeros(int(PAD[i] * sr), np.float32)])
