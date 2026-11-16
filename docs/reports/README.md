@@ -30,9 +30,10 @@ memory differ:
 
 **Accuracy** (from report 2): on held-out recordings ATE 3.08 m vs 3.28 m standing still; on the organisers' own
 degradation script 3.40 m vs 3.66 m (7-8 % better). On the camera + IMU benchmark (report 1) Path Finder beats
-physics-only and standing still in 38/38 scenarios, and on the live phone test (report 3) it was closer in all four camera
-blackouts, e.g. 3.5 m off after 48 s blind where a standard tracker was 227 m off (both measured against ARCore's
-pose when the camera came back, not against independent ground truth).
+physics-only and standing still in 38/38 scenarios, and on the live phone test (report 3) it was far
+closer than a standard tracker in all four camera blackouts (e.g. 3.5 m against 227 m after 48 s blind, measured
+against ARCore's pose when the camera came back), though in that small room simply freezing in place was closer
+still (1.8 m).
 
 Reproduce: `bash tools/benchmark_report.sh <organisers' degrade_imu.py>` (computer) and
 `bash tools/android/bench_on_phone.sh <degraded folders>` (phone, USB or wireless debugging).
