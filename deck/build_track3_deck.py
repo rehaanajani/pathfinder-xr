@@ -19,20 +19,19 @@ HERE = Path(__file__).resolve().parent
 
 # ------------------------------------------------------------------------------------------------ numbers
 R = {
-    # held-out MH_05, V2_03, room6, seeds 1-3, tools/eval_track3.py (metres). Physics only and stand still:
-    # docs/LEARNED_VELOCITY.md; Ours: the AirIO-style network, docs/AIRIO.md (RPE 1 s on the scorer's earlier
-    # definition, same as the other two rows)
-    "held_out": {
-        "Physics only": {"ATE": 4.54, "Checkpoints": 4.19, "Blind 5 s": 4.03, "Dropouts": 4.47, "RPE 1 s": 0.97},
-        "Stand still": {"ATE": 3.28, "Checkpoints": 3.03, "Blind 5 s": 2.38, "Dropouts": 3.27, "RPE 1 s": 0.85},
-        "Ours": {"ATE": 3.08, "Checkpoints": 2.86, "Blind 5 s": 2.34, "Dropouts": 3.15, "RPE 1 s": 0.80},
+    "held_out": {   # all 17 public EuRoC + TUM-VI recordings damaged by the ORGANISERS' degrade_imu.py (seed 42,
+                    # accel-first input), C++ entry at the final settings: runs/organiser/sw_O.json and sw_S.json,
+                    # results/track3/coupling_sweep.md. "Drift 1 s" = position drift over 1 s (tools/score_track3.py)
+        "Stand still": {"ATE": 2.62, "Checkpoints": 2.45, "Blind 5 s": 2.28, "Dropouts": 2.42, "Drift 1 s": 0.77},
+        "Ours": {"ATE": 2.32, "Checkpoints": 2.13, "Blind 5 s": 2.24, "Dropouts": 2.13, "Drift 1 s": 0.57},
     },
+    # the 3 recordings never used for training (MH_05, V2_03, room6), same run
+    "test3": {"Stand still": {"ATE": 3.31, "Checkpoints": 3.03}, "Ours": {"ATE": 3.10, "Checkpoints": 2.90}},
     # tools/eval_track3.py, PF_ENTRY=cpp, MH_05 seeds 1-3, no corrections at all (runs/track3/raw_mh05)
     "raw_mh05_ate": 825.0,
     "ours_mh05_ate": 6.42,
-    # docs/AIRIO.md: C++ entry with the AirIO network, Windows 11 laptop, static build (peak working set; 5.0 MB of
-    # it with no network at all). The earlier network measured 2.2 MB / 4 ms on an Apple M5 (tools/make_bundle.py).
-    "peak_mb": 5.2, "ms_per_s": 6.0, "contract_tests": 24,
+    # docs/reports/: MacBook Air M5 (report 2) and the Galaxy M36 phone CPU (report 3), worst of 5 recordings
+    "peak_mb": 2.5, "ms_per_s": 1.8, "phone_mb": 4.0, "phone_ms": 5.0, "contract_tests": 58,
     "params": 42716, "weights_kb": 171,
     # PR #11, #8 and the stress report (demo line, not scored)
     "phone_before": 46.0, "phone_after": 0.6,
@@ -189,7 +188,7 @@ def main():
     text(s, Inches(6.2), TOP + Inches(0.3), Inches(2.2), Inches(0.8), f"{R['raw_mh05_ate']:.0f} m",
          size=44, bold=True, color=RED)
     text(s, Inches(6.2), TOP + Inches(1.2), Inches(2.2), Inches(1.0),
-         "average error when the degraded IMU is simply integrated (EuRoC MH_05, a recording we never trained on)",
+         "average error when the degraded IMU is simply integrated (EuRoC MH_05, never trained on; our own damage model)",
          size=11, color=MUTED)
     text(s, Inches(6.2), TOP + Inches(2.4), Inches(2.2), Inches(0.5), "8 MB  |  20 ms", size=18, bold=True, color=CYAN)
     text(s, Inches(6.2), TOP + Inches(2.95), Inches(2.2), Inches(0.9),
@@ -197,8 +196,8 @@ def main():
     notes(s, "Brief: estimate the 6-DoF trajectory through the checkpoints from the degraded IMU stream only, then "
              "dead-reckon 5 s after the IMU fails. Input imu0/data.csv (EuRoC format), output estimated_trajectory.txt "
              "(TUM format, one pose per IMU row). Scored: memory 20, runtime 20, checkpoints 30, blind 5 s 20, "
-             "dropouts 10, with evo (ATE, RPE). The 825 m is plain strapdown integration of our degraded copy of MH_05, "
-             "seeds 1-3.")
+             "dropouts 10, with evo (ATE, RPE). The 825 m is plain strapdown integration of MH_05 damaged by our own "
+             "stand-in degradation (seeds 1-3), before the organisers sent their script.")
 
     # ---------- 3. Solution
     s = sl[2]
@@ -250,17 +249,20 @@ def main():
          [[("Tech stack  ", {"bold": True, "color": CYAN}),
            ("C++17 + zlib (the entry)  |  Python + NumPy (readable reference, same output)  |  PyTorch (training only)  "
             "|  evo (scoring)  |  Docker  |  GitHub Actions", {"color": INK, "size": 11})],
-          [("Single pass, constant memory: the input is streamed row by row and only a 1 s window is kept. "
-            f"Peak {R['peak_mb']} MB, {R['ms_per_s']:.0f} ms per second of IMU, one thread, offline.",
+          [("Streamed, bounded memory: a first look at up to 60 s for gravity and gyro bias, then one pass row by row "
+            f"keeping a 1 s window. Peak {R['peak_mb']} MB, {R['ms_per_s']} ms per second of IMU (MacBook M5); "
+            f"{R['phone_mb']} MB, {R['phone_ms']:.0f} ms on a Galaxy M36 phone CPU. One thread, offline.",
             {"size": 11, "color": MUTED})]], size=12)
     notes(s, "Training: EuRoC MAV and TUM-VI recordings degraded on the fly (rising noise, bias drift, dropouts), "
-             "with a held-out split never used for any choice. The network runs inside the C++ entry with no ML runtime.")
+             "with 3 recordings (MH_05, V2_03, room6) never used for training. The network runs inside the C++ entry with no "
+             "ML runtime. Retraining on the organisers' damage and a 4x larger network gave no gain beyond seed noise "
+             "(results/track3/retrain_organiser.md).")
 
     # ---------- 5. Track final output
     s = sl[4]
     set_header(s, "TRACK FINAL OUTPUT")
     metrics = ["ATE", "Checkpoints", "Blind 5 s", "Dropouts"]
-    show = [("Physics only", ORANGE), ("Stand still", GREY), ("Ours", GREEN)]
+    show = [("Stand still", GREY), ("Ours", GREEN)]
     cd = CategoryChartData()
     cd.categories = metrics
     for k, _ in show:
@@ -274,7 +276,7 @@ def main():
         ser.format.fill.fore_color.rgb = c
         ser.format.line.color.rgb = c
     ch.has_title = True
-    ch.chart_title.text_frame.text = "Error on held-out recordings (m, lower is better)"
+    ch.chart_title.text_frame.text = "Organisers' degradation script, 17 recordings (m, lower is better)"
     ch.chart_title.text_frame.paragraphs[0].runs[0].font.size = Pt(12)
     ch.chart_title.text_frame.paragraphs[0].runs[0].font.color.rgb = INK
     ch.has_legend = True
@@ -294,11 +296,12 @@ def main():
     ch.category_axis.format.line.color.rgb = LINE
     ch.value_axis.format.line.fill.background()
     text(s, Inches(0.4), Inches(4.45), Inches(5.1), Inches(0.8),
-         "EuRoC MH_05 + V2_03 + TUM-VI room6, never used for training or tuning; degraded 3 ways each. "
-         "SE(3)-aligned like evo. Physics only = our filter without the network.", size=9, color=MUTED)
-    budget = [("Peak memory", f"{R['peak_mb']} MB", "of 8 MB", GREEN),
-              ("Compute", f"{R['ms_per_s']:.0f} ms", "per s of IMU, of 20", GREEN),
-              ("Output contract", f"{R['contract_tests']}/{R['contract_tests']}", "tests: 1 pose per row, bad rows", CYAN),
+         f"All 11 EuRoC + 6 TUM-VI recordings, damaged by the organisers' degrade_imu.py (their seed). SE(3)-aligned "
+         f"ATE like evo. On the 3 never used for training: {R['test3']['Ours']['ATE']} m vs "
+         f"{R['test3']['Stand still']['ATE']} m standing still.", size=9, color=MUTED)
+    budget = [("Peak memory", f"{R['peak_mb']} MB", f"of 8 ({R['phone_mb']} MB on a phone)", GREEN),
+              ("Compute", f"{R['ms_per_s']} ms", f"per s of IMU, of 20 ({R['phone_ms']:.0f} on a phone)", GREEN),
+              ("Stress tests", f"{R['contract_tests']}/{R['contract_tests']}", "1 pose per row, bad rows, layouts", CYAN),
               ("C++ = Python", "1 µm", "largest difference", CYAN)]
     for i, (h, big, sub, c) in enumerate(budget):
         y = TOP + Inches(i * 0.88)
@@ -306,22 +309,23 @@ def main():
         text(s, Inches(5.8), y + Inches(0.02), Inches(2.7), Inches(0.3), h, size=10, color=MUTED)
         text(s, Inches(5.8), y + Inches(0.3), Inches(2.7), Inches(0.45),
              [[(big, {"bold": True, "size": 17, "color": c}), ("  " + sub, {"size": 10, "color": MUTED})]])
-    notes(s, f"Held-out means: ours ATE {ho['Ours']['ATE']} m vs stand still {ho['Stand still']['ATE']} m vs physics only "
-             f"{ho['Physics only']['ATE']} m; RPE 1 s {ho['Ours']['RPE 1 s']} vs {ho['Stand still']['RPE 1 s']} vs "
-             f"{ho['Physics only']['RPE 1 s']} m. The degradation is our stand-in for the organisers' script, which "
-             "we have not received. Memory and time: C++ entry on a Windows 11 laptop (5.0 MB of the 5.2 MB is the "
-             "Windows runtime with no network; the earlier network measured 2.2 MB and 4 ms on an Apple M5).")
+    notes(s, f"Means over 17 recordings: ours ATE {ho['Ours']['ATE']} m vs standing still {ho['Stand still']['ATE']} m "
+             f"(12 % lower), checkpoints 13 % lower, dropouts 12 % lower, blind 5 s about level; position drift over 1 s "
+             f"{ho['Ours']['Drift 1 s']} vs {ho['Stand still']['Drift 1 s']} m (our scorer's drift measure, not evo RPE). "
+             "11 of the 17 recordings were used to train the network; the 3 never used give 3.10 vs 3.31 m. "
+             "Memory and time: worst of 5 recordings, MacBook Air M5 (median of 5 runs) and Galaxy M36 (best of 5); "
+             "the Windows laptop under WSL measured 5.1 MB and 14 ms (docs/reports/).")
 
     # ---------- 6. Differentiation
     s = sl[5]
     text(s, Inches(0.5), TOP, Inches(8.0), Inches(0.5), "What else could be submitted, and what we add", size=19, bold=True)
     hdr = ["", "Integrate the IMU", "Stand still", "Large learned model", "Ours"]
-    rws = [["Error on held-out data", f"{R['raw_mh05_ate']:.0f} m (MH_05)", f"{ho['Stand still']['ATE']} m",
+    rws = [["Error, organisers' damage", f"{R['raw_mh05_ate']:.0f} m (MH_05, ours)", f"{ho['Stand still']['ATE']} m",
             "not run (no clean IMU)", f"{ho['Ours']['ATE']} m"],
            ["Bad rows, gaps, IMU death", "drifts away", "ignores them", "garbage in, garbage out", "caught per row, coasts"],
            ["Unknown gravity, no ground truth", "needs a start pose", "n/a", "needs a gravity frame", "estimated from the data"],
            ["Knows how sure it is", "no", "no", "sometimes", "yes, weights its own output"],
-           ["Fits 8 MB / 20 ms", "yes", "yes", "no (PyTorch at run time)", f"{R['peak_mb']} MB, {R['ms_per_s']:.0f} ms"]]
+           ["Fits 8 MB / 20 ms", "yes", "yes", "no (PyTorch at run time)", f"{R['peak_mb']} MB, {R['ms_per_s']} ms"]]
     tbl = s.shapes.add_table(len(rws) + 1, 5, Inches(0.5), Inches(1.55), Inches(8.0), Inches(2.6)).table
     for j, w in enumerate([2.0, 1.45, 1.25, 1.65, 1.65]):
         tbl.columns[j].width = Inches(w)
@@ -342,8 +346,9 @@ def main():
     card(s, Inches(0.5), Inches(4.35), Inches(8.0), Inches(0.62), name="Limitations")
     text(s, Inches(0.6), Inches(4.38), Inches(7.8), Inches(0.58),
          [[("Honest limits  ", {"bold": True, "color": ORANGE, "size": 11}),
-           ("On held-out data we beat standing still by about 6 %. An IMU alone cannot see its heading, and the network "
-            "is tuned to the drone's axes (weaker on handheld rooms and a remounted IMU). Our degradation is a stand-in.",
+           ("12 % better than standing still on the organisers' damage (6 % on the 3 recordings never trained on); "
+            "level during the blind 5 s. An IMU alone cannot see its heading. A remounted IMU switches to a "
+            "gravity-aligned network automatically.",
             {"size": 10, "color": MUTED})]])
     notes(s, "Large learned model column refers to TLIO / RoNIN-style inertial odometry networks, which are trained on "
              "clean, gravity-aligned IMU data and run in PyTorch.")
@@ -367,7 +372,7 @@ def main():
            ("PF_ENTRY=cpp pytest tests/stress/test_main_contract.py: one pose per row, NaN, frozen, gaps, cut files, "
             "8 MB, 20 ms", {"size": 10, "color": MUTED})],
           [("Score  ", {"bold": True, "size": 11}),
-           ("tools/eval_track3.py degrades EuRoC / TUM-VI and scores ATE, checkpoints, blind 5 s, dropouts, RPE",
+           ("tools/eval_organiser.py runs the organisers' degrade_imu.py and scores ATE, checkpoints, blind 5 s, dropouts",
             {"size": 10, "color": MUTED})],
           [("Bundle  ", {"bold": True, "size": 11}),
            ("tools/make_bundle.py <input> writes CaliforniaBurrito.zip with metadata.json", {"size": 10, "color": MUTED})],
@@ -380,7 +385,7 @@ def main():
     text(s, Inches(0.5), TOP, Inches(8.0), Inches(0.5), "Beyond the scored task: the same ideas on real XR hardware",
          size=17, bold=True)
     tiles = [(f"{R['phone_before']:.0f} m -> {R['phone_after']} m", "Real phone, camera covered for 61 s",
-              "Galaxy M36 live: position error when vision returns, standard fusion vs ours (stand-still prior in long outages)"),
+              "Galaxy M36 live: position error against ARCore when vision returns, standard fusion vs ours"),
              (f"{R['headset_before']:.0f} m -> {R['headset_after']:.1f} m", "Real VR headsets, clipped IMUs",
               "Samsung Odyssey+ / Valve Index recordings: the saturation guard spots clipping from the data itself"),
              ("5 IMUs", "Finding the faulty IMU",
