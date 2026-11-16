@@ -1,3 +1,5 @@
+> The camera + multi-IMU system built before the official Track 3 brief. Not the scored entry; see the [main README](../README.md).
+
 # Path Finder: trajectory estimation that survives sensor failure
 
 **Samsung PRISM XR Hackathon 2026, Track 3: Path Finder, Trajectory Estimation Under Sensor Degradation.**
@@ -7,7 +9,7 @@ Team California Burrito, SRM Institute of Science and Technology, Kattankulathur
 
 The task Samsung scores is IMU-only: a degraded EuRoC-format `imu0/data.csv` in, `estimated_trajectory.txt` (TUM
 format, one pose per IMU row, including the 5 s after the IMU dies) out, within 8 MB peak RAM and 20 ms per second of
-IMU on one thread. The entry is [`src/`](src/README.md):
+IMU on one thread. The entry is [`src/`](../src/README.md):
 
 ```bash
 docker build -t pathfinder src/
@@ -19,37 +21,37 @@ or without Docker: `make -C src && src/pathfinder <imu folder | zip | csv> -o es
 | | |
 |---|---|
 | Entry | `src/main.cpp` (C++17 + zlib); `src/main.py` is the readable reference with the same output |
-| Peak RAM / compute | **2.28 MB / 1.96 ms** per second of IMU, worst of 3 recordings, one thread, Apple M5 ([`results/track3/budget.json`](results/track3/budget.json)); 5.2 MB / 6 ms on a Windows 11 laptop (5.0 MB of that is the Windows runtime) |
+| Peak RAM / compute | **2.28 MB / 1.96 ms** per second of IMU, worst of 3 recordings, one thread, Apple M5 ([`results/track3/budget.json`](../results/track3/budget.json)); 5.2 MB / 6 ms on a Windows 11 laptop (5.0 MB of that is the Windows runtime) |
 | Output contract | 24 tests: one pose per row through NaN, frozen, zero and missing rows, cut files, unknown gravity (`PF_ENTRY=cpp pytest tests/stress/test_main_contract.py`) |
-| Accuracy, held-out EuRoC MH_05 + V2_03 + TUM-VI room6 | ATE 3.08 m vs 3.28 m standing still ([raw results](results/track3/README.md)), 3.19 m for the retuned filter alone or with our earlier network, and 4.54 m for our original filter settings. The network reads body-frame IMU with gravity kept (AirIO style); it is worse than the earlier one on the handheld TUM-VI rooms and if the IMU were mounted another way ([details](docs/AIRIO.md), [earlier network](docs/LEARNED_VELOCITY.md)) |
+| Accuracy, held-out EuRoC MH_05 + V2_03 + TUM-VI room6 | ATE 3.08 m vs 3.28 m standing still ([raw results](../results/track3/README.md)), 3.19 m for the retuned filter alone or with our earlier network, and 4.54 m for our original filter settings. The network reads body-frame IMU with gravity kept (AirIO style); it is worse than the earlier one on the handheld TUM-VI rooms and if the IMU were mounted another way ([details](AIRIO.md), [earlier network](LEARNED_VELOCITY.md)) |
 | Bundle | `python tools/make_bundle.py <input>` writes `dist/CaliforniaBurrito.zip` with `metadata.json` |
-| Slides | [`deck/SRMIST_CaliforniaBurrito.pptx`](deck/SRMIST_CaliforniaBurrito.pptx) |
+| Slides | [`deck/SRMIST_CaliforniaBurrito.pptx`](../deck/SRMIST_CaliforniaBurrito.pptx) |
 
-Benchmark reports (Windows laptop, MacBook, Galaxy phone): [`docs/reports/`](docs/reports/README.md). Brief: [`docs/TRACK3_BRIEF.md`](docs/TRACK3_BRIEF.md). Status: [`docs/TRACK3_STATUS.md`](docs/TRACK3_STATUS.md).
-What we tried and what did not work: [`docs/RESEARCH_REVIEW.md`](docs/RESEARCH_REVIEW.md).
+Benchmark reports (Windows laptop, MacBook, Galaxy phone): [`docs/reports/`](reports/README.md). Brief: [`docs/TRACK3_BRIEF.md`](TRACK3_BRIEF.md). Status: [`docs/TRACK3_STATUS.md`](TRACK3_STATUS.md).
+What we tried and what did not work: [`docs/RESEARCH_REVIEW.md`](RESEARCH_REVIEW.md).
 
 ## The wider system (camera + several IMUs; not scored)
 
-The live phone demo, the real-VR-headset evaluation and the saturation / long-outage work live in [`demo_line/`](demo_line/README.md) with their own copy of the filter; the real-vision workstream (#26) is in the root `pathfinder/`.
+The live phone demo, the real-VR-headset evaluation and the saturation / long-outage work live in [`demo_line/`](../demo_line/README.md) with their own copy of the filter; the real-vision workstream (#26) is in the root `pathfinder/`.
 
 Everything below is the camera + multi-IMU tracker built before the official brief arrived. It is the material for the
-final demo. **Estimator implementation update:** see [issue #1 completion notes](docs/ISSUE1_COMPLETION.md) for the
+final demo. **Estimator implementation update:** see [issue #1 completion notes](ISSUE1_COMPLETION.md) for the
 current reference-free API, model policy, input validation and validity semantics. The result tables below predate
 that implementation; they are historical research evidence, not revalidated measurements of the current defaults.
 
 **Real-vision update (issues #2/#3):** Path Finder now runs on motion estimated from **real stereo images**
 (`pathfinder/stereo_vo.py`), fused through clone-based relative-pose updates with the **real** IMU. It has been
-evaluated on TUM-VI room1 under a frozen protocol ([docs/PROTOCOL.md](docs/PROTOCOL.md)), with
-the report and figures in [results/vision/](results/vision/README.md) and a labelled prerecorded replay in
-[demo/vision_replay.html](demo/vision_replay.html). room1 is a *development* recording that earlier work already
+evaluated on TUM-VI room1 under a frozen protocol ([docs/PROTOCOL.md](PROTOCOL.md)), with
+the report and figures in [results/vision/](../results/vision/README.md) and a labelled prerecorded replay in
+[demo/vision_replay.html](../demo/vision_replay.html). room1 is a *development* recording that earlier work already
 used. That evaluation has no untouched final test and runs no established external VIO baseline, and the
 VO covariance is not validated, so relative-mode poses are reported `valid=False` by contract. The tables, deck
 and video further down still describe the earlier simulated-camera benchmark and have **not** been regenerated
-from the new bundle. Setup and reproduction: [docs/REPRODUCE.md](docs/REPRODUCE.md); runtime contract:
-[docs/STREAMING.md](docs/STREAMING.md); releases/licences: [docs/RELEASE.md](docs/RELEASE.md).
+from the new bundle. Setup and reproduction: [docs/REPRODUCE.md](REPRODUCE.md); runtime contract:
+[docs/STREAMING.md](STREAMING.md); releases/licences: [docs/RELEASE.md](RELEASE.md).
 According to the team's restatement of the official brief (`docs/TRACK3_BRIEF.md` on the `track3-entry` branch, PR #12),
 the **scored Track 3 task is IMU-only**. This vision work is supporting/innovation material and is not the scored entry; see
-[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
+[docs/REQUIREMENTS.md](REQUIREMENTS.md).
 
 > Design robust trajectory-estimation techniques capable of maintaining reliable tracking and navigation
 > when sensor measurements become degraded or unreliable.
@@ -107,12 +109,12 @@ poses. Shipping it means a C++ port of the filter and voting, and the network ex
 | Item | Where |
 |---|---|
 | Source code | this repository |
-| Presentation | [`deck/PathFinder_SRMIST_CaliforniaBurrito.pptx`](deck/PathFinder_SRMIST_CaliforniaBurrito.pptx) (Samsung template, built by `deck/build_deck.py`) |
-| Video | [`results/demo.mp4`](results/demo.mp4) (84 s, rendered from real runs by `make_video.py`) |
-| Interactive demo | [`demo/index.html`](demo/index.html), open in any browser |
-| Results | [`results/report.html`](results/report.html), [`results/summary.json`](results/summary.json) |
+| Presentation | [`deck/PathFinder_SRMIST_CaliforniaBurrito.pptx`](../deck/PathFinder_SRMIST_CaliforniaBurrito.pptx) (Samsung template, built by `deck/build_deck.py`) |
+| Video | [`results/demo.mp4`](../results/demo.mp4) (84 s, rendered from real runs by `make_video.py`) |
+| Interactive demo | [`demo/index.html`](../demo/index.html), open in any browser |
+| Results | [`results/report.html`](../results/report.html), [`results/summary.json`](../results/summary.json) |
 | Trained models | [release `models-v1`](https://github.com/rehaanajani/pathfinder-xr/releases/tag/models-v1) |
-| AI disclosure | [`AI_DISCLOSURE.md`](AI_DISCLOSURE.md) |
+| AI disclosure | [`AI_DISCLOSURE.md`](../AI_DISCLOSURE.md) |
 
 ## Results
 
@@ -282,7 +284,7 @@ Outputs: `results/report.html` (all numbers and plots), `results/summary.json`, 
 
 ## AI disclosure
 
-See [AI_DISCLOSURE.md](AI_DISCLOSURE.md).
+See [AI_DISCLOSURE.md](../AI_DISCLOSURE.md).
 
 ## Team
 
