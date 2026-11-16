@@ -1,0 +1,35 @@
+{
+ "schema": "pathfinder.result-bundle/1",
+ "source_run": "20261115T173827Z-vision-room1-c7acccf",
+ "source_status": "complete",
+ "source_sha256": {
+  "manifest.json": "d722e5a4458eac28b1dcf89f712b99eb32d35109b1f44b27a5ee1550457bca89",
+  "protocol.json": "d20adb7ba8d789f4bda0ffb8a0fe9058d16eb283aa4994f8dfbcba31739011fd",
+  "rows.jsonl": "4321d7149d97957ab446f62cf8acc2853c81eb81ad7f364f1382b2a5c5100a4b",
+  "summary.json": "5057b775194d9dee2c1a69e80b1756b17167c73f5a70b6029a3d009aa0fe24e4",
+  "status.json": "3f6f96caaaef6e989e9e228f0813f22c226b7228e675fef82d645e9e4bdb4741"
+ },
+ "protocol": "pathfinder.vision-protocol/2",
+ "code": {
+  "commit": "c7acccfe5364c2379fa8102ea9857dca6c743763",
+  "dirty": false,
+  "diff_sha256": null,
+  "branch": "issue-2-3-real-vision-repro"
+ },
+ "generator": "tools/vision_report.py",
+ "generator_sha256": "777536b2263a1ffc2fce3803fd5f6e19c153544807dea7550cca04de1ad19347",
+ "profile_run": "20261115T181641Z-profile-room1-51192ba",
+ "files": {
+  "ate_by_scenario.png": "5f9130d04f9a0ce7a25332908f1955cd12dfcedf20379e958b6d6ac66b2b49d3",
+  "error_blackout_20s_at60.png": "e3c23528c0a254f552ccf2a846418cfd2b1ecbaa4d6ccf1216a00481bf0aba64",
+  "error_blackout_5s_at40.png": "2c5d37a7043e4be219c2aebab137d7e97ecd3d58081de3a633014acf872b07fe",
+  "error_clean.png": "f399c8d9f79db4dce643dcbb852d3d39e7e56903ddc8ee80d0332ae55b85cbb0",
+  "error_frozen_3s_at60.png": "bd2db18ebbf3bbff2fd6fe0773212210073e2de6a1d6c89cc7d95528d7786a89",
+  "REPORT.md": "102752e15a159c89635827993fa5459554f374bb21379b8b3d0db0b7937297a6",
+  "source_manifest.json": "d722e5a4458eac28b1dcf89f712b99eb32d35109b1f44b27a5ee1550457bca89",
+  "source_protocol.json": "d20adb7ba8d789f4bda0ffb8a0fe9058d16eb283aa4994f8dfbcba31739011fd",
+  "tables.json": "73c1a3b4d69d4e53727b47f4169bbb079d69a9d66aa61d8b5dba7c4a67810c28",
+  "trajectory_clean.png": "d54b61f71a124841e1555125d6cdcda2ecd0f4ad8589411622b3f79327d55527"
+ },
+ "rows_jsonl_note": "rows.jsonl (full per-run metrics + 10 Hz series) stays in the source run directory; tables.json carries every reported number"
+}

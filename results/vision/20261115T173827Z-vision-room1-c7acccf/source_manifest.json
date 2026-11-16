@@ -1,0 +1,116 @@
+{
+ "schema": "pathfinder.run/1",
+ "name": "vision-room1",
+ "created_utc": "20261115T173827Z",
+ "command": [
+  "evaluate_vision.py",
+  "--calibration",
+  "calibration/vo_room1_v2.json",
+  "--sync",
+  "results/runs/20261115T164518Z-check-sync-room1-db7015b/sync.json",
+  "--workers",
+  "14"
+ ],
+ "code": {
+  "commit": "c7acccfe5364c2379fa8102ea9857dca6c743763",
+  "dirty": false,
+  "diff_sha256": null,
+  "branch": "issue-2-3-real-vision-repro"
+ },
+ "environment": {
+  "python": "3.13.5",
+  "implementation": "CPython",
+  "platform": "Windows-11-10.0.26300-SP0",
+  "machine": "AMD64",
+  "processor": "Intel64 Family 6 Model 141 Stepping 1, GenuineIntel",
+  "cpu_count": 16,
+  "omp_num_threads": "1",
+  "packages": {
+   "numpy": "2.3.4",
+   "scipy": "1.18.0",
+   "cv2": "4.12.0",
+   "torch": "2.8.0+cpu",
+   "yaml": "6.0.2",
+   "onnxruntime": null,
+   "pandas": "2.3.3",
+   "matplotlib": null
+  }
+ },
+ "config": {
+  "seq": "room1",
+  "calibration": "calibration/vo_room1_v2.json",
+  "sync": "results/runs/20261115T164518Z-check-sync-room1-db7015b/sync.json",
+  "model": "models/dispnet_faults/best.pt",
+  "model_sha256": "611e97fdad4ac7735a3086179e059edb772f6d93d13a40c3b88b8d4bfec3eba3",
+  "no_model": false,
+  "scenarios": "all",
+  "workers": 14,
+  "out": null,
+  "systems": [
+   "vo_only",
+   "imu_only",
+   "conventional",
+   "pathfinder",
+   "pathfinder_no_gate",
+   "pathfinder_uncal_cov",
+   "pathfinder_no_adaptive_q",
+   "pathfinder_no_health",
+   "pathfinder_model",
+   "pathfinder_model_no_selfcheck",
+   "pathfinder_model_biascorr"
+  ]
+ },
+ "seeds": [
+  100,
+  101,
+  102,
+  103,
+  104,
+  105,
+  106,
+  107,
+  108,
+  109,
+  110,
+  111
+ ],
+ "protocol": "pathfinder.vision-protocol/2",
+ "inputs": {
+  "imu": {
+   "path": "C:\\Users\\Nikhil\\AppData\\Local\\Temp\\pfxr-audit\\src\\local_data\\tumvi\\dataset-room1_512_16\\mav0\\imu0\\data.csv",
+   "sha256": "8cd471ca2c1425260534228fbe0f3e27bd6711199dfce7c971447cdf184569e2"
+  },
+  "cam0_index": {
+   "path": "C:\\Users\\Nikhil\\AppData\\Local\\Temp\\pfxr-audit\\src\\local_data\\tumvi\\dataset-room1_512_16\\mav0\\cam0\\data.csv",
+   "sha256": "95420d52db3c4f392d7df8a4b562abb353b7b8db0d4f73fb76a3031330bd5ddb"
+  },
+  "cam1_index": {
+   "path": "C:\\Users\\Nikhil\\AppData\\Local\\Temp\\pfxr-audit\\src\\local_data\\tumvi\\dataset-room1_512_16\\mav0\\cam1\\data.csv",
+   "sha256": "95420d52db3c4f392d7df8a4b562abb353b7b8db0d4f73fb76a3031330bd5ddb"
+  },
+  "camchain": {
+   "path": "C:\\Users\\Nikhil\\AppData\\Local\\Temp\\pfxr-audit\\src\\local_data\\tumvi\\dataset-room1_512_16\\dso\\camchain.yaml",
+   "sha256": "3a0c0285f4d0a3a1678053b2e5912e3e250e78ac09bd009f6d7d8bba669d5703"
+  },
+  "imu_config": {
+   "path": "C:\\Users\\Nikhil\\AppData\\Local\\Temp\\pfxr-audit\\src\\local_data\\tumvi\\dataset-room1_512_16\\dso\\imu_config.yaml",
+   "sha256": "e309d3f4b5e6e812580fcb9c9f402ab79f4a09931e41f433e7038301118683a1"
+  },
+  "reference_scoring_only": {
+   "path": "C:\\Users\\Nikhil\\AppData\\Local\\Temp\\pfxr-audit\\src\\local_data\\tumvi\\dataset-room1_512_16\\mav0\\mocap0\\data.csv",
+   "sha256": "24c577e2dcddcd54a4b5d9d988277d00b3b1b64785033bce93775da75eb95fa5"
+  },
+  "vo_calibration": {
+   "path": "calibration\\vo_room1_v2.json",
+   "sha256": "591e9332b1ce7f79c4f55d26807d89faf7892a7c081f086621d41524ed21e61c"
+  },
+  "model": {
+   "path": "models\\dispnet_faults\\best.pt",
+   "sha256": "611e97fdad4ac7735a3086179e059edb772f6d93d13a40c3b88b8d4bfec3eba3"
+  },
+  "sync": {
+   "path": "results\\runs\\20261115T164518Z-check-sync-room1-db7015b\\sync.json",
+   "sha256": "f1345746e86dbf312260c6d1e6495b874236a9c32837f8faa6fb9003b0af3604"
+  }
+ }
+}

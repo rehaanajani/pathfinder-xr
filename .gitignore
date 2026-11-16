@@ -13,3 +13,5 @@ deck/unpacked/
 deck/*.jpg
 deck/*.pdf
 .claude/
+!models/MODELS.json
+fresh-setup/

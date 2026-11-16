@@ -1,0 +1,496 @@
+{
+ "protocol": "pathfinder.vision-protocol/1",
+ "frozen": {
+  "protocol": "pathfinder.vision-protocol/1",
+  "imu_noise": {
+   "sigma_g": 0.00016,
+   "sigma_a": 0.0028,
+   "sigma_bg": 2.2e-05,
+   "sigma_ba": 0.00086
+  },
+  "vo_cov_scale": 4.0,
+  "camera_time_offset_s": 0.0,
+  "model": "models/dispnet_faults/best.pt",
+  "model_sha256": "611e97fdad4ac7735a3086179e059edb772f6d93d13a40c3b88b8d4bfec3eba3"
+ },
+ "vo_config": {
+  "max_corners": 300,
+  "min_distance": 12,
+  "quality": 0.003,
+  "fb_px": 1.0,
+  "ransac_px": 1.5,
+  "min_inliers": 15,
+  "good_inliers": 80,
+  "depth_range": [
+   0.2,
+   15.0
+  ],
+  "guess_depth": 2.0,
+  "stereo_rep_px": 1.0,
+  "pixel_std": 0.5,
+  "max_rot_rad": 0.6,
+  "max_trans_m": 0.5,
+  "kf_every": 4,
+  "kf_min_track_ratio": 0.5
+ },
+ "scenarios": [
+  {
+   "name": "clean"
+  },
+  {
+   "name": "blackout_5s_at40",
+   "image_faults": [
+    {
+     "kind": "blackout",
+     "start": 40.0,
+     "end": 45.0,
+     "severity": 1.0
+    }
+   ]
+  },
+  {
+   "name": "blackout_5s_startup",
+   "image_faults": [
+    {
+     "kind": "blackout",
+     "start": 0.0,
+     "end": 5.0,
+     "severity": 1.0
+    }
+   ]
+  },
+  {
+   "name": "blackout_20s_at60",
+   "image_faults": [
+    {
+     "kind": "blackout",
+     "start": 60.0,
+     "end": 80.0,
+     "severity": 1.0
+    }
+   ]
+  },
+  {
+   "name": "dark_10s_at50",
+   "image_faults": [
+    {
+     "kind": "dark",
+     "start": 50.0,
+     "end": 60.0,
+     "severity": 0.9
+    }
+   ]
+  },
+  {
+   "name": "blur_5s_at70",
+   "image_faults": [
+    {
+     "kind": "blur",
+     "start": 70.0,
+     "end": 75.0,
+     "severity": 1.0
+    }
+   ]
+  },
+  {
+   "name": "occlusion_8s_at30",
+   "image_faults": [
+    {
+     "kind": "occlusion",
+     "start": 30.0,
+     "end": 38.0,
+     "severity": 1.0
+    }
+   ]
+  },
+  {
+   "name": "low_texture_6s_at90",
+   "image_faults": [
+    {
+     "kind": "low_texture",
+     "start": 90.0,
+     "end": 96.0,
+     "severity": 1.0
+    }
+   ]
+  },
+  {
+   "name": "drop_3s_at100",
+   "image_faults": [
+    {
+     "kind": "drop",
+     "start": 100.0,
+     "end": 103.0,
+     "severity": 1.0
+    }
+   ]
+  },
+  {
+   "name": "jitter_10s_at20",
+   "image_faults": [
+    {
+     "kind": "jitter",
+     "start": 20.0,
+     "end": 30.0,
+     "severity": 1.0
+    }
+   ]
+  },
+  {
+   "name": "frozen_3s_at60",
+   "image_faults": [
+    {
+     "kind": "frozen",
+     "start": 60.0,
+     "end": 63.0,
+     "severity": 1.0
+    }
+   ]
+  },
+  {
+   "name": "stereo_desync_5s_at80",
+   "image_faults": [
+    {
+     "kind": "stereo_desync",
+     "start": 80.0,
+     "end": 85.0,
+     "severity": 1.0
+    }
+   ]
+  },
+  {
+   "name": "blackout_5s_at40+imu_bias",
+   "image_faults": [
+    {
+     "kind": "blackout",
+     "start": 40.0,
+     "end": 45.0,
+     "severity": 1.0
+    }
+   ],
+   "imu_faults": [
+    {
+     "kind": "bias",
+     "start": 35.0,
+     "end": 142.05042791366577,
+     "gyro": [
+      0.02,
+      -0.015,
+      0.01
+     ],
+     "acc": [
+      0.3,
+      -0.2,
+      0.15
+     ]
+    }
+   ]
+  },
+  {
+   "name": "blackout_5s_at40+imu_saturation",
+   "image_faults": [
+    {
+     "kind": "blackout",
+     "start": 40.0,
+     "end": 45.0,
+     "severity": 1.0
+    }
+   ],
+   "imu_faults": [
+    {
+     "kind": "saturation",
+     "start": 40.0,
+     "end": 45.0,
+     "gyro_max": 0.5,
+     "acc_max": 10.5
+    }
+   ]
+  },
+  {
+   "name": "imu_dropout_0.5s_at50",
+   "imu_faults": [
+    {
+     "kind": "dropout",
+     "start": 50.0,
+     "end": 50.5
+    }
+   ]
+  },
+  {
+   "name": "imu_noise_5s_at60",
+   "imu_faults": [
+    {
+     "kind": "noise",
+     "start": 60.0,
+     "end": 65.0
+    }
+   ]
+  },
+  {
+   "name": "random_s100",
+   "image_faults": [
+    {
+     "kind": "frozen",
+     "start": 5.930079640336049,
+     "end": 8.916181977772137,
+     "severity": 0.9815580765743499
+    },
+    {
+     "kind": "drop",
+     "start": 82.80615486349303,
+     "end": 92.26642631694368,
+     "severity": 0.7067255351462495
+    },
+    {
+     "kind": "stereo_desync",
+     "start": 93.3932458105279,
+     "end": 98.72814338450686,
+     "severity": 0.4329940313714062
+    }
+   ],
+   "imu_faults": [
+    {
+     "kind": "spikes",
+     "start": 10.881662408160519,
+     "end": 13.957016129878767
+    }
+   ],
+   "seed": 100
+  },
+  {
+   "name": "random_s101",
+   "image_faults": [
+    {
+     "kind": "stereo_desync",
+     "start": 82.53232144516912,
+     "end": 83.99985334323581,
+     "severity": 0.5060299928378498
+    }
+   ],
+   "imu_faults": [
+    {
+     "kind": "saturation",
+     "start": 28.521829892864282,
+     "end": 30.790792537255136
+    }
+   ],
+   "seed": 101
+  },
+  {
+   "name": "random_s102",
+   "image_faults": [
+    {
+     "kind": "blur",
+     "start": 41.06880544902758,
+     "end": 43.961483450973674,
+     "severity": 0.7794296650824114
+    },
+    {
+     "kind": "drop",
+     "start": 132.9174009183753,
+     "end": 140.1393223183512,
+     "severity": 0.4697650920454344
+    }
+   ],
+   "imu_faults": [],
+   "seed": 102
+  },
+  {
+   "name": "random_s103",
+   "image_faults": [
+    {
+     "kind": "blackout",
+     "start": 98.0844136864024,
+     "end": 99.27314732886572,
+     "severity": 0.6070760021836872
+    },
+    {
+     "kind": "blackout",
+     "start": 120.48638900298819,
+     "end": 121.4654612509186,
+     "severity": 0.9002797418662587
+    }
+   ],
+   "imu_faults": [],
+   "seed": 103
+  },
+  {
+   "name": "random_s104",
+   "image_faults": [
+    {
+     "kind": "frozen",
+     "start": 17.190730715294535,
+     "end": 21.16699742465514,
+     "severity": 0.562548502408827
+    },
+    {
+     "kind": "blur",
+     "start": 88.05051873827249,
+     "end": 92.57398749241905,
+     "severity": 0.8769437097588089
+    },
+    {
+     "kind": "jitter",
+     "start": 106.15520485701389,
+     "end": 106.76503057152401,
+     "severity": 0.8777275645878186
+    }
+   ],
+   "imu_faults": [],
+   "seed": 104
+  },
+  {
+   "name": "random_s105",
+   "image_faults": [
+    {
+     "kind": "drop",
+     "start": 0.0,
+     "end": 9.74740276824876,
+     "severity": 0.654693039238828
+    }
+   ],
+   "imu_faults": [
+    {
+     "kind": "dropout",
+     "start": 72.73345238761169,
+     "end": 79.02385666625973
+    }
+   ],
+   "seed": 105
+  },
+  {
+   "name": "random_s106",
+   "image_faults": [
+    {
+     "kind": "blackout",
+     "start": 44.941381887226505,
+     "end": 46.267530245404174,
+     "severity": 0.3386734224425864
+    },
+    {
+     "kind": "stereo_desync",
+     "start": 65.22284410902935,
+     "end": 65.7871723898171,
+     "severity": 0.9751096062221576
+    }
+   ],
+   "imu_faults": [],
+   "seed": 106
+  },
+  {
+   "name": "random_s107",
+   "image_faults": [
+    {
+     "kind": "drop",
+     "start": 102.10478346197496,
+     "end": 104.19628005568822,
+     "severity": 0.6438212955556184
+    }
+   ],
+   "imu_faults": [],
+   "seed": 107
+  },
+  {
+   "name": "random_s108",
+   "image_faults": [
+    {
+     "kind": "frozen",
+     "start": 48.29160760021236,
+     "end": 51.614979526117075,
+     "severity": 0.4680762232993493
+    }
+   ],
+   "imu_faults": [],
+   "seed": 108
+  },
+  {
+   "name": "random_s109",
+   "image_faults": [
+    {
+     "kind": "low_texture",
+     "start": 44.715127153172034,
+     "end": 50.93337675964892,
+     "severity": 0.7194771836058531
+    },
+    {
+     "kind": "dark",
+     "start": 76.11177569576186,
+     "end": 76.89882464468043,
+     "severity": 0.9995865662285686
+    }
+   ],
+   "imu_faults": [],
+   "seed": 109
+  },
+  {
+   "name": "random_s110",
+   "image_faults": [
+    {
+     "kind": "blackout",
+     "start": 13.748751878120506,
+     "end": 14.363195139776966,
+     "severity": 0.6119754048730877
+    },
+    {
+     "kind": "stereo_desync",
+     "start": 69.67324667980863,
+     "end": 71.99420279377848,
+     "severity": 0.46789507547644205
+    }
+   ],
+   "imu_faults": [
+    {
+     "kind": "bias",
+     "start": 26.7047028215428,
+     "end": 29.583461896877076
+    }
+   ],
+   "seed": 110
+  },
+  {
+   "name": "random_s111",
+   "image_faults": [
+    {
+     "kind": "jitter",
+     "start": 33.485597081925626,
+     "end": 38.93899275943326,
+     "severity": 0.43825968037045354
+    },
+    {
+     "kind": "blur",
+     "start": 92.28150803900749,
+     "end": 93.11181499683126,
+     "severity": 0.8373066139170138
+    }
+   ],
+   "imu_faults": [],
+   "seed": 111
+  }
+ ],
+ "systems": [
+  "vo_only",
+  "imu_only",
+  "conventional",
+  "pathfinder",
+  "pathfinder_no_gate",
+  "pathfinder_uncal_cov",
+  "pathfinder_no_adaptive_q",
+  "pathfinder_no_health",
+  "pathfinder_model",
+  "pathfinder_model_no_selfcheck",
+  "pathfinder_model_biascorr"
+ ],
+ "sequence": "room1",
+ "split_role": "development recording (previously exposed); see docs/PROTOCOL.md",
+ "duration_s": 141.05042791366577,
+ "sync_measurement": {
+  "offset_s": 0.0001657144950502357,
+  "convention": "imu time of image = front-end time + offset_s",
+  "file_time_shift_s": 0.0,
+  "file_time_shift_source": "absent_assumed_zero",
+  "rms_increment_residual_deg": 0.04983693929671564,
+  "rms_increment_at_zero_deg": 0.04990919268152183,
+  "n_increments": 2786
+ },
+ "calibration_run": "20261115T164509Z-calibrate-vo-room1-db7015b"
+}

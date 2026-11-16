@@ -1,0 +1,8 @@
+# Inputs for the pinned CPU lock used by CI and the fresh-setup check (no Torch or model-inference tests).
+numpy==2.2.6
+scipy==1.18.0
+opencv-python-headless==4.12.0.88
+PyYAML==6.0.2
+pytest==8.4.1
+matplotlib==3.10.7
+psutil==7.0.0

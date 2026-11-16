@@ -193,6 +193,37 @@ implemented but **off by default**: on synthetic data it removes the outage dama
 network's large benefit under all-IMU saturation (1.9 → 11.2 m), and choosing the threshold needs the TLIO
 validation split, which is not available locally. Cloning / `disp_cov_scale = 1600` remain IMU-only results.
 
+## 5b. Image-derived relative motion (issue #2)
+
+`StreamingEstimator(camera_mode="relative")` accepts visual odometry from `pathfinder.stereo_vo`.
+It has two event types:
+
+* `add_camera_keyframe(t, kf)` clones (R, p) at `t`. Camera clones and learned-displacement clones are
+  pruned independently (`vo_max_clones`), so one kind never evicts the other.
+* `add_camera_relative(t, kf, dp, dR, cov6, health)` gives the IMU pose at `t` in keyframe `kf`'s
+  IMU frame. The measurement model is `h_t = R_k^T (p - p_k)`, `h_R = R_k^T R`, and the residual is
+  `[dp - h_t, Log(h_R^T dR)]`. The Jacobians use right perturbations of the current state and of the
+  clone (`tests/test_relative_pose.py` checks them numerically). A 6-DoF χ² gate (`vo_gate`, 22.46)
+  rejects inconsistent motion such as frozen frames. A missing clone gives `vo_no_anchor` and is never
+  applied. Relative updates never re-anchor absolute position or heading.
+
+The front end reads images only, so the IMU information is not counted twice. Its covariance is the
+PnP information with the per-landmark stereo depth covariance, inflated by the residual scale and
+multiplied by `vo_cov_scale`, which is calibrated on development data (`calibration/vo_room1_v2.json`).
+`vo_covariance_validated=False` (default) marks every relative-mode output
+`COVARIANCE_UNRELIABLE`/invalid until held-out coverage evidence exists. Initialisation in relative
+mode is the gravity start: the frame is the start pose, with yaw prior 0.1° because odometry fixes the
+gauge, and velocity unknown with 1.5 m/s std. Healthy VO updates count as camera anchoring, so the
+issue #1 fallback policy holds: the learned model only self-checks while VO tracks.
+`model_input_bias_corrected=True` feeds the model IMU samples minus the filter's bias estimate. This
+removes a train/runtime mismatch on raw-IMU devices; TLIO training data are bias compensated. It is
+off by default and evaluated as an ablation.
+
+Front-end correction found on real data: DLT triangulation splits the residual epipolar error between
+the two views. On TUM-VI room1 that error is systematically vertical, and it produced a constant
+−0.019°/frame pitch bias against the gyro (about 0.4°/s). Landmarks are now anchored on their
+left-image ray (`tests/test_vision_eval.py::test_landmarks_anchor_on_left_ray_so_zero_motion_has_no_bias`).
+
 ## 6. Before / after (synthetic)
 
 Wrong-fix and recovery matrix (`results/diagnostics/issue1/wrongfix_matrix.py`; shipped config; mean / max position error in m
@@ -257,3 +288,18 @@ Before = the audit's `synthetic_eval.log` (same seeds, same scenarios); after = 
 | Real visual measurements (wrong-fix behaviour against a real VIO front end) | issue #2 |
 | 1e-4 false-alarm rate verification | needs ~10⁵–10⁶ independent windows, ideally real data |
 | Multiple simultaneous IMU faults, inter-IMU time offset estimation | not implemented |
+
+
+### PR26 review correction: relative-pose recovery
+
+Recovery requires a consecutive, healthy innovation history with no gap longer
+than `outage_gap_s` and a consistent offset/trend in a common frame. Invalid, missing-anchor
+and skipped measurements reset that history. A successful recovery increases only the
+current pose/velocity uncertainty relative to the existing clone and still passes the
+innovation gate. Bias gains are frozen during its recovery window. Low-health updates
+cannot steer that window. Failed recovery remains rejected and is logged.
+
+This remains a development policy: a coherent camera error can resemble an inertial
+error. It does not certify covariance or establish the cause of historical room1 failures.
+The committed protocol-v1/v2 results predate these corrections. New front-end source
+hashes require new calibration and a new result bundle; do not relabel old results.

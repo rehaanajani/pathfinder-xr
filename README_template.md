@@ -8,6 +8,20 @@ for the current reference-free API, conservative model policy, input validation 
 The result tables and submission artifacts below predate this implementation; they are historical
 research evidence, not revalidated measurements of the current defaults or production certification.
 
+**Real-vision update (issues #2/#3):** Path Finder now runs on motion estimated from **real stereo images**
+(`pathfinder/stereo_vo.py`), fused through clone-based relative-pose updates with the **real** IMU. It has been
+evaluated on TUM-VI room1 under a frozen protocol ([docs/PROTOCOL.md](docs/PROTOCOL.md)), with
+the report and figures in [results/vision/](results/vision/README.md) and a labelled prerecorded replay in
+[demo/vision_replay.html](demo/vision_replay.html). room1 is a *development* recording that earlier work already
+used. That evaluation has no untouched final test and runs no established external VIO baseline, and the
+VO covariance is not validated, so relative-mode poses are reported `valid=False` by contract. The tables, deck
+and video further down still describe the earlier simulated-camera benchmark and have **not** been regenerated
+from the new bundle. Setup and reproduction: [docs/REPRODUCE.md](docs/REPRODUCE.md); runtime contract:
+[docs/STREAMING.md](docs/STREAMING.md); releases/licences: [docs/RELEASE.md](docs/RELEASE.md).
+According to the team's restatement of the official brief (`docs/TRACK3_BRIEF.md` on the `track3-entry` branch, PR #12),
+the **scored Track 3 task is IMU-only**. This vision work is supporting/innovation material and is not the scored entry; see
+[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
+
 > Design robust trajectory-estimation techniques capable of maintaining reliable tracking and navigation
 > when sensor measurements become degraded or unreliable.
 
@@ -98,7 +112,7 @@ __RESULTS__
 ## Run it
 
 ```bash
-bash reproduce.sh               # set up, download data (3.8 GB), train or reuse models, test, benchmark, demo
+bash reproduce.sh               # set up, download data (3.8 GB), verify released models (retrain only with --train), test, benchmark, demo
 bash reproduce.sh --synthetic   # no download, synthetic head walks, ~3 min
 ```
 
@@ -151,8 +165,9 @@ Outputs: `results/report.html` (all numbers and plots), `results/summary.json`, 
   error cancels in it); it stays as an option. See `results/diagnostics/`.
 - **A wider network is training.** 1.46M parameters, 0.120 m per-window error after 17 of 30 epochs vs 0.136 m
   for the current network; not yet scored end to end.
-- **Not on a headset yet.** The network runs in ONNX Runtime at __MS__ ms on one CPU core (INT8: 0.4 MB); the
-  next step is ONNX Runtime Mobile or Qualcomm QNN on Snapdragon XR2+ Gen 2.
+- **Not on a headset yet.** The historical ONNX benchmark records 0.40 ms FP32 and
+  0.28 ms INT8 on an Apple M5 laptop, one CPU thread, ONNX Runtime 1.32.0
+  (`results/onnx_benchmark.json`). These are network-only timings, not full-pipeline or headset latency.
 
 ## Prior work we build on
 
