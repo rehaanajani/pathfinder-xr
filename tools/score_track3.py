@@ -12,6 +12,8 @@ import argparse
 import json
 import sys
 
+from pathlib import Path
+
 import numpy as np
 
 
@@ -32,7 +34,9 @@ def score(est_path, gt_path, truth=None, input_csv=None):
     tg, pg = gt[:, 0] * 1e-9, gt[:, 1:4]
     res = {"rows": int(len(est))}
     if input_csv:
-        tin = np.loadtxt(input_csv, delimiter=",", comments="#", usecols=0, dtype=np.int64) * 1e-9
+        # any header (EuRoC "#..." or the organisers' plain "timestamp,ax,..."): keep only rows starting with a digit
+        tin = np.array([int(l.split(",", 1)[0]) for l in Path(input_csv).read_text().splitlines()
+                        if l[:1].isdigit()], dtype=np.int64) * 1e-9
         res["rows_match_input"] = bool(len(tin) == len(te) and np.allclose(tin, te, atol=1e-6))
     res["quat_unit"] = bool(np.allclose(np.linalg.norm(qe, axis=1), 1, atol=1e-6))
     inside = (te >= tg[0]) & (te <= tg[-1])
