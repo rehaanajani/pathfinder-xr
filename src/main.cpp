@@ -411,17 +411,31 @@ static Layout detect_layout(const std::string& path, const std::string& columns,
     }
     close_source(src);
     std::vector<std::string> notes;
+    auto si = [](double n) { return n >= 6.0 && n <= 14.0; };   // gravity in m/s^2
+    auto gu = [](double n) { return n >= 0.6 && n <= 1.4; };    // gravity in g
+    bool have = x.size() >= 10;
+    double mx = have ? median_of(x) : 0, my = have ? median_of(y) : 0;
     if (columns != "auto") L.accel_first = columns == "accel-first";
-    else if (x.size() >= 10) {
-        double mx = median_of(x), my = median_of(y);
-        auto si = [](double n) { return n >= 6.0 && n <= 14.0; };
-        auto gu = [](double n) { return n >= 0.6 && n <= 1.4; };
-        if (si(mx) != si(my)) L.accel_first = si(mx);
-        else if (!si(mx) && !si(my) && gu(mx) != gu(my)) { L.accel_first = gu(mx); L.a_scale = G; }
-        else notes.push_back("column order unclear, using gyro first");
-    } else notes.push_back("too few rows to check columns, using gyro first");
+    else if (!have) notes.push_back("too few rows to check columns, using gyro first");
+    else {
+        // a forced accel unit narrows the test to that unit; otherwise m/s^2 first, then g (as main.py)
+        bool use_si = accel_unit != "g", use_gu = accel_unit != "ms2", decided = false;
+        if (use_si) {
+            if (si(mx) != si(my)) { L.accel_first = si(mx); decided = true; }
+            else if (si(mx) || si(my)) use_gu = false;           // both look like m/s^2: g cannot settle it
+        }
+        if (!decided && use_gu && gu(mx) != gu(my)) {
+            L.accel_first = gu(mx); decided = true;
+            if (accel_unit == "auto") L.a_scale = G;
+        }
+        if (!decided) notes.push_back("column order unclear, using gyro first");
+    }
     if (accel_unit == "g") L.a_scale = G;
     else if (accel_unit == "ms2") L.a_scale = 1.0;
+    else if (columns != "auto" && have) {                        // forced order, automatic unit
+        double na = L.accel_first ? mx : my;
+        L.a_scale = (gu(na) && !si(na)) ? G : 1.0;
+    }
     if (ts_unit != "auto") {
         L.t_scale = ts_unit == "s" ? 1000000000LL : ts_unit == "ms" ? 1000000LL : ts_unit == "us" ? 1000LL : 1LL;
     } else if (!t.empty()) {

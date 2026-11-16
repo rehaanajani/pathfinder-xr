@@ -129,25 +129,34 @@ def detect_layout(inp, n_max=2000, columns="auto", ts_unit="auto", accel_unit="a
     med = lambda z: sorted(z)[len(z) // 2]
     notes = []
     accel_first, a_scale = False, 1.0
+    si = lambda n: 6.0 <= n <= 14.0                 # gravity in m/s^2
+    gu = lambda n: 0.6 <= n <= 1.4                  # gravity in g
+    mx, my = (med(x), med(y)) if len(x) >= 10 else (None, None)
     if columns != "auto":
         accel_first = columns == "accel-first"
-    elif len(x) >= 10:
-        mx, my = med(x), med(y)
-        si = lambda n: 6.0 <= n <= 14.0
-        gu = lambda n: 0.6 <= n <= 1.4
-        if si(mx) != si(my):
-            accel_first = si(mx)
-        elif not si(mx) and not si(my) and gu(mx) != gu(my):
-            accel_first = gu(mx)
-            a_scale = G
-        else:
-            notes.append("column order unclear, using gyro first")
-    else:
+    elif mx is None:
         notes.append("too few rows to check columns, using gyro first")
+    else:
+        # a forced accel unit narrows the test to that unit; otherwise m/s^2 first, then g
+        bands = [si] if accel_unit == "ms2" else [gu] if accel_unit == "g" else [si, gu]
+        decided = False
+        for band in bands:
+            if band(mx) != band(my):
+                accel_first, decided = band(mx), True
+                if band is gu and accel_unit == "auto":
+                    a_scale = G
+                break
+            if band is si and (si(mx) or si(my)):  # both look like m/s^2: g cannot settle it
+                break
+        if not decided:
+            notes.append("column order unclear, using gyro first")
     if accel_unit == "g":
         a_scale = G
     elif accel_unit == "ms2":
         a_scale = 1.0
+    elif columns != "auto" and mx is not None:     # forced order, automatic unit: judge the accel triplet
+        na = mx if accel_first else my
+        a_scale = G if gu(na) and not si(na) else 1.0
     t_scale = 1
     if ts_unit != "auto":
         t_scale = {"ns": 1, "us": 10 ** 3, "ms": 10 ** 6, "s": 10 ** 9}[ts_unit]
