@@ -16,7 +16,7 @@ is the authority.
 
 Degradation: progressive noise, bias drift, frame dropouts (including **2-second signal loss**), **unknown gravity
 alignment**, then total failure. Datasets: **EuRoC MAV and TUM-VI**. An organizer degradation script is mentioned
-("provided") — we have not received it; see *Assumptions*.
+("provided"); the organisers emailed it on 16 Nov (see *Organiser update, 16 Nov* below).
 
 ## Input (slide 16)
 
@@ -72,7 +72,7 @@ team_name.zip
     └── README.md              # how to compile & run
 ```
 
-Plus, for every team: working code in a **public or shared GitHub repo**; README with reproducible setup **and
+Plus, for every team: working code in a GitHub repo, which the 16 Nov email makes **public only** (code, ppt, video, package, readme all in it); README with reproducible setup **and
 Docker files**; **demo video ≤ 3 min** (YouTube or Drive link); presentation (PPT or PDF) named
 **`CollegeName_TeamName`** → `SRMIST_CaliforniaBurrito`; one submission per team via the Google Form. The
 presentation covers: theme ID, title, team; problem in our own words; solution and architecture diagram; tools and
@@ -80,14 +80,26 @@ tech stack; innovation highlights, results and limitations. *Not following the g
 
 ## Dates
 
-| | Deck (slide 27, "tentative") | Earlier email (Prakhar, 12 Nov) |
+| | **Official, 16 Nov email (current)** | Deck (slide 27, "tentative", superseded) |
 |---|---|---|
-| Final submission | **18 Nov 2026, 11:59 PM** | 22 Nov 2026, 11:59 PM |
-| Top 15 announced | 23 Nov | 29 Nov (top 12) |
-| Final demo | 27 Nov | 9 Dec |
-| Results | 2 Dec | 12 Dec |
+| Final submission | **22 Nov 2026** | 18 Nov |
+| Shortlist | **Top 12, 29 Nov** | Top 15, 23 Nov |
+| Final demo | **9 Dec** | 27 Nov |
+| Results | **12 Dec** | 2 Dec |
 
-**We plan for 18 Nov.** Prizes: ₹1.0 L for the top 4, PRISM worklet and possible Samsung internship.
+Submit via the Google Form https://forms.gle/86xENrtqhx988hBt8. Prizes: ₹1.0 L for the top 4, PRISM worklet and
+possible Samsung internship.
+
+## Organiser update, 16 Nov
+
+- Everything (code, resources, document, demo, ppt, package, readme) goes in a **public** GitHub repo, linked in the
+  form. The final presentation uses their template `Submission_Final_forGithub.pptx`.
+- "Package is only required for team 4": the zip bundle is optional for Track 3 (we can still include one).
+- Their degradation script (`degrade_imu.py`, fixed seed 42) documents columns `timestamp, accel xyz, gyro xyz`
+  (EuRoC is gyro first) and accepts s/ms/us/ns and accel in g. It ramps noise (accel up to 0.20 m/s², gyro 0.015
+  rad/s), bias and scale random walks, spikes (accel 6, gyro 1), stuck runs of 2-10 samples, single dropped rows (up
+  to 6 %) and bursts of 5-50 rows, duplicate rows, and keeps the last 5 s as all-zero rows. The entry detects the
+  column order and units itself; scores on their script are in `results/track3/README.md`.
 
 ## What this changes for us
 
@@ -106,7 +118,7 @@ multi-IMU fault isolation, OpenXR-style flags.
 | Their scoring | `evo` ATE/RPE harness with waypoint, blind-5 s and dropout sub-scores |
 | Packaging | Dockerfile, `team_name.zip`, README, video, PPT name |
 
-## Assumptions (to replace when the organizer script/kit arrives)
+## Assumptions (written before the 16 Nov update; the organiser script now answers the IMU-death and dropout ones)
 
 - **Checkpoints** are times along the hidden ground truth where the pose error is measured; their positions are
   *not* given to us.
