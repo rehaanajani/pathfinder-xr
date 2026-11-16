@@ -11,13 +11,13 @@
 | | Windows laptop (WSL) | MacBook Air M5 | Galaxy M36 phone | Limit |
 |---|---:|---:|---:|---:|
 | Peak RAM, worst | 5.06 MiB | **2.47 MB** | 4.04 MB | 8 |
-| CPU per second of IMU, worst | 13.97 ms | **1.84 ms** | 4.97 ms | 20 |
+| CPU per second of IMU, worst recording | 13.97 ms | **1.84 ms** (median of 5 runs) | 4.97 ms (best of 5 runs) | 20 |
 | Output contract | 114/114 | 56 tests pass | one pose per row on all 5 recordings | |
 
 **Which is better?** Accuracy does not depend on the machine: the arithmetic is fixed (`-O3` without fast-math, no
-platform-specific instructions). The trajectory the phone wrote for MH_05 is **byte-identical** to the Mac's, and C++
-matches the Python reference to 1e-6 m. On x86 (the Windows laptop) we have not compared files; at most the last
-printed digit could differ through the maths library. Only speed and memory differ:
+platform-specific instructions). The trajectory the phone wrote for MH_05 was **byte-identical** to the Mac's when we compared them on 17 Nov (the file hash was not recorded), and C++
+matches the Python reference to 1e-6 m. On x86 (the Windows laptop) we have not compared output files. Only speed and
+memory differ:
 
 - **Fastest: the Mac** (Apple M5, 1.8 ms). **Slowest: the Windows laptop under WSL** (14 ms): an older 2021 Intel core,
   measured through WSL's virtualisation with other work running, on code before the `-O3` / contiguous-memory change.
@@ -30,8 +30,10 @@ printed digit could differ through the maths library. Only speed and memory diff
 
 **Accuracy** (from report 2): on held-out recordings ATE 3.08 m vs 3.28 m standing still; on the organisers' own
 degradation script 3.40 m vs 3.66 m (7-8 % better). On the camera + IMU benchmark (report 1) Path Finder beats
-physics-only and standing still in 38/38 scenarios, and on the live phone test (report 3) it was closer in all four camera
-blackouts, e.g. 3.5 m off after 48 s blind where a standard tracker was 227 m off.
+physics-only and standing still in 38/38 scenarios, and on the live phone test (report 3) it was far
+closer than a standard tracker in all four camera blackouts (e.g. 3.5 m against 227 m after 48 s blind, measured
+against ARCore's pose when the camera came back), though in that small room simply freezing in place was closer
+still (1.8 m).
 
 Reproduce: `bash tools/benchmark_report.sh <organisers' degrade_imu.py>` (computer) and
 `bash tools/android/bench_on_phone.sh <degraded folders>` (phone, USB or wireless debugging).

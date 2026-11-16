@@ -49,6 +49,35 @@ CACHE = Path(os.environ.get("PFX_CACHE", DATA / "velcache_body"))
 
 
 # ----------------------------------------------------------------------------- data preparation
+ORG_SCRIPT = os.environ.get("PFX_ORG_SCRIPT")      # the organisers' degrade_imu.py (16 Nov email; not in this repo)
+ORG_COPIES = {"train": [(1000 + j, lvl) for j, lvl in enumerate((1.0, 1.0, 1.0, 0.7, 1.3, 1.6))],
+              "val": [(1100, 1.0)], "test": [(1200, 1.0)]}
+
+
+def organiser_copy(src, work, seed, max_level):
+    """A copy damaged by the organisers' own degrade() (spikes, stuck runs, dropped rows and bursts, duplicates,
+    ramped noise, bias and scale drift, last 5 s zero), with a training seed (>= 1000; their scoring seed is 42)
+    and a varied final severity. Written in their documented column order (timestamp, accel, gyro)."""
+    import importlib.util
+    import pandas as pd
+    spec_ = importlib.util.spec_from_file_location("org_degrade", ORG_SCRIPT)
+    org = importlib.util.module_from_spec(spec_); spec_.loader.exec_module(org)
+    d = np.loadtxt(src / "imu0" / "data.csv", delimiter=",", comments="#")
+    df = pd.DataFrame({"timestamp": d[:, 0].astype(np.int64), "ax": d[:, 4], "ay": d[:, 5], "az": d[:, 6],
+                       "gx": d[:, 1], "gy": d[:, 2], "gz": d[:, 3]})
+    cfg = dict(org.CONFIG, max_level=max_level)
+    out, _ = org.degrade(df, cfg, seed)
+    (work / "imu0").mkdir(parents=True, exist_ok=True)
+    out.to_csv(work / "imu0" / "data.csv", index=False)
+
+
+def all_copies(split):
+    out = list(copies(split))
+    if ORG_SCRIPT:
+        out += [(f"org{s}_{lvl}", ["ORG", str(s), str(lvl)]) for s, lvl in ORG_COPIES[split]]
+    return out
+
+
 def prep_one(job):
     spec, tag, dargs = job
     from scipy.spatial.transform import Rotation as R, Slerp
@@ -59,8 +88,11 @@ def prep_one(job):
         return name, None
     src, gt_csv = source(spec)
     work = CACHE / "degraded" / name
-    subprocess.run([sys.executable, str(ROOT / "tools" / "degrade_imu.py"), str(src), str(work), *dargs],
-                   check=True, capture_output=True)
+    if dargs and dargs[0] == "ORG":
+        organiser_copy(src, work, seed=int(dargs[1]), max_level=float(dargs[2]))
+    else:
+        subprocess.run([sys.executable, str(ROOT / "tools" / "degrade_imu.py"), str(src), str(work), *dargs],
+                       check=True, capture_output=True)
     rec = []
     entry.run(str(work), str(work / "est.txt"),
               entry.args([str(work), "--preset", "learned", "--model", "none", "--model-input", "body",
@@ -117,17 +149,17 @@ def prep(a):
             if not source(spec)[1].exists():
                 print("missing data, skipped:", spec, flush=True)
                 continue
-            jobs += [(spec, tag, dargs) for tag, dargs in copies(split)]
+            jobs += [(spec, tag, dargs) for tag, dargs in all_copies(split)]
     with Pool(a.jobs) as pool:
         for name, info in pool.imap_unordered(prep_one, jobs):
             if info:
                 print(name, json.dumps(info), flush=True)
 
 
-def load_split(specs, W, torch, dev):
+def load_split(specs, W, torch, dev, pattern="*"):
     Xs, Ds, Vs, idx, off = [], [], [], [], 0
     for spec in specs:
-        files = sorted(CACHE.glob(f"{spec.replace(':', '_')}__*.npz"))
+        files = sorted(CACHE.glob(f"{spec.replace(':', '_')}__{pattern}.npz"))
         if not files:
             raise SystemExit(f"no cache for {spec}: run `train_airio.py prep` first")
         for f in files:
@@ -256,11 +288,11 @@ def evaluate(net, data, W, a, torch, bs=4096):
 
 def train(a):
     import torch
-    dev = "cuda" if torch.cuda.is_available() and not a.cpu else "cpu"
+    dev = "cpu" if a.cpu else ("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
     torch.manual_seed(a.seed)
     W = a.window
-    tr = load_split(a.train, W, torch, dev)
-    va = load_split(a.val, W, torch, dev)
+    tr = load_split(a.train, W, torch, dev, a.train_copies)
+    va = load_split(a.val, W, torch, dev, a.val_copies)
     va = (*va[:3], va[3][::a.val_stride])
     net = build(a.widths, a.hidden, a.kernels).to(dev)
     n_par = sum(p.numel() for p in net.parameters() if p.requires_grad)
@@ -288,7 +320,7 @@ def train(a):
     net.load_state_dict(torch.load(out / "best.pt", weights_only=True)["state"])
     per = {}
     for spec in a.val:
-        one = load_split([spec], W, torch, dev)
+        one = load_split([spec], W, torch, dev, a.val_copies)
         per[spec] = evaluate(net, (*one[:3], one[3][::a.val_stride]), W, a, torch)
         print("best", spec, json.dumps({k: round(v, 3) for k, v in per[spec].items()}), flush=True)
     (out / "history.json").write_text(json.dumps({"args": vars(a), "params": n_par, "hist": hist,
@@ -328,6 +360,8 @@ def main():
     t.add_argument("--tilt-aug", type=float, default=2.0, help="deg, std of the random tilt error of the up channel")
     t.add_argument("--mirror", type=int, default=1)
     t.add_argument("--rot-aug", type=float, default=0.0, help="fraction of windows given a random IMU mounting")
+    t.add_argument("--train-copies", default="*", help="glob of the cached copies to train on, e.g. 'org*'")
+    t.add_argument("--val-copies", default="*", help="glob of the cached copies to validate on")
     t.add_argument("--val-stride", type=int, default=3); t.add_argument("--cpu", action="store_true")
     t.add_argument("--seed", type=int, default=0); t.add_argument("--out", default="runs/airio/a")
     e = sub.add_parser("export")

@@ -77,9 +77,9 @@ struct Opt {
     double zupt_gyro = 0.04, zupt_acc = 0.15, zupt_tau = 0.05, zupt_gyro_std = NaN, zupt_acc_std = 0.15;
     double prescan = NaN, bias_rate = NaN, leak = 1.0, kp = NaN, ki = NaN, kp_boost = NaN, ki_calm = NaN;
     double tilt_lp = NaN, kp_boost_tau = 0.7, tilt_acc_tol = 1.5, acc_res_tau = 10.0, v_max = 3.0, pos_tau = NaN;
-    double blind_vel_tau = 1.5, blind_turn_tau = 0.5;
-    int model_every = 20; double model_min_valid = 0.25, model_ref = 0.1, model_vref = 1.0;
-    double model_pos_gain = 0.0, model_vel_gain = 1.0; int model_window = 200, model_dec = 1;
+    double blind_vel_tau = 1.5, blind_turn_tau = 0.5, pos_tau_blind = NaN, pos_tau_nonet = NaN;
+    int model_every = 20; double model_min_valid = 0.25, model_ref = NaN, model_vref = 1.0;
+    double model_pos_gain = NaN, model_vel_gain = 1.0; int model_window = 200, model_dec = 1;
     std::string model_input = "world";
     double yaw_q = 0.0, yaw_q_blind = 2.0, model_blind_tau = 0.7, acc_max = 16 * G, gyro_max = 35.0, acc_min = 1.0;
 };
@@ -107,7 +107,8 @@ static void parse_args(int argc, char** argv, Opt& a) {
         {"kp-boost", &a.kp_boost, nullptr, nullptr}, {"ki-calm", &a.ki_calm, nullptr, nullptr},
         {"tilt-lp", &a.tilt_lp, nullptr, nullptr}, {"kp-boost-tau", &a.kp_boost_tau, nullptr, nullptr},
         {"tilt-acc-tol", &a.tilt_acc_tol, nullptr, nullptr}, {"acc-res-tau", &a.acc_res_tau, nullptr, nullptr},
-        {"v-max", &a.v_max, nullptr, nullptr}, {"pos-tau", &a.pos_tau, nullptr, nullptr},
+        {"v-max", &a.v_max, nullptr, nullptr}, {"pos-tau", &a.pos_tau, nullptr, nullptr}, {"pos-tau-blind", &a.pos_tau_blind, nullptr, nullptr},
+        {"pos-tau-nonet", &a.pos_tau_nonet, nullptr, nullptr},
         {"blind-vel-tau", &a.blind_vel_tau, nullptr, nullptr}, {"blind-turn-tau", &a.blind_turn_tau, nullptr, nullptr},
         {"model-every", nullptr, &a.model_every, nullptr}, {"model-min-valid", &a.model_min_valid, nullptr, nullptr},
         {"model-ref", &a.model_ref, nullptr, nullptr}, {"model-vref", &a.model_vref, nullptr, nullptr},
@@ -168,6 +169,9 @@ static void parse_args(int argc, char** argv, Opt& a) {
     def(a.kp, 1.0, 0.3, L); def(a.ki, 0.02, 0.1, L); def(a.kp_boost, 0.0, 10.0, L); def(a.tilt_lp, 0.0, 0.1, L);
     def(a.ki_calm, 0.0, 0.5, L); def(a.zupt_gyro_std, 0.0, 0.01, L); def(a.bias_rate, 0.2, 3.0, L);
     def(a.prescan, 0.0, 60.0, L); def(a.pos_tau, 0.0, 3.0, L);
+    // Network coupling chosen on the organisers' degradation (16-17 Nov, validation, then held-out): trust the
+    // network's displacement for position, pull back to the start more gently, and firmly once the IMU is dead.
+    def(a.pos_tau_blind, 0.0, 0.0, L); def(a.pos_tau_nonet, 0.0, 3.0, L); def(a.model_pos_gain, 0.0, 0.0, L); def(a.model_ref, 0.1, 0.1, L);
 }
 
 // ------------------------------------------------------------------------------------------------ input
@@ -446,7 +450,10 @@ static Layout detect_layout(const std::string& path, const std::string& columns,
             for (size_t i = 1; i < t.size(); i++) if (t[i] > t[i - 1]) dts.push_back(t[i] - t[i - 1]);
             if (!dts.empty()) {
                 double dt = median_of(dts);
-                L.t_scale = dt < 1.0 ? 1000000000LL : dt < 1e3 ? 1000000LL : dt < 1e6 ? 1000LL : 1LL;
+                // the unit giving a believable IMU rate, 10 Hz - 10 kHz (see main.py)
+                L.t_scale = 1;
+                for (long long sc : {1LL, 1000LL, 1000000LL, 1000000000LL})
+                    if (1e9 / (dt * (double)sc) >= 10.0 && 1e9 / (dt * (double)sc) < 10000.0) { L.t_scale = sc; break; }
                 if (tmax * (double)L.t_scale >= 9.2e18) {
                     L.t_scale = 1;
                     notes.push_back("timestamp unit would overflow, using ns");
@@ -593,7 +600,7 @@ static void rot_cov(const Q& q, double m[3], double s[3]) {
 struct Feat { bool has = false; double v[10]; };   // world: 7 channels, body: 10 (see main.py push_slot)
 
 struct PathFinder {
-    const Opt& A;
+    Opt A;                                   // a copy: the mount guard changes the coupling when it switches networks
     Q q{1, 0, 0, 0};
     V3 p{{0, 0, 0}}, v{{0, 0, 0}}, bg{{0, 0, 0}}, ba{{0, 0, 0}}, w_last{{0, 0, 0}}, acc_res{{0, 0, 0}};
     bool have_t_prev = false; long long t_prev = 0;
@@ -610,7 +617,7 @@ struct PathFinder {
     double yaw_var = 0.0;
     bool have_dt_nom = false; double dt_nom = 0;
     VelNet* net = nullptr;
-    int W, dec;
+    int W, dec, rate_mult = 1;              // rate_mult: input samples averaged per network sample (1 kHz in: 5)
     double v_blind_tau;
     bool ring_made = false;
     std::vector<Feat> ring; std::vector<V3> ring_p;
@@ -692,6 +699,8 @@ struct PathFinder {
             return;
         }
         net = &fallback;
+        // the coupling the fallback network was validated with (see main.py FALLBACK_COUPLING)
+        A.model_pos_gain = 0.0; A.pos_tau = 3.0; A.model_ref = 0.1; A.pos_tau_blind = 0.0;
         W = net->window; dec = net->dec;
         body = net->version >= 3;
         const std::string& f = A.fallback_model;
@@ -839,10 +848,15 @@ struct PathFinder {
             double k = std::min(1.0, leak * dt);
             for (int i = 0; i < 3; i++) v[i] *= 1.0 - k;
         }
-        if (A.pos_tau > 0) {
-            double k = std::min(1.0, dt / A.pos_tau);
-            for (int i = 0; i < 3; i++) p[i] *= 1.0 - k;
-        }
+        // Bounded-space prior (see main.py): exponential pull to the start, firmer for the part of the step past 1 s of
+        // unusable IMU.
+        double tb = A.pos_tau_blind > 0 ? std::min(dt, std::max(0.0, bad_time - 1.0)) : 0.0;
+        double tau = (A.pos_tau_nonet > 0 && !net_usable()) ? A.pos_tau_nonet : A.pos_tau;   // see main.py
+        double f = 1.0;
+        if (tau > 0) f *= std::exp(-(dt - tb) / tau);
+        if (tb > 0) f *= std::exp(-tb / A.pos_tau_blind);
+        if (f != 1.0)
+            for (int i = 0; i < 3; i++) p[i] *= f;
         double sp = norm3(v);
         if (sp > A.v_max) {
             double s = A.v_max / sp;
@@ -852,6 +866,10 @@ struct PathFinder {
 
     bool push_slot(const V3* w, const V3* f) {
         if (!ring_made) {
+            if (net && have_dt_nom) {           // the network's sample rate, whatever the input's (see main.py)
+                rate_mult = std::max(1, (int)pyround(1.0 / (dt_nom * net->rate)));
+                dec = net->dec * rate_mult;
+            }
             ring.assign(W, Feat{}); ring_p.assign(W, V3{{0, 0, 0}});
             nb = body ? 9 : 6;
             for (double& b : bin) b = 0.0;
@@ -891,10 +909,14 @@ struct PathFinder {
         return feat.has;
     }
 
+    bool net_usable() const {               // the network runs at its own rate (input averaged by rate_mult)
+        return net && have_dt_nom && std::fabs(dt_nom * net->rate * rate_mult - 1.0) <= 0.15;
+    }
+
     void learned_update() {
-        if (!net || since < A.model_every) return;
+        if (!net || since < (long long)A.model_every * rate_mult) return;
         if (slots < W || ring_valid < A.model_min_valid * W) return;
-        if (!have_dt_nom || std::fabs(dt_nom * net->rate - 1.0) > 0.15) return;
+        if (!net_usable()) return;
         since = 0;
         int ni = net->n_in;
         xin.assign((size_t)ni * W, 0.0f);

@@ -164,7 +164,13 @@ def detect_layout(inp, n_max=2000, columns="auto", ts_unit="auto", accel_unit="a
         dts = [b - a for a, b in zip(t, t[1:]) if b > a]
         if dts:
             dt = med(dts)
-            t_scale = 10 ** 9 if dt < 1.0 else 10 ** 6 if dt < 1e3 else 10 ** 3 if dt < 1e6 else 1
+            # the unit that makes the sampling rate believable for an IMU (10 Hz - 10 kHz); units are 1000x apart,
+            # so exactly one fits. (A spacing threshold alone fails on jittered ~1 kHz ns data, e.g. 995,200 ns.)
+            t_scale = 1
+            for sc in (1, 10 ** 3, 10 ** 6, 10 ** 9):
+                if 10.0 <= 1e9 / (dt * sc) < 10000.0:
+                    t_scale = sc
+                    break
             if max(abs(c) for c in t) * t_scale >= 9.2e18:
                 t_scale = 1
                 notes.append("timestamp unit would overflow, using ns")
@@ -233,6 +239,7 @@ class PathFinder:
         self.net = None
         self.rec = None                           # tools/train_velocity.py sets a list here to record slots
         self.W, self.dec = a.model_window, a.model_dec
+        self.rate_mult = 1                        # input samples averaged per network sample (1 kHz input, 200 Hz net: 5)
         self.v_blind_tau = a.blind_vel_tau
         # Network input: "world" (weights version 2, 7 channels: gravity-aligned gyro, specific force minus g, health)
         # or "body" (version 3, 10 channels, AirIO style: body-frame gyro and specific force with gravity kept, the
@@ -311,6 +318,13 @@ class PathFinder:
                       file=sys.stderr)
                 return
             self.net = fb
+            # The heavier network coupling of the "learned" preset was chosen with the body-frame network on its
+            # training mounts; an unfamiliar mount gets the gravity-aligned network and the coupling it was validated
+            # with (fresh VR-headset recordings: 32 % better than standing still; the heavier coupling was worse).
+            import copy
+            self.a = A = copy.copy(A)
+            for k, v in FALLBACK_COUPLING.items():
+                setattr(A, k, v)
             self.W, self.dec = self.net.window, self.net.dec
             self.body = self.net.version >= 3
             print(f"IMU mount {self.mount_angle:.0f} deg from the training mounts: using {Path(A.fallback_model).name}",
@@ -460,10 +474,21 @@ class PathFinder:
             k = min(1.0, leak * dt)
             for i in range(3):
                 self.v[i] *= 1.0 - k
-        if A.pos_tau > 0:                         # bounded-space prior: position slowly reverts to the start point
-            k = min(1.0, dt / A.pos_tau)
+        # Bounded-space prior: position slowly reverts to the start point (exponential, so a long gap cannot overshoot);
+        # once the IMU has been unusable for over 1 s the pull is firmer. The part of this step past the 1 s mark gets
+        # the firmer pull, the rest the normal one.
+        tb = min(dt, max(0.0, self.bad_time - 1.0)) if A.pos_tau_blind > 0 else 0.0
+        tau = A.pos_tau
+        if A.pos_tau_nonet > 0 and not self.net_usable():
+            tau = A.pos_tau_nonet                 # network not running: the firmer pull tuned without it
+        f = 1.0
+        if tau > 0:
+            f *= math.exp(-(dt - tb) / tau)
+        if tb > 0:
+            f *= math.exp(-tb / A.pos_tau_blind)
+        if f != 1.0:
             for i in range(3):
-                self.p[i] *= 1.0 - k
+                self.p[i] *= f
         sp = norm3(self.v)
         if sp > A.v_max:
             s = A.v_max / sp
@@ -475,6 +500,9 @@ class PathFinder:
         force minus g, and the fraction of healthy samples; a slot with no healthy sample is empty (None)."""
         W = self.W
         if self.ring is None:
+            if self.net is not None and self.dt_nom:  # the network's sample rate, whatever the input's (e.g. 1 kHz)
+                self.rate_mult = max(1, int(round(1.0 / (self.dt_nom * self.net.rate))))
+                self.dec = self.net.dec * self.rate_mult
             self.ring = [None] * W                # features per slot (None = empty)
             self.ring_p = [(0.0, 0.0, 0.0)] * W   # position when the slot was written
             self.nb = 9 if self.body else 6
@@ -522,12 +550,12 @@ class PathFinder:
         used as measurements: position is pulled toward (position one window ago + displacement), velocity toward
         the predicted velocity, each weighted by the network's own confidence."""
         A = self.a
-        if self.net is None or self.since < A.model_every:
+        if self.net is None or self.since < A.model_every * self.rate_mult:
             return
         if self.slots < self.W or self.ring_valid < A.model_min_valid * self.W:
             return
-        if self.dt_nom is None or abs(self.dt_nom * self.net.rate - 1.0) > 0.15:
-            return                                # trained for one sample rate only: fall back to physics
+        if not self.net_usable():
+            return                                # rate the network cannot use: fall back to physics
         self.since = 0
         d, sd, v, sv = self.net.predict(self.ring, self.ring_i)
         if self.body:                             # body-frame outputs -> our world frame (diagonal covariance rotated)
@@ -545,6 +573,11 @@ class PathFinder:
             self.p[i] += gp * (self.p_then[i] + d[i] - self.p[i])
             self.v[i] += gv * (v[i] - self.v[i])
         self.net_ok = True
+
+    def net_usable(self):
+        """The network runs at its own sample rate (input averaged down by rate_mult); otherwise physics only."""
+        return (self.net is not None and self.dt_nom is not None
+                and abs(self.dt_nom * self.net.rate * self.rate_mult - 1.0) <= 0.15)
 
     def pose(self):
         w, x, y, z = self.q
@@ -652,11 +685,14 @@ def run(inp, out, a, rec=None):
 
 # Option defaults. "physics" is the filter as first submitted; "learned" was chosen on the validation recordings
 # (docs/LEARNED_VELOCITY.md) for use with the velocity network, whose input is rotated with this orientation.
+# Network coupling used with the fallback (gravity-aligned) network after the mount guard switches.
+FALLBACK_COUPLING = {"model_pos_gain": 0.0, "pos_tau": 3.0, "model_ref": 0.1, "pos_tau_blind": 0.0}
+
 PRESETS = {
     "physics": {"kp": 1.0, "ki": 0.02, "kp_boost": 0.0, "tilt_lp": 0.0, "ki_calm": 0.0, "zupt_gyro_std": 0.0, "bias_rate": 0.2,
-                "prescan": 0.0, "pos_tau": 0.0},
+                "prescan": 0.0, "pos_tau": 0.0, "pos_tau_nonet": 0.0, "pos_tau_blind": 0.0, "model_pos_gain": 0.0, "model_ref": 0.1},
     "learned": {"kp": 0.3, "ki": 0.1, "kp_boost": 10.0, "tilt_lp": 0.1, "ki_calm": 0.5, "zupt_gyro_std": 0.01, "bias_rate": 3.0,
-                "prescan": 60.0, "pos_tau": 3.0},
+                "prescan": 60.0, "pos_tau": 3.0, "pos_tau_nonet": 3.0, "pos_tau_blind": 0.0, "model_pos_gain": 0.0, "model_ref": 0.1},
 }
 
 
@@ -692,6 +728,10 @@ def args(argv=None):
     ap.add_argument("--v-max", type=float, default=3.0)
     ap.add_argument("--pos-tau", type=float, default=None,
                     help="s; time constant of the pull of position back to the start point (0 = off)")
+    ap.add_argument("--pos-tau-nonet", type=float, default=None,
+                    help="s; pull back to the start while the network is not running (no model, unusable rate)")
+    ap.add_argument("--pos-tau-blind", type=float, default=None,
+                    help="s; pull back to the start once the IMU has been unusable for > 1 s (0 = same as --pos-tau)")
     ap.add_argument("--blind-vel-tau", type=float, default=1.5)
     ap.add_argument("--blind-turn-tau", type=float, default=0.5)
     ap.add_argument("--model", default="auto",
@@ -699,9 +739,9 @@ def args(argv=None):
                          "next to this script if present, 'none' = physics only")
     ap.add_argument("--model-every", type=int, default=20, help="healthy samples between network updates")
     ap.add_argument("--model-min-valid", type=float, default=0.25, help="fraction of the window that must be healthy")
-    ap.add_argument("--model-ref", type=float, default=0.1, help="m; displacement std at which the position gain halves")
+    ap.add_argument("--model-ref", type=float, default=None, help="m; displacement std at which the position gain halves")
     ap.add_argument("--model-vref", type=float, default=1.0, help="m/s; velocity std at which the velocity gain halves")
-    ap.add_argument("--model-pos-gain", type=float, default=0.0)
+    ap.add_argument("--model-pos-gain", type=float, default=None)
     ap.add_argument("--model-vel-gain", type=float, default=1.0)
     ap.add_argument("--model-window", type=int, default=200, help=argparse.SUPPRESS)   # taken from the weights file;
     ap.add_argument("--model-dec", type=int, default=1, help=argparse.SUPPRESS)        # only set when recording
@@ -738,7 +778,8 @@ def args(argv=None):
     elif a.fallback_model in ("none", ""):
         a.fallback_model = None
     for k, v in PRESETS[a.preset or ("learned" if a.model else "physics")].items():
-        if getattr(a, k) is None:
+        cur = getattr(a, k)
+        if cur is None or (isinstance(cur, float) and math.isnan(cur)):  # as the C++ entry: NaN means "use the preset"
             setattr(a, k, v)
     return a
 

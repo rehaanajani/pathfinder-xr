@@ -6,7 +6,8 @@
 2. versioned JSON artifacts carry a known ``schema`` and required fields (models manifest, VO
    calibration, promoted result bundles);
 3. no tracked file contains credential-like strings (GitHub/AWS/private-key patterns);
-4. no tracked file exceeds 10 MB (datasets/checkpoints belong in releases, not git).
+4. no tracked file exceeds 10 MB (datasets/checkpoints belong in releases, not git); the submission video in
+   docs/media/ may be up to 50 MB, because the organisers require it in the repository.
 Exits non-zero with a list of problems.
 """
 
@@ -45,7 +46,8 @@ def main():
                 py_compile.compile(str(p), doraise=True, cfile=None)
             except py_compile.PyCompileError as exc:
                 problems.append(f"compile: {p.relative_to(ROOT)}: {exc.msg.splitlines()[-1]}")
-        if p.stat().st_size > 10 * 2 ** 20:
+        limit = 50 if p.relative_to(ROOT).parts[:2] == ("docs", "media") and p.suffix == ".mp4" else 10
+        if p.stat().st_size > limit * 2 ** 20:
             problems.append(f"size: {p.relative_to(ROOT)} is {p.stat().st_size / 2 ** 20:.1f} MB")
         if p.suffix in (".png", ".jpg", ".mp4", ".pdf", ".pptx", ".onnx", ".pt", ".zip"):
             continue

@@ -1,8 +1,10 @@
 """Fills Samsung's 9-slide submission template for the scored Track 3 task (IMU-only).
 
-    python deck/build_track3_deck.py      # writes deck/SRMIST_CaliforniaBurrito.pptx
+    python deck/make_images.py --work <run folder> --gt <MH_05 ground truth>   # real-data images in deck/img/
+    python deck/build_track3_deck.py                                          # writes deck/SRMIST_CaliforniaBurrito.pptx
 
-Every number is in R below with where it comes from. The older camera + IMU deck is deck/build_deck.py.
+Style: the template's own frame, our content in black, white and greys with one blue accent (from the template) and
+one muted red used only for failure. Every number is in R with where it comes from.
 """
 
 from pathlib import Path
@@ -11,117 +13,131 @@ from pptx import Presentation
 from pptx.chart.data import CategoryChartData
 from pptx.dml.color import RGBColor
 from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
-from pptx.enum.shapes import MSO_SHAPE
+from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Inches, Pt
 
 HERE = Path(__file__).resolve().parent
+IMG = HERE / "img"
 
 # ------------------------------------------------------------------------------------------------ numbers
 R = {
-    # held-out MH_05, V2_03, room6, seeds 1-3, tools/eval_track3.py (metres). Physics only and stand still:
-    # docs/LEARNED_VELOCITY.md; Ours: the AirIO-style network, docs/AIRIO.md (RPE 1 s on the scorer's earlier
-    # definition, same as the other two rows)
-    "held_out": {
-        "Physics only": {"ATE": 4.54, "Checkpoints": 4.19, "Blind 5 s": 4.03, "Dropouts": 4.47, "RPE 1 s": 0.97},
-        "Stand still": {"ATE": 3.28, "Checkpoints": 3.03, "Blind 5 s": 2.38, "Dropouts": 3.27, "RPE 1 s": 0.85},
-        "Ours": {"ATE": 3.08, "Checkpoints": 2.86, "Blind 5 s": 2.34, "Dropouts": 3.15, "RPE 1 s": 0.80},
-    },
-    # tools/eval_track3.py, PF_ENTRY=cpp, MH_05 seeds 1-3, no corrections at all (runs/track3/raw_mh05)
-    "raw_mh05_ate": 825.0,
-    "ours_mh05_ate": 6.42,
-    # docs/AIRIO.md: C++ entry with the AirIO network, Windows 11 laptop, static build (peak working set; 5.0 MB of
-    # it with no network at all). The earlier network measured 2.2 MB / 4 ms on an Apple M5 (tools/make_bundle.py).
-    "peak_mb": 5.2, "ms_per_s": 6.0, "contract_tests": 24,
-    "params": 42716, "weights_kb": 171,
-    # PR #11, #8 and the stress report (demo line, not scored)
-    "phone_before": 46.0, "phone_after": 0.6,
-    "headset_before": 62.4, "headset_after": 2.06,
-    "fuzz_cases": 600, "bugs_fixed": 7,
+    # all 17 public EuRoC + TUM-VI recordings damaged by the ORGANISERS' degrade_imu.py (seed 42, accel-first),
+    # C++ entry at the final settings: runs/organiser/sw_O.json and sw_S.json, results/track3/coupling_sweep.md
+    "all17": {"Standing still": {"ATE": 2.62, "Checkpoints": 2.45, "Blind 5 s": 2.28, "Dropouts": 2.42, "Drift 1 s": 0.77},
+              "Path Finder": {"ATE": 2.32, "Checkpoints": 2.13, "Blind 5 s": 2.24, "Dropouts": 2.13, "Drift 1 s": 0.57}},
+    "test3": {"still": 3.31, "ours": 3.10},          # MH_05, V2_03, room6 (never trained on), same run
+    "naive_km": 72,                                  # plain integration of MH_05 with the organisers' damage, 113 s
+    "mac_mb": 2.5, "mac_ms": 1.8, "phone_mb": 4.0, "phone_ms": 5.0, "win_mb": 5.1, "win_ms": 14.0,   # docs/reports
+    "tests": 58, "params": 42716, "weights_kb": 171,
+    # phone live test, 48 s camera blackout, error vs ARCore when it returned (docs/reports/03_phone.md)
+    "phone_std": 227, "phone_ours": 3.5, "phone_freeze": 1.8,
 }
 
-BG = RGBColor(0x0A, 0x0E, 0x1A)
-PANEL = RGBColor(0x12, 0x1A, 0x2E)
-LINE = RGBColor(0x23, 0x2E, 0x4A)
-INK = RGBColor(0xEE, 0xF1, 0xF6)
-MUTED = RGBColor(0x9A, 0xA6, 0xBC)
-CYAN = RGBColor(0x00, 0xB4, 0xD8)
-GREEN = RGBColor(0x2E, 0xD3, 0x9A)
-ORANGE = RGBColor(0xF0, 0x8A, 0x34)
-RED = RGBColor(0xF3, 0x6B, 0x5F)
-GREY = RGBColor(0x6B, 0x75, 0x8A)
-DARK_GREEN = RGBColor(0x0F, 0x2A, 0x24)
+INK = RGBColor(0xF2, 0xF3, 0xF5)
+SOFT = RGBColor(0xC9, 0xCD, 0xD4)
+MUTED = RGBColor(0x8A, 0x91, 0x9E)
+LINE = RGBColor(0x2A, 0x30, 0x3C)
+PANEL = RGBColor(0x11, 0x15, 0x20)
+PANEL2 = RGBColor(0x17, 0x1C, 0x29)
+ACCENT = RGBColor(0x5B, 0x8C, 0xFF)
+ALERT = RGBColor(0xE5, 0x48, 0x4D)
+GREY = RGBColor(0x5A, 0x61, 0x6E)
 FONT = "Calibri"
-TOP = Inches(1.05)
+MONO = "Courier New"
 
 
-def text(slide, x, y, w, h, runs, size=14, color=INK, bold=False, align=PP_ALIGN.LEFT,
-         anchor=MSO_ANCHOR.TOP, name=None, mono=False, space=6):
+def text(slide, x, y, w, h, runs, size=12, color=INK, bold=False, align=PP_ALIGN.LEFT, anchor=MSO_ANCHOR.TOP,
+         name=None, font=FONT, space=4):
     """runs: str, or list of paragraphs; a paragraph is str or list of (text, opts) tuples."""
-    tb = slide.shapes.add_textbox(x, y, w, h)
+    tb = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
     if name:
         tb.name = name
     tf = tb.text_frame
     tf.word_wrap = True
-    tf.margin_left = tf.margin_right = Inches(0.05)
-    tf.margin_top = tf.margin_bottom = Inches(0.03)
+    tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
     tf.vertical_anchor = anchor
     paras = [runs] if isinstance(runs, str) else runs
     for i, para in enumerate(paras):
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
         p.alignment = align
         p.space_after = Pt(space)
-        parts = [(para, {})] if isinstance(para, str) else para
-        for t, o in parts:
+        for t, o in ([(para, {})] if isinstance(para, str) else para):
             r = p.add_run()
             r.text = t
             f = r.font
-            f.name = "Courier New" if mono else FONT
+            f.name = o.get("font", font)
             f.size = Pt(o.get("size", size))
             f.bold = o.get("bold", bold)
             f.color.rgb = o.get("color", color)
     return tb
 
 
-def card(slide, x, y, w, h, fill=PANEL, name=None):
-    s = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, x, y, w, h)
-    s.adjustments[0] = 0.06
-    s.fill.solid()
-    s.fill.fore_color.rgb = fill
-    s.line.color.rgb = LINE
-    s.line.width = Pt(0.75)
+def box(slide, x, y, w, h, fill=PANEL, line=LINE, name=None, radius=0.04, weight=0.75):
+    s = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(x), Inches(y), Inches(w), Inches(h))
+    s.adjustments[0] = radius
+    if fill is None:
+        s.fill.background()
+    else:
+        s.fill.solid()
+        s.fill.fore_color.rgb = fill
+    if line is None:
+        s.line.fill.background()
+    else:
+        s.line.color.rgb = line
+        s.line.width = Pt(weight)
     s.shadow.inherit = False
     if name:
         s.name = name
     return s
 
 
-def dot(slide, x, y, d, color, label):
-    s = slide.shapes.add_shape(MSO_SHAPE.OVAL, x, y, d, d)
-    s.fill.solid()
-    s.fill.fore_color.rgb = color
-    s.line.fill.background()
-    tf = s.text_frame
-    tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
-    tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-    p = tf.paragraphs[0]
-    p.alignment = PP_ALIGN.CENTER
-    r = p.add_run()
-    r.text = label
-    r.font.name = FONT
-    r.font.size = Pt(12)
-    r.font.bold = True
-    r.font.color.rgb = BG
-    return s
+def rule(slide, x, y, w, color=LINE, weight=0.75):
+    c = slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Inches(x), Inches(y), Inches(x + w), Inches(y))
+    c.line.color.rgb = color
+    c.line.width = Pt(weight)
+    return c
 
 
-def arrow(slide, x, y, w, color=GREY, down=False):
-    shape = MSO_SHAPE.DOWN_ARROW if down else MSO_SHAPE.RIGHT_ARROW
-    a = slide.shapes.add_shape(shape, Inches(x), Inches(y), Inches(0.14 if down else w), Inches(w if down else 0.14))
-    a.fill.solid()
-    a.fill.fore_color.rgb = color
-    a.line.fill.background()
-    return a
+def arrow(slide, x1, y1, x2, y2, color=MUTED, weight=1.25):
+    from lxml import etree
+    c = slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Inches(x1), Inches(y1), Inches(x2), Inches(y2))
+    c.line.color.rgb = color
+    c.line.width = Pt(weight)
+    ln = c.line._get_or_add_ln()
+    tail = etree.SubElement(ln, "{http://schemas.openxmlformats.org/drawingml/2006/main}tailEnd")
+    tail.set("type", "triangle")
+    tail.set("w", "med")
+    tail.set("len", "med")
+    return c
+
+
+def node(slide, x, y, w, h, title, sub, accent=False, name=None, fill=PANEL):
+    box(slide, x, y, w, h, fill=fill, line=ACCENT if accent else LINE, name=name, weight=1.25 if accent else 0.75)
+    text(slide, x + 0.08, y, w - 0.16, h, [[(title, {"bold": True, "size": 11, "color": INK})],
+                                         [(sub, {"size": 8.5, "color": MUTED})]],
+         align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE, space=1)
+
+
+def picture(slide, path, x, y, w=None, h=None, name=None, border=True):
+    pic = slide.shapes.add_picture(str(path), Inches(x), Inches(y), Inches(w) if w else None, Inches(h) if h else None)
+    if name:
+        pic.name = name
+    if border:
+        pic.line.color.rgb = LINE
+        pic.line.width = Pt(0.75)
+    return pic
+
+
+def kicker(slide, x, y, s, color=ACCENT, w=None):
+    w = w if w is not None else min(6.0, 9.5 - x)
+    text(slide, x, y, w, 0.25, s.upper(), size=8.5, bold=True, color=color)
+
+
+def headline(slide, s, sub=None, y=1.08):
+    text(slide, 0.5, y, 9.0, 0.45, s, size=20, bold=True, name="Headline")
+    if sub:
+        text(slide, 0.5, y + 0.44, 9.0, 0.3, sub, size=11, color=MUTED, name="Subhead")
 
 
 def set_header(slide, new):
@@ -138,15 +154,21 @@ def notes(slide, t):
     slide.notes_slide.notes_text_frame.text = t
 
 
+def stat(slide, x, y, w, big, label, color=INK, name=None, big_size=26):
+    text(slide, x, y, w, 0.5, big, size=big_size, bold=True, color=color, name=name)
+    text(slide, x, y + 0.5, w, 0.6, label, size=9.5, color=MUTED)
+
+
+# ------------------------------------------------------------------------------------------------ slides
 def main():
     prs = Presentation(HERE / "template.pptx")
     sl = prs.slides
-    ho = R["held_out"]
+    a17 = R["all17"]
 
     # ---------- 1. Title
     s = sl[0]
-    rep = {"Track No": "Track 3  |  Path Finder", "XR Hackathon": "XR Hackathon",
-           "Team Name": "Team California Burrito", "College Name": "SRM IST, Kattankulathur"}
+    rep = {"Track No": "Track 3  ·  Path Finder", "Team Name": "Team California Burrito",
+           "College Name": "SRM IST, Kattankulathur"}
     for sh in s.shapes:
         if not sh.has_text_frame:
             continue
@@ -159,243 +181,273 @@ def main():
                     r.text = rep.get(r.text.strip(), r.text)
         elif t == "Members Details":
             sh.text_frame.paragraphs[0].runs[0].text = "Members"
-    text(s, Inches(5.6), Inches(2.86), Inches(3.0), Inches(1.4),
-         ["Rehaan Ajani (lead)", "Nikhil Solanki", "Debadrita Haldar", "Mayank Yadav"],
-         size=12, name="Members list")
-    text(s, Inches(0.55), Inches(3.55), Inches(5.0), Inches(1.0),
-         [[(f"Trajectory from a jammed IMU alone, in {R['peak_mb']} MB", {"size": 15, "bold": True, "color": CYAN})],
-          [("Track 3: Trajectory Estimation Under Sensor Degradation  |  github.com/rehaanajani/pathfinder-xr",
-            {"size": 10, "color": MUTED})]], name="Tagline")
-    notes(s, "Theme: Track 3, Path Finder, trajectory estimation under sensor degradation. Team California Burrito, "
-             "SRM Institute of Science and Technology, Kattankulathur.")
+    text(s, 5.6, 2.86, 3.2, 1.3, ["Rehaan Ajani  (lead)", "Nikhil Solanki", "Debadrita Haldar", "Mayank Yadav"],
+         size=11, color=SOFT, name="Members list", space=3)
+    text(s, 0.55, 3.75, 4.9, 1.2,
+         [[("Trajectory from a degraded IMU alone", {"size": 16, "bold": True, "color": INK})],
+          [(f"{R['mac_mb']} MB of memory  ·  {R['mac_ms']} ms per second of data  ·  one CPU thread",
+            {"size": 10.5, "color": MUTED})],
+          [("Track 3: Trajectory Estimation Under Sensor Degradation", {"size": 9.5, "color": MUTED})]],
+         name="Tagline", space=3)
+    notes(s, "Team California Burrito, SRM Institute of Science and Technology, Kattankulathur. Track 3, Path Finder: "
+             "trajectory estimation under sensor degradation, IMU only.")
 
     # ---------- 2. Problem
     s = sl[1]
-    text(s, Inches(0.5), TOP, Inches(5.3), Inches(1.4),
-         [[("One sensor left, and it is being jammed", {"size": 22, "bold": True})],
-          [("An aircraft flies through its checkpoints with only an IMU. Jamming makes the readings worse and "
-            "worse until the IMU dies, and the path must still be known 5 s after that.", {"size": 12, "color": MUTED})]],
-         name="Problem statement")
-    rows = [("Noise and drift", "Noise rises and the gyro and accelerometer biases wander", ORANGE),
-            ("Gaps", "2 s signal losses: missing, frozen, zeroed or NaN rows", RED),
-            ("Blind start and end", "No ground truth, unknown gravity; then total failure and 5 s blind", CYAN)]
-    for i, (k, v, c) in enumerate(rows):
-        y = Inches(2.65 + i * 0.85)
-        card(s, Inches(0.5), y, Inches(5.3), Inches(0.72), name=f"Failure {i + 1}")
-        dot(s, Inches(0.63), y + Inches(0.16), Inches(0.4), c, str(i + 1))
-        text(s, Inches(1.15), y + Inches(0.04), Inches(4.55), Inches(0.64),
-             [[(k + "  ", {"bold": True, "size": 13}), (v, {"size": 11, "color": MUTED})]], anchor=MSO_ANCHOR.MIDDLE)
-    card(s, Inches(6.05), TOP + Inches(0.1), Inches(2.45), Inches(3.95), name="Stat card")
-    text(s, Inches(6.2), TOP + Inches(0.3), Inches(2.2), Inches(0.8), f"{R['raw_mh05_ate']:.0f} m",
-         size=44, bold=True, color=RED)
-    text(s, Inches(6.2), TOP + Inches(1.2), Inches(2.2), Inches(1.0),
-         "average error when the degraded IMU is simply integrated (EuRoC MH_05, a recording we never trained on)",
-         size=11, color=MUTED)
-    text(s, Inches(6.2), TOP + Inches(2.4), Inches(2.2), Inches(0.5), "8 MB  |  20 ms", size=18, bold=True, color=CYAN)
-    text(s, Inches(6.2), TOP + Inches(2.95), Inches(2.2), Inches(0.9),
-         "peak memory, and compute per second of IMU, on one CPU thread", size=11, color=MUTED)
-    notes(s, "Brief: estimate the 6-DoF trajectory through the checkpoints from the degraded IMU stream only, then "
-             "dead-reckon 5 s after the IMU fails. Input imu0/data.csv (EuRoC format), output estimated_trajectory.txt "
-             "(TUM format, one pose per IMU row). Scored: memory 20, runtime 20, checkpoints 30, blind 5 s 20, "
-             "dropouts 10, with evo (ATE, RPE). The 825 m is plain strapdown integration of our degraded copy of MH_05, "
-             "seeds 1-3.")
+    headline(s, "One sensor left, and it is being jammed",
+             "Only the IMU: noise and drift rise, readings spike, freeze and vanish, then it dies. The path is still due.")
+    picture(s, IMG / "signal.png", 0.5, 1.85, w=5.6, name="Real IMU signal")
+    text(s, 0.5, 4.5, 5.6, 0.3, "Real data: EuRoC MH_05 accelerometer, before and after the organisers' degradation script.",
+         size=8.5, color=MUTED)
+    box(s, 6.35, 1.85, 3.15, 3.25, name="Constraints")
+    kicker(s, 6.55, 2.0, "Why it is hard")
+    stat(s, 6.55, 2.25, 2.8, f"{R['naive_km']} km", "off after 113 s if the IMU is simply integrated: a 1° tilt error "
+         "leaks 0.17 m/s² of gravity, and double integration does the rest", color=ALERT)
+    rule(s, 6.55, 3.55, 2.75)
+    stat(s, 6.55, 3.65, 2.8, "8 MB  ·  20 ms", "the budget: peak memory, and compute per second of data, one thread")
+    notes(s, "Input imu0/data.csv (EuRoC format), output estimated_trajectory.txt (TUM, one pose per input row, "
+             "including the 5 s after the IMU dies). Scored: memory 20, runtime 20, checkpoints 30, blind 5 s 20, "
+             "dropouts 10. The 72 km comes from integrating MH_05 directly; clean data drifts almost the same "
+             "(65 km after 107 s): the problem is gravity leaking through tilt error, not only the damage.")
 
     # ---------- 3. Solution
     s = sl[2]
-    text(s, Inches(0.5), TOP, Inches(8.0), Inches(0.6),
-         "Trust each reading only as far as physics and a small learned model agree with it", size=16, bold=True)
-    steps = [("1", "Check every sample", "NaN, zero, frozen, impossible values and time gaps are caught per row", RED),
-             ("2", "Start blind", "Gravity and gyro bias come from the data; no ground truth needed", ORANGE),
-             ("3", "Integrate, with brakes", "Gravity correction, still detection, speed limit, drift removal", CYAN),
-             ("4", "Learned velocity", f"{R['params']:,}-parameter CNN reads 1 s of body-frame IMU: velocity and how sure it is", GREEN),
-             ("5", "Coast when blind", "Dropouts and the 5 s after death: turn rate and speed decay from the last trusted state", GREY)]
-    for i, (n, h, d, c) in enumerate(steps):
-        x = Inches(0.5 + i * 1.62)
-        card(s, x, Inches(1.8), Inches(1.5), Inches(2.65), name=f"Step {n}")
-        dot(s, x + Inches(0.12), Inches(1.95), Inches(0.38), c, n)
-        text(s, x + Inches(0.08), Inches(2.45), Inches(1.36), Inches(0.62), h, size=13, bold=True)
-        text(s, x + Inches(0.08), Inches(3.08), Inches(1.36), Inches(1.35), d, size=10, color=MUTED)
-    text(s, Inches(0.5), Inches(4.6), Inches(8.0), Inches(0.6),
-         [[("Out: ", {"bold": True, "color": CYAN}),
-           ("one 6-DoF pose per IMU row (TUM format), through every dropout and the 5 s after the IMU dies.",
-            {"color": MUTED})]], size=12)
+    headline(s, "Trust each reading only as far as physics and a small network agree",
+             "Five stages, each with one job. Every input row gets exactly one pose out.")
+    stages = [("Check", "every sample", "NaN, zero, frozen, spikes, gaps, duplicates caught per row"),
+              ("Start blind", "gravity & bias", "estimated from the data itself; no ground truth, no calibration"),
+              ("Physics", "with brakes", "attitude + integration, still detection, speed limit, pull to start"),
+              ("Learned velocity", f"{R['params']:,} parameters", "1 s of IMU in; velocity and its confidence out"),
+              ("Coast", "when blind", "turn rate and speed decay from the last trusted state")]
+    x0, w, gap = 0.5, 1.62, 0.225
+    for i, (h, sub, d) in enumerate(stages):
+        x = x0 + i * (w + gap)
+        text(s, x, 1.85, w, 0.2, f"0{i + 1}", size=8, bold=True, color=ACCENT, align=PP_ALIGN.CENTER)
+        node(s, x, 2.08, w, 0.8, h, sub, accent=(i == 3), name=f"Stage {i + 1}")
+        text(s, x, 2.98, w, 0.85, d, size=9, color=MUTED, align=PP_ALIGN.CENTER)
+        if i < 4:
+            arrow(s, x + w + 0.03, 2.48, x + w + gap - 0.03, 2.48)
+    box(s, 0.5, 3.9, 9.0, 1.2, fill=PANEL2, name="Equations")
+    kicker(s, 0.7, 4.0, "The core equations, as implemented")
+    eqs = [("Attitude", "q ← q ⊗ exp(½ ω Δt),   ω ← ω − b + kₚ (â × ĝ)"),
+           ("Motion", "v ← v + (R a − g) Δt,   p ← p + v Δt"),
+           ("Brakes", "|ω| < ε  ⇒  v → 0,   p ← p · e^(−Δt/τ)"),
+           ("Network weight", "w = σ₀² / (σ₀² + σ²)")]
+    for i, (k, e) in enumerate(eqs):
+        cx = 0.7 + (i % 2) * 4.45
+        cy = 4.3 + (i // 2) * 0.36
+        text(s, cx, cy, 4.3, 0.3, [[(k + "   ", {"bold": True, "size": 10, "color": SOFT}),
+                                     (e, {"size": 10.5, "color": INK, "font": "Cambria Math"})]])
     notes(s, "The network's velocity is a measurement weighted by its own confidence; on bad input it reports more "
-             "doubt, so physics takes over. Heading is unobservable with an IMU alone, so after dropouts the network's "
-             "horizontal output is shrunk by the expected heading error.")
+             "doubt, so physics takes over. Heading is unobservable with an IMU alone, so position is pulled gently "
+             "back toward the start.")
 
     # ---------- 4. Architecture
     s = sl[3]
-    flow = [("imu0/data.csv", "degraded IMU", 0.4, RED), ("Sample health", "good / bad / gap", 2.05, ORANGE),
-            ("Orientation", "gyro + gravity, bias", 3.7, CYAN), ("Position", "integrate, brakes", 5.35, CYAN),
-            ("TUM output", "1 pose per row", 7.0, GREEN)]
-    for label, sub, x, c in flow:
-        card(s, Inches(x), Inches(1.35), Inches(1.45), Inches(0.85), name=label)
-        text(s, Inches(x), Inches(1.35), Inches(1.45), Inches(0.85),
-             [[(label, {"bold": True, "size": 12, "color": c})], [(sub, {"size": 9, "color": MUTED})]],
-             align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE, space=2)
-    for x in (1.86, 3.51, 5.16, 6.81):
-        arrow(s, x, 1.71, 0.17)
-    card(s, Inches(3.7), Inches(2.75), Inches(3.1), Inches(0.85), fill=DARK_GREEN, name="Learned velocity")
-    text(s, Inches(3.7), Inches(2.75), Inches(3.1), Inches(0.85),
-         [[("Learned velocity", {"bold": True, "size": 12, "color": GREEN})],
-          [(f"1 s of IMU -> velocity + confidence, {R['weights_kb']} KB", {"size": 9, "color": MUTED})]],
-         align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE, space=2)
-    card(s, Inches(2.05), Inches(2.75), Inches(1.45), Inches(0.85), name="Dead reckoning")
-    text(s, Inches(2.05), Inches(2.75), Inches(1.45), Inches(0.85),
-         [[("Dead reckoning", {"bold": True, "size": 12, "color": GREY})], [("bad rows, 5 s blind", {"size": 9, "color": MUTED})]],
-         align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE, space=2)
-    arrow(s, 2.71, 2.27, 0.42, down=True)
-    arrow(s, 6.0, 2.27, 0.42, color=GREEN, down=True)
-    text(s, Inches(0.5), Inches(3.85), Inches(8.0), Inches(1.3),
-         [[("Tech stack  ", {"bold": True, "color": CYAN}),
-           ("C++17 + zlib (the entry)  |  Python + NumPy (readable reference, same output)  |  PyTorch (training only)  "
-            "|  evo (scoring)  |  Docker  |  GitHub Actions", {"color": INK, "size": 11})],
-          [("Single pass, constant memory: the input is streamed row by row and only a 1 s window is kept. "
-            f"Peak {R['peak_mb']} MB, {R['ms_per_s']:.0f} ms per second of IMU, one thread, offline.",
-            {"size": 11, "color": MUTED})]], size=12)
-    notes(s, "Training: EuRoC MAV and TUM-VI recordings degraded on the fly (rising noise, bias drift, dropouts), "
-             "with a held-out split never used for any choice. The network runs inside the C++ entry with no ML runtime.")
+    headline(s, "Streamed, bounded, one thread", "C++17 entry with the network inside; no ML runtime, nothing to install.")
+    y = 1.95
+    flow = [("imu0/data.csv", "degraded input"), ("Layout detect", "columns, units"), ("Sample health", "good / bad / gap"),
+            ("Orientation", "gyro + gravity"), ("Position", "integrate + brakes"), ("TUM output", "1 pose per row")]
+    w, gap, x0 = 1.33, 0.2, 0.5
+    for i, (h, sub) in enumerate(flow):
+        x = x0 + i * (w + gap)
+        node(s, x, y, w, 0.72, h, sub, name=h)
+        if i < len(flow) - 1:
+            arrow(s, x + w + 0.02, y + 0.36, x + w + gap - 0.02, y + 0.36)
+    xo, xp = x0 + 3 * (w + gap), x0 + 4 * (w + gap)
+    node(s, xo + 0.35, 3.05, 2.2, 0.66, "Learned velocity", f"1 s window → v̂, σ  ({R['weights_kb']} KB)", accent=True,
+         name="Network node")
+    arrow(s, xo + w / 2, y + 0.72, xo + w / 2 + 0.25, 3.05, color=ACCENT)
+    arrow(s, xo + 2.25, 3.05, xp + w / 2, y + 0.72, color=ACCENT)
+    xs = x0 + 2 * (w + gap)
+    node(s, xs - 1.1, 3.05, 1.75, 0.66, "Dead reckoning", "bad rows · 5 s blind", name="Dead reckoning node")
+    arrow(s, xs + w / 2, y + 0.72, xs + 0.25, 3.05)
+    picture(s, IMG / "terminal_short.png", 0.5, 3.88, h=1.62, name="Real run screenshot")
+    text(s, 4.05, 3.95, 5.45, 1.5,
+         [[("Real run  ", {"bold": True, "size": 10.5, "color": INK}),
+           ("the organisers' damage on MH_05: 22,137 rows in, 22,137 poses out, 0.4 s, 2.5 MB.", {"size": 10, "color": MUTED})],
+          [("Stack  ", {"bold": True, "size": 10.5, "color": INK}),
+           ("C++17 + zlib (entry)  ·  Python/NumPy (reference, same output to 1 µm)  ·  PyTorch (training only)  ·  "
+            "Docker  ·  GitHub Actions", {"size": 10, "color": MUTED})]], space=6)
+    notes(s, "The input is streamed: a first look at up to 60 s for gravity and gyro bias, then one pass keeping a 1 s "
+             "window, so memory does not grow with the recording. Both column orders and all timestamp units are "
+             "detected and reported on stderr.")
 
     # ---------- 5. Track final output
     s = sl[4]
     set_header(s, "TRACK FINAL OUTPUT")
-    metrics = ["ATE", "Checkpoints", "Blind 5 s", "Dropouts"]
-    show = [("Physics only", ORANGE), ("Stand still", GREY), ("Ours", GREEN)]
+    metrics = ["ATE", "Checkpoints", "Blind 5 s", "Dropouts", "Drift 1 s"]
     cd = CategoryChartData()
     cd.categories = metrics
+    show = [("Standing still", GREY), ("Path Finder", ACCENT)]
     for k, _ in show:
-        cd.add_series(k, [ho[k][m] for m in metrics])
-    ch = s.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, Inches(0.4), TOP, Inches(5.1), Inches(3.35), cd).chart
+        cd.add_series(k, [a17[k][m] for m in metrics])
+    ch = s.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, Inches(0.4), Inches(1.05), Inches(5.0), Inches(3.1), cd).chart
     ch.font.name = FONT
-    ch.font.size = Pt(10)
+    ch.font.size = Pt(9)
     ch.font.color.rgb = MUTED
     for ser, (_, c) in zip(ch.plots[0].series, show):
         ser.format.fill.solid()
         ser.format.fill.fore_color.rgb = c
-        ser.format.line.color.rgb = c
+        ser.format.line.fill.background()
+    ch.plots[0].gap_width = 70
+    ch.plots[0].overlap = -10
     ch.has_title = True
-    ch.chart_title.text_frame.text = "Error on held-out recordings (m, lower is better)"
-    ch.chart_title.text_frame.paragraphs[0].runs[0].font.size = Pt(12)
+    ch.chart_title.text_frame.text = "Organisers' script, all 17 recordings (m, lower is better)"
+    ch.chart_title.text_frame.paragraphs[0].runs[0].font.size = Pt(11)
     ch.chart_title.text_frame.paragraphs[0].runs[0].font.color.rgb = INK
+    ch.chart_title.text_frame.paragraphs[0].runs[0].font.bold = True
     ch.has_legend = True
     ch.legend.position = XL_LEGEND_POSITION.BOTTOM
     ch.legend.include_in_layout = False
-    ch.legend.font.color.rgb = MUTED
+    ch.legend.font.color.rgb = SOFT
     pl = ch.plots[0]
     pl.has_data_labels = True
     pl.data_labels.font.size = Pt(8)
-    pl.data_labels.font.color.rgb = INK
+    pl.data_labels.font.color.rgb = SOFT
     pl.data_labels.number_format = "0.00"
     pl.data_labels.number_format_is_linked = False
     ch.value_axis.has_major_gridlines = True
     ch.value_axis.major_gridlines.format.line.color.rgb = LINE
     ch.value_axis.tick_labels.font.color.rgb = MUTED
-    ch.category_axis.tick_labels.font.color.rgb = MUTED
-    ch.category_axis.format.line.color.rgb = LINE
     ch.value_axis.format.line.fill.background()
-    text(s, Inches(0.4), Inches(4.45), Inches(5.1), Inches(0.8),
-         "EuRoC MH_05 + V2_03 + TUM-VI room6, never used for training or tuning; degraded 3 ways each. "
-         "SE(3)-aligned like evo. Physics only = our filter without the network.", size=9, color=MUTED)
-    budget = [("Peak memory", f"{R['peak_mb']} MB", "of 8 MB", GREEN),
-              ("Compute", f"{R['ms_per_s']:.0f} ms", "per s of IMU, of 20", GREEN),
-              ("Output contract", f"{R['contract_tests']}/{R['contract_tests']}", "tests: 1 pose per row, bad rows", CYAN),
-              ("C++ = Python", "1 µm", "largest difference", CYAN)]
-    for i, (h, big, sub, c) in enumerate(budget):
-        y = TOP + Inches(i * 0.88)
-        card(s, Inches(5.7), y, Inches(2.85), Inches(0.78), name=h)
-        text(s, Inches(5.8), y + Inches(0.02), Inches(2.7), Inches(0.3), h, size=10, color=MUTED)
-        text(s, Inches(5.8), y + Inches(0.3), Inches(2.7), Inches(0.45),
-             [[(big, {"bold": True, "size": 17, "color": c}), ("  " + sub, {"size": 10, "color": MUTED})]])
-    notes(s, f"Held-out means: ours ATE {ho['Ours']['ATE']} m vs stand still {ho['Stand still']['ATE']} m vs physics only "
-             f"{ho['Physics only']['ATE']} m; RPE 1 s {ho['Ours']['RPE 1 s']} vs {ho['Stand still']['RPE 1 s']} vs "
-             f"{ho['Physics only']['RPE 1 s']} m. The degradation is our stand-in for the organisers' script, which "
-             "we have not received. Memory and time: C++ entry on a Windows 11 laptop (5.0 MB of the 5.2 MB is the "
-             "Windows runtime with no network; the earlier network measured 2.2 MB and 4 ms on an Apple M5).")
+    ch.category_axis.tick_labels.font.color.rgb = SOFT
+    ch.category_axis.format.line.color.rgb = LINE
+    text(s, 0.5, 4.2, 4.9, 0.9,
+         [[("−12 % ATE, −13 % checkpoints, −12 % dropouts, −26 % drift; blind 5 s about level. ",
+            {"size": 9.5, "color": SOFT}),
+           (f"Never trained on (MH_05, V2_03, room6): {R['test3']['ours']:.2f} m vs {R['test3']['still']:.2f} m.",
+            {"size": 9.5, "color": MUTED})]])
+    picture(s, IMG / "trajectory.png", 5.6, 1.05, h=2.55, name="Trajectory vs truth")
+    text(s, 5.6, 3.62, 2.55, 0.3, "MH_05, organisers' damage, SE(3)-aligned", size=8, color=MUTED)
+    tiles = [(f"{R['mac_mb']} MB", "peak memory, of 8"), (f"{R['mac_ms']} ms", "per s of data, of 20"),
+             (f"{R['tests']}/{R['tests']}", "stress tests pass"), ("1 µm", "C++ vs Python")]
+    for i, (big, lab) in enumerate(tiles):
+        x = 5.6 + (i % 2) * 1.98
+        y = 3.98 + (i // 2) * 0.62
+        box(s, x, y, 1.9, 0.55, name=lab)
+        text(s, x + 0.12, y + 0.04, 1.7, 0.5, [[(big, {"bold": True, "size": 14, "color": INK})],
+                                               [(lab, {"size": 8, "color": MUTED})]], space=0)
+    text(s, 8.3, 1.1, 1.3, 2.6,
+         [[("Galaxy M36", {"bold": True, "size": 10, "color": INK})],
+          [(f"{R['phone_mb']} MB · {R['phone_ms']:.0f} ms on the phone's own CPU", {"size": 9, "color": MUTED})],
+          [("Windows laptop", {"bold": True, "size": 10, "color": INK})],
+          [(f"{R['win_mb']} MB · {R['win_ms']:.0f} ms under WSL", {"size": 9, "color": MUTED})]], space=4)
+    notes(s, "Means over all 11 EuRoC and 6 TUM-VI recordings, damaged by the organisers' own degrade_imu.py with "
+             "their seed and documented column order. 11 of the 17 were used to train the network; the three never "
+             "used give 3.10 m vs 3.31 m. Memory and CPU: worst of 5 recordings (docs/reports).")
 
     # ---------- 6. Differentiation
     s = sl[5]
-    text(s, Inches(0.5), TOP, Inches(8.0), Inches(0.5), "What else could be submitted, and what we add", size=19, bold=True)
-    hdr = ["", "Integrate the IMU", "Stand still", "Large learned model", "Ours"]
-    rws = [["Error on held-out data", f"{R['raw_mh05_ate']:.0f} m (MH_05)", f"{ho['Stand still']['ATE']} m",
-            "not run (no clean IMU)", f"{ho['Ours']['ATE']} m"],
-           ["Bad rows, gaps, IMU death", "drifts away", "ignores them", "garbage in, garbage out", "caught per row, coasts"],
-           ["Unknown gravity, no ground truth", "needs a start pose", "n/a", "needs a gravity frame", "estimated from the data"],
-           ["Knows how sure it is", "no", "no", "sometimes", "yes, weights its own output"],
-           ["Fits 8 MB / 20 ms", "yes", "yes", "no (PyTorch at run time)", f"{R['peak_mb']} MB, {R['ms_per_s']:.0f} ms"]]
-    tbl = s.shapes.add_table(len(rws) + 1, 5, Inches(0.5), Inches(1.55), Inches(8.0), Inches(2.6)).table
-    for j, w in enumerate([2.0, 1.45, 1.25, 1.65, 1.65]):
-        tbl.columns[j].width = Inches(w)
+    headline(s, "What else could be submitted, and what we add")
+    hdr = ["", "Integrate the IMU", "Stand still", "Large learned model", "Path Finder"]
+    rws = [["Error, organisers' damage", f"{R['naive_km']} km (MH_05)", f"{a17['Standing still']['ATE']} m",
+            "not run (no clean IMU)", f"{a17['Path Finder']['ATE']} m"],
+           ["Bad rows, gaps, IMU death", "drifts away", "ignores them", "garbage in, garbage out", "caught per row; coasts"],
+           ["Unknown gravity and mount", "needs a start pose", "n/a", "needs a gravity frame", "estimated; mount guard"],
+           ["Knows how sure it is", "no", "no", "sometimes", "yes; weights its own output"],
+           ["Fits 8 MB / 20 ms", "yes", "yes", "no (runtime too large)", f"{R['mac_mb']} MB · {R['mac_ms']} ms"]]
+    tbl = s.shapes.add_table(len(rws) + 1, 5, Inches(0.5), Inches(1.65), Inches(9.0), Inches(2.6)).table
+    for j, wd in enumerate([2.2, 1.6, 1.3, 1.9, 2.0]):
+        tbl.columns[j].width = Inches(wd)
     for i, row in enumerate([hdr] + rws):
         for j, v in enumerate(row):
             c = tbl.cell(i, j)
             c.fill.solid()
-            c.fill.fore_color.rgb = DARK_GREEN if (j == 4 and i) else (PANEL if i else LINE)
+            c.fill.fore_color.rgb = (PANEL2 if i == 0 else PANEL)
             tf = c.text_frame
             tf.paragraphs[0].text = ""
             r = tf.paragraphs[0].add_run()
             r.text = v
             r.font.name = FONT
-            r.font.size = Pt(10 if i else 11)
-            r.font.bold = i == 0 or j == 0
-            r.font.color.rgb = GREEN if (j == 4 and i) else (INK if j == 0 or i == 0 else MUTED)
-            c.margin_left = c.margin_right = Inches(0.06)
-    card(s, Inches(0.5), Inches(4.35), Inches(8.0), Inches(0.62), name="Limitations")
-    text(s, Inches(0.6), Inches(4.38), Inches(7.8), Inches(0.58),
-         [[("Honest limits  ", {"bold": True, "color": ORANGE, "size": 11}),
-           ("On held-out data we beat standing still by about 6 %. An IMU alone cannot see its heading, and the network "
-            "is tuned to the drone's axes (weaker on handheld rooms and a remounted IMU). Our degradation is a stand-in.",
-            {"size": 10, "color": MUTED})]])
-    notes(s, "Large learned model column refers to TLIO / RoNIN-style inertial odometry networks, which are trained on "
-             "clean, gravity-aligned IMU data and run in PyTorch.")
+            r.font.size = Pt(10 if i else 10.5)
+            r.font.bold = i == 0 or j == 0 or j == 4
+            r.font.color.rgb = ACCENT if (j == 4) else (INK if j == 0 or i == 0 else MUTED)
+            c.margin_left = c.margin_right = Inches(0.08)
+            c.vertical_anchor = MSO_ANCHOR.MIDDLE
+    box(s, 0.5, 4.45, 9.0, 0.7, fill=PANEL2, name="Limitations")
+    text(s, 0.7, 4.52, 8.6, 0.6,
+         [[("Honest limits  ", {"bold": True, "color": INK, "size": 10.5}),
+           ("An IMU alone cannot see heading or absolute position, so error grows with distance. The blind 5 s is about "
+            "level with standing still. Settings were chosen to be never worse than standing still on any recording, "
+            "not to win on a few.", {"size": 10, "color": MUTED})]], anchor=MSO_ANCHOR.MIDDLE)
+    notes(s, "Large learned model refers to TLIO / RoNIN-style inertial odometry networks, trained on clean, "
+             "gravity-aligned IMU and run in PyTorch.")
 
     # ---------- 7. Demo & local setup
     s = sl[6]
-    card(s, Inches(0.5), TOP, Inches(4.4), Inches(3.95), name="Setup card")
-    text(s, Inches(0.65), TOP + Inches(0.1), Inches(4.1), Inches(0.4), "Run it", size=16, bold=True)
-    tb = text(s, Inches(0.65), TOP + Inches(0.55), Inches(4.15), Inches(2.3),
-              ["docker build -t pathfinder src/", "docker run --rm -v $PWD/data:/data \\",
-               "  pathfinder /data -o /data/estimated_trajectory.txt", "", "# or without Docker:", "make -C src",
-               "src/pathfinder <imu folder|zip|csv> \\", "  -o estimated_trajectory.txt"],
-              size=10, color=CYAN, mono=True, space=1)
-    text(s, Inches(0.65), TOP + Inches(2.85), Inches(4.1), Inches(1.05),
-         ["Input: EuRoC imu0/data.csv (a folder, a zip or the CSV). Output: TUM format, one pose per row.",
-          "Python reference, same output: python3 src/main.py <input>"], size=10, color=MUTED, space=3)
-    card(s, Inches(5.1), TOP, Inches(3.45), Inches(3.95), name="Check card")
-    text(s, Inches(5.25), TOP + Inches(0.1), Inches(3.2), Inches(0.4), "Check it", size=16, bold=True)
-    text(s, Inches(5.25), TOP + Inches(0.55), Inches(3.2), Inches(3.3),
-         [[("Contract tests  ", {"bold": True, "size": 11}),
-           ("PF_ENTRY=cpp pytest tests/stress/test_main_contract.py: one pose per row, NaN, frozen, gaps, cut files, "
-            "8 MB, 20 ms", {"size": 10, "color": MUTED})],
-          [("Score  ", {"bold": True, "size": 11}),
-           ("tools/eval_track3.py degrades EuRoC / TUM-VI and scores ATE, checkpoints, blind 5 s, dropouts, RPE",
-            {"size": 10, "color": MUTED})],
-          [("Bundle  ", {"bold": True, "size": 11}),
-           ("tools/make_bundle.py <input> writes CaliforniaBurrito.zip with metadata.json", {"size": 10, "color": MUTED})],
-          [("CI  ", {"bold": True, "size": 11}),
-           ("every push builds the Docker image and runs the tests on Linux", {"size": 10, "color": MUTED})]],
-         space=8)
+    headline(s, "Run it in one command, check it in one more")
+    box(s, 0.5, 1.6, 4.3, 2.35, fill=RGBColor(0x0D, 0x11, 0x17), name="Commands")
+    text(s, 0.68, 1.72, 4.0, 2.2,
+         [[("# build and run (Docker)", {"color": MUTED})],
+          [("docker build -t pathfinder src/", {})],
+          [("docker run --rm -v $PWD/data:/data \\", {})],
+          [("  pathfinder /data -o /data/estimated_trajectory.txt", {})],
+          [("", {})],
+          [("# or natively", {"color": MUTED})],
+          [("make -C src && src/pathfinder <input>", {})],
+          [("", {})],
+          [("# tests (58) and the organisers' script", {"color": MUTED})],
+          [("PF_ENTRY=cpp pytest tests/stress", {})],
+          [("python tools/eval_organiser.py \\", {})],
+          [("  --script degrade_imu.py --data <recordings>", {})]],
+         size=9, color=INK, font=MONO, space=0)
+    text(s, 0.5, 4.05, 4.3, 1.1,
+         [[("Input  ", {"bold": True, "size": 10, "color": INK}),
+           ("a folder with imu0/data.csv, a zip, or the CSV; either column order; s/ms/µs/ns; m/s² or g.",
+            {"size": 9.5, "color": MUTED})],
+          [("Output  ", {"bold": True, "size": 10, "color": INK}),
+           ("TUM format, one pose per input row, including the 5 s after the IMU dies.", {"size": 9.5, "color": MUTED})]],
+         space=5)
+    picture(s, IMG / "localhost_live_blackout.jpg", 5.05, 1.6, w=4.45, name="Live demo, localhost")
+    text(s, 5.05, 4.1, 4.45, 1.0,
+         [[("Live demo on localhost  ", {"bold": True, "size": 10, "color": INK}),
+           ("Galaxy phone streaming its IMU; camera covered. The standard tracker (red) runs away; Path Finder (green) "
+            "stays close, draws its uncertainty, and flags itself \"too_uncertain\".", {"size": 9, "color": MUTED})]])
+    notes(s, "Live demo: demo_line/tools/live_demo/server.py, replaying the recorded 17 Nov phone session "
+             "(http://localhost). CI on every push builds the Docker image and runs the stress tests on Linux.")
 
     # ---------- 8. Brownie
     s = sl[7]
-    text(s, Inches(0.5), TOP, Inches(8.0), Inches(0.5), "Beyond the scored task: the same ideas on real XR hardware",
-         size=17, bold=True)
-    tiles = [(f"{R['phone_before']:.0f} m -> {R['phone_after']} m", "Real phone, camera covered for 61 s",
-              "Galaxy M36 live: position error when vision returns, standard fusion vs ours (stand-still prior in long outages)"),
-             (f"{R['headset_before']:.0f} m -> {R['headset_after']:.1f} m", "Real VR headsets, clipped IMUs",
-              "Samsung Odyssey+ / Valve Index recordings: the saturation guard spots clipping from the data itself"),
-             ("5 IMUs", "Finding the faulty IMU",
-              "IMUs on one rigid frame must agree; parity-space checks drop a biased, stuck or spiking one (Galaxy XR has 5)"),
-             (f"{R['fuzz_cases']} cases", "Breaking our own code",
-              f"Fuzz and hostile-input tests: {R['bugs_fixed']} bugs found by the team and fixed, each with a test")]
-    for i, (big, h, d) in enumerate(tiles):
-        x = Inches(0.5 + (i % 2) * 4.05)
-        y = TOP + Inches(0.6 + (i // 2) * 1.85)
-        card(s, x, y, Inches(3.95), Inches(1.7), name=h)
-        text(s, x + Inches(0.12), y + Inches(0.08), Inches(3.7), Inches(0.5), big, size=22, bold=True, color=GREEN)
-        text(s, x + Inches(0.12), y + Inches(0.62), Inches(3.7), Inches(0.35), h, size=12, bold=True)
-        text(s, x + Inches(0.12), y + Inches(0.95), Inches(3.7), Inches(0.72), d, size=10, color=MUTED)
-    notes(s, "These parts use cameras and several IMUs, which the scored task does not have. They are in the repository "
-             "with their own benchmarks (README) and are the plan for the final demo.")
+    headline(s, "Beyond the scored task: the same ideas on real hardware")
+    box(s, 0.5, 1.6, 4.4, 3.5, name="Phone test")
+    kicker(s, 0.7, 1.75, "Real Galaxy phone · camera covered 48 s")
+    bars = [("Standard tracker", R["phone_std"], ALERT, f"{R['phone_std']} m"),
+            ("Path Finder", R["phone_ours"], ACCENT, f"{R['phone_ours']} m"),
+            ("Freezing in place", R["phone_freeze"], SOFT, f"{R['phone_freeze']} m")]
+    for i, (lab, v, col, s_) in enumerate(bars):
+        y = 2.15 + i * 0.62
+        text(s, 0.7, y, 2.0, 0.25, lab, size=10, color=INK)
+        wbar = max(0.04, 2.9 * v / R["phone_std"])
+        box(s, 0.7, y + 0.28, wbar, 0.14, fill=col, line=None, radius=0.5)
+        text(s, 0.8 + wbar, y + 0.21, 1.0, 0.3, s_, size=11, bold=True, color=col)
+    text(s, 0.7, 4.1, 4.0, 0.9, "Error against ARCore when the camera returned, in a room about 6 × 9 m. Freezing "
+         "in place was closer still: in small spaces doing nothing is a strong baseline, which is why the scored entry "
+         "pulls back toward its start.", size=9, color=MUTED)
+    tiles = [("Scored entry on a phone", f"{R['phone_mb']} MB · {R['phone_ms']:.0f} ms",
+              "the same C++ cross-compiled, run on the Galaxy M36 CPU; output matched the Mac's"),
+             ("Real VR headsets", "IMU clipping", "Samsung Odyssey+ / Valve Index recordings: saturation spotted from "
+              "the data itself"),
+             ("Several IMUs", "fault voting", "IMUs on one rigid frame must agree; a biased, stuck or spiking one is "
+              "dropped"),
+             ("Breaking our own code", "600 cases", "fuzz and hostile-input tests; 7 bugs found and fixed, each with a "
+              "test")]
+    for i, (h, big, d) in enumerate(tiles):
+        x = 5.1 + (i % 2) * 2.22
+        y = 1.6 + (i // 2) * 1.78
+        box(s, x, y, 2.12, 1.7, name=h)
+        text(s, x + 0.14, y + 0.12, 1.86, 1.5, [[(h.upper(), {"bold": True, "size": 8, "color": ACCENT})],
+                                                 [(big, {"bold": True, "size": 15, "color": INK})],
+                                                 [(d, {"size": 8.5, "color": MUTED})]], space=3)
+    notes(s, "These parts use cameras and several IMUs, which the scored task does not have. Phone numbers: "
+             "docs/reports/03_phone.md (all four blackouts, with the freeze baseline).")
+
+    # ---------- 9. Thank you
+    s = sl[8]
+    text(s, 2.97, 3.25, 5.5, 0.9,
+         [[("github.com/rehaanajani/pathfinder-xr", {"size": 13, "bold": True, "color": INK})],
+          [("Team California Burrito  ·  SRM IST  ·  Samsung PRISM XR Hackathon 2026", {"size": 10, "color": MUTED})]],
+         space=4)
 
     out = HERE / "SRMIST_CaliforniaBurrito.pptx"
     prs.save(out)

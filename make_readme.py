@@ -1,4 +1,5 @@
-"""Writes README.md from README_template.md and results/summary.json (no hand-typed numbers)."""
+"""Writes docs/WIDER_SYSTEM.md (the camera + multi-IMU system, not scored) from README_template.md and results/summary.json (no hand-typed numbers)."""
+import re
 
 import json
 
@@ -121,5 +122,17 @@ out = (T.replace("__RESULTS__", "\n".join(lines)).replace("__EXTRA__", "\n".join
         .replace("__PARAMS__", f"{m['params']:,}")
         .replace("__SIZE__", f"{m['size_mb']:.1f}")
         .replace("__MS__", f"{m['ms_per_prediction_cpu']:.1f}"))
-Path("README.md").write_text(out)
-print("wrote README.md")
+def _relink(md):
+    """The page lives in docs/: make repository-relative links work from there."""
+    def f(m):
+        url = m.group(2)
+        if re.match(r"(https?:|#|mailto:|\.\./|/)", url):
+            return m.group(0)
+        url = url[5:] if url.startswith("docs/") else "../" + url
+        return f"{m.group(1)}({url})"
+    return re.sub(r"(\]|!\[[^\]]*\])\(([^)\s]+)\)", f, md)
+
+
+out = _relink(out)
+Path("docs/WIDER_SYSTEM.md").write_text(out)
+print("wrote docs/WIDER_SYSTEM.md")
