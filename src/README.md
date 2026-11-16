@@ -32,8 +32,15 @@ file itself.
 
 ## Input and output
 
-Input, comma-separated, `#` header optional:
-`timestamp [ns], w_x, w_y, w_z [rad/s], a_x, a_y, a_z [m/s², including gravity]`.
+Input, comma-separated, any header line optional:
+`timestamp [ns], w_x, w_y, w_z [rad/s], a_x, a_y, a_z [m/s², including gravity]` (EuRoC).
+
+The organisers' degradation script documents the other column order (`timestamp, accel xyz, gyro xyz`) and accepts
+timestamps in s/ms/us/ns and acceleration in g. The entry therefore checks the first rows: the accelerometer is the
+triplet that reads gravity (6-14 m/s², or 0.6-1.4 g if neither reads m/s²); epoch-nanosecond timestamps (> 1e17) stay
+ns, others take their unit from the row spacing. It says what it found on stderr when it is not the EuRoC layout. To
+force it: `--columns gyro-first|accel-first`, `--ts-unit ns|us|ms|s`, `--accel-unit ms2|g` (also accepted by
+`tools/make_bundle.py`).
 
 Output, space-separated, with a `# timestamp tx ty tz qx qy qz qw` header: timestamp in seconds (input ns × 1e-9),
 position in metres, unit quaternion. The world frame has gravity along −z; origin and heading are those of the first
