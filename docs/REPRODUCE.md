@@ -11,7 +11,7 @@
 | A second team member reproducing from a clean machine | **Not done.** This needs a person (issue #3 B). |
 
 `requirements/core-dev-py313.lock` is compiled by uv with `--generate-hashes` from
-`requirements/core-dev.in` and covers numpy, scipy, OpenCV (headless), PyYAML, matplotlib and
+`requirements/core-dev.in` and covers numpy, scipy, OpenCV (headless), PyYAML, psutil, matplotlib and
 pytest. `opencv-python-headless 4.12.0.88` requires `numpy < 2.3`, so the lock pins numpy 2.2.6. The
 development machine's system Python had numpy 2.3.4 with `opencv-python`, which is an inconsistent
 pair and is not the supported setup. PyTorch is needed only for the learned model and is not in the
@@ -28,6 +28,9 @@ uv pip install --python .venv/bin/python \      uv pip install --python .venv/Sc
 
 `reproduce.sh` now picks `.venv/Scripts/python.exe` or `.venv/bin/python`. It never retrains a model
 silently: missing or mismatched checkpoints make it exit. Pass `--train` to retrain on purpose.
+`--synthetic` runs the generated stereo smoke fixture with no model or dataset downloads.
+The legacy full TLIO workflow installs optional Torch/gdown packages separately (not hash-locked),
+and writes into a new `results/runs/legacy-*` directory rather than overwriting committed reports.
 
 ## Checks without data (what CI runs)
 
@@ -62,7 +65,7 @@ python tools/extract_dataset.py local_data/tumvi/dataset-room1_512_16.tar local_
 python tools/extract_dataset.py local_data/tumvi/dataset-room1_512_16.tar local_data/tumvi --verify
 python tools/check_sync.py --seq room1                       # offsets / frames, development data only
 python tools/calibrate_vo.py --seq room1 --segment 0 60 --write calibration/vo_room1_vN.json
-python evaluate_vision.py --calibration calibration/vo_room1_v1.json \
+python evaluate_vision.py --calibration calibration/vo_room1_v2.json \
     --sync results/runs/<check-sync-run>/sync.json --workers 14
 python tools/profile_pipeline.py --seq room1 --seconds 60 --kf-every 4 --vo-cov-scale 4 \
     --model models/dispnet_faults/best.pt
@@ -81,7 +84,7 @@ inputs, schedule and seed, so any change in these recomputes.
 ## Result directories
 
 Every run writes `results/runs/<utc>-<name>-<sha>[-dirty]/` with `manifest.json` (commit, dirty
-flag, diff hash, packages, hardware, command, input hashes) and `status.json` (`running` →
+flag, diff hash, packages, hardware, command, input hashes) and `status.json` (`running` â†’
 `complete`, `failed` with traceback, or `interrupted`). Run directories are never overwritten.
 `results/runs/` is git-ignored. A run becomes a committed artifact only through
 `tools/vision_report.py`, which writes `results/vision/<run>/bundle.json` with the source run id and

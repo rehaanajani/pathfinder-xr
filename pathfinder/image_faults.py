@@ -49,7 +49,13 @@ class ImageFault:
 
 
 class Corruptor:
-    """Stateful corruption of one stream (keeps the previous frames for frozen/desync)."""
+    """Stateful corruption with a fixed composition order, independent of schedule order.
+
+    Drop consumes no randomness. Jitter affects time only. Photometric/spatial faults
+    precede blackout. Frozen repeats the previous delivered pair exactly, ignoring
+    new image corruptions until it ends (at startup it captures the first pair).
+    Desync uses the previous delivered right image unless the pair is frozen.
+    """
 
     def __init__(self, schedule, seed: int = 0):
         self.schedule = list(schedule)
@@ -60,6 +66,16 @@ class Corruptor:
 
     def apply(self, t, left, right):
         active = [f for f in self.schedule if f.active(t)]
+        if any(f.kind == "drop" for f in active):
+            return None
+        order = ("jitter", "dark", "blur", "occlusion", "low_texture", "blackout", "frozen", "stereo_desync")
+        active.sort(key=lambda f: (order.index(f.kind), f.start, f.end, f.severity))
+        frozen = any(f.kind == "frozen" for f in active)
+        if frozen and self.last is not None:
+            for f in active:
+                if f.kind == "jitter":
+                    t += self.rng.uniform(-0.02, 0.02) * f.severity
+            return t, self.last[0].copy(), self.last[1].copy()
         out_l, out_r = left, right
         for f in active:
             s = f.severity
@@ -78,7 +94,9 @@ class Corruptor:
                 ker[k // 2] = 1.0 / k
                 out_l, out_r = (cv2.filter2D(x, -1, ker) for x in (out_l, out_r))
             elif f.kind == "occlusion":
-                box = self.boxes.setdefault(f, self._box(left.shape, s))
+                if f not in self.boxes:
+                    self.boxes[f] = self._box(left.shape, s)
+                box = self.boxes[f]
                 out_l, out_r = out_l.copy(), out_r.copy()
                 y0, y1, x0, x1 = box
                 out_l[y0:y1, x0:x1] = 20
@@ -89,9 +107,8 @@ class Corruptor:
                 out_l, out_r = self.last
             elif f.kind == "stereo_desync" and self.prev_right is not None:
                 out_r = self.prev_right
-        if not any(f.kind == "frozen" for f in active):
-            self.last = (out_l, out_r)
-        self.prev_right = right
+        self.last = (out_l.copy(), out_r.copy())
+        self.prev_right = out_r.copy()
         return t, out_l, out_r
 
     def _dark(self, img, s):
@@ -118,12 +135,14 @@ def randomized_schedule(duration: float, seed: int, n_faults=(0, 3), kinds=KINDS
                         allow_startup: bool = True):
     """Random camera faults over [0, duration): count, kind, onset, length and severity all drawn from
     ``seed``. Onset may be 0 (fault present at start-up) when ``allow_startup``."""
+    if not np.isfinite(duration) or duration <= 0:
+        raise ValueError("recording duration must be finite and positive")
     rng = np.random.default_rng(seed)
     n = int(rng.integers(n_faults[0], n_faults[1] + 1))
     out = []
     for _ in range(n):
         kind = str(rng.choice(kinds))
         length = float(np.exp(rng.uniform(np.log(dur_range[0]), np.log(dur_range[1]))))
-        start = 0.0 if (allow_startup and rng.random() < 0.1) else float(rng.uniform(0, max(duration - length, 0.1)))
-        out.append(ImageFault(kind, start, min(start + length, duration + 1e-3), float(rng.uniform(0.3, 1.0))))
+        start = 0.0 if (allow_startup and rng.random() < 0.1) else float(rng.uniform(0, max(duration - length, 0.0)))
+        out.append(ImageFault(kind, start, min(start + length, duration), float(rng.uniform(0.3, 1.0))))
     return sorted(out, key=lambda f: f.start)

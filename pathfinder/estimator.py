@@ -239,7 +239,8 @@ class StreamingEstimator:
         measurements have an anchor. Emitted at visual start-up and after every tracking restart."""
         if self.camera_mode != "relative":
             raise ValueError("keyframes require camera_mode='relative'")
-        if not np.isfinite(t):
+        if (not np.isfinite(t) or isinstance(kf_id, (bool, np.bool_))
+                or not isinstance(kf_id, (int, np.integer))):
             self.log.cam_invalid += 1
             return
         self._queue(float(t), "kf", int(kf_id))
@@ -252,7 +253,9 @@ class StreamingEstimator:
         if self.camera_mode != "relative":
             raise ValueError("relative measurements require camera_mode='relative'")
         dp, dR, cov6 = (np.array(x, dtype=float, copy=True) for x in (dp, dR, cov6))
-        if (not np.isfinite(t) or dp.shape != (3,) or dR.shape != (3, 3) or cov6.shape != (6, 6)
+        if (not np.isfinite(t) or isinstance(kf_id, (bool, np.bool_))
+                or not isinstance(kf_id, (int, np.integer))
+                or dp.shape != (3,) or dR.shape != (3, 3) or cov6.shape != (6, 6)
                 or not np.isfinite(health) or not 0 <= health <= 1):
             self.log.cam_invalid += 1
             return
@@ -350,6 +353,10 @@ class StreamingEstimator:
             # frame is the start frame (yaw gauge fixed at 0), as in any odometry system. Without a
             # camera, heading is unknown and carries the full prior.
             P0[2, 2] = np.deg2rad(0.1) ** 2 if relative else np.pi ** 2
+            if relative:
+                # Right attitude errors live in the body frame; yaw is about gravity.
+                Rm = R0.as_matrix()
+                P0[:3, :3] = Rm.T @ P0[:3, :3] @ Rm
             P0[3:6, 3:6] = np.eye(3) * ini.fallback_vel_std ** 2
             P0[6:9, 6:9] = np.eye(3) * 1e-6
             P0[9:12, 9:12] = np.eye(3) * 1e-4
@@ -379,6 +386,8 @@ class StreamingEstimator:
              "P_pos": np.full((3, 3), np.nan), "P_vel": np.full((3, 3), np.nan), "valid": False,
              "track_state": TRACK_INITIALIZING, "camera_state": CAM_NONE,
              "imu_state": -1 if imu_state is None else int(imu_state), "reasons": self.base_reasons}
+        if r is not None:
+            o["reasons"] |= r["reasons"] & (REASONS["CAMERA_REANCHORED"] | REASONS["IMU_GAP"])
         return o
 
     # ------------------------------------------------------------------ main step
@@ -413,6 +422,9 @@ class StreamingEstimator:
                 if f.camera_update(payload[0], payload[1], log, tc) == "reanchored":
                     reasons |= REASONS["CAMERA_REANCHORED"]
             elif kind == "kf":
+                if ("cam", payload) in f.clone_k:
+                    log.cam_invalid += 1
+                    continue
                 f.add_clone(("cam", payload), c.vo_max_clones)
                 log.vo_keyframes += 1
             else:
@@ -445,8 +457,12 @@ class StreamingEstimator:
                 log.disp_skipped += 1
             else:
                 Rs = np.array([h[1] for h in win])
-                gw = np.einsum("nij,nj->ni", Rs, np.array([h[4] for h in win]))
-                aw = np.einsum("nij,nj->ni", Rs, np.array([h[5] for h in win]))
+                raw_g = np.array([h[4] for h in win])
+                raw_a = np.array([h[5] for h in win])
+                if c.model_input_bias_corrected:
+                    raw_g, raw_a = raw_g - f.bg, raw_a - f.ba
+                gw = np.einsum("nij,nj->ni", Rs, raw_g)
+                aw = np.einsum("nij,nj->ni", Rs, raw_a)
                 if c.cloning and c.yaw_frame and k0 in f.clone_k:
                     Rz = f.clone_yaw(k0)          # into the clone's yaw frame (row vectors: v @ Rz)
                     gw, aw = gw @ Rz, aw @ Rz
@@ -464,8 +480,6 @@ class StreamingEstimator:
 
         Rm = f.R.as_matrix()
         g_in, a_in = (gyro, acc) if finite else (self.held[0], self.held[1])
-        if c.model_input_bias_corrected:
-            g_in, a_in = g_in - f.bg, a_in - f.ba
         self.hist.append((t, Rm, f.p.copy(), f.P[6:9, 6:9].copy(), g_in, a_in, lost))
         self.k += 1
         return self._output(t, imu_state, lost, reasons)
@@ -573,6 +587,12 @@ def replay(t, gyro, acc, cfg: FilterConfig, init, cam=None, predictor=None, imu_
     est = StreamingEstimator(cfg, init, predictor, expect_camera=cam is not None or vision is not None,
                              camera_mode="relative" if vision is not None else "fix")
     vis = list(vision) if vision is not None else []
+    for event in vis:
+        if not isinstance(event, dict) or event.get("kind") not in ("kf", "rel"):
+            raise ValueError("visual events must be keyframes or relative poses")
+        required = {"t", "kf"} | ({"dp", "dR", "cov"} if event["kind"] == "rel" else set())
+        if not required <= event.keys():
+            raise ValueError("incomplete visual event")
     vt = np.array([e["t"] for e in vis], float)
     if np.any(np.diff(vt) < 0) or not np.isfinite(vt).all():
         raise ValueError("visual events must be finite and in non-decreasing time order")

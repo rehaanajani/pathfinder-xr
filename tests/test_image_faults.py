@@ -37,3 +37,32 @@ def test_schedule_is_seeded_and_validated():
         ImageFault("dark", 1, 1)
     with pytest.raises(ValueError):
         ImageFault("dark", 0, 1, 0.0)
+
+
+def test_startup_freeze_captures_first_delivered_pair():
+    c = Corruptor([ImageFault("frozen", 0, 2)])
+    first = c.apply(0, _img(0), _img(1))
+    second = c.apply(.1, _img(2), _img(3))
+    np.testing.assert_array_equal(first[1], second[1])
+    np.testing.assert_array_equal(first[2], second[2])
+
+
+@pytest.mark.parametrize("kind", ["blackout", "frozen"])
+def test_overlap_order_is_independent_and_blackout_stays_zero(kind):
+    schedule = [ImageFault("dark", 0, 2), ImageFault(kind, 0, 2)]
+    a, b = Corruptor(schedule, 1), Corruptor(schedule[::-1], 1)
+    previous = None
+    for i in range(3):
+        x = a.apply(i * .1, _img(i), _img(i + 10))
+        y = b.apply(i * .1, _img(i), _img(i + 10))
+        np.testing.assert_array_equal(x[1], y[1])
+        if kind == "blackout":
+            assert not x[1].any()
+        elif previous is not None:
+            np.testing.assert_array_equal(x[1], previous)
+        previous = x[1]
+
+
+def test_short_schedule_stays_inside_recording():
+    for seed in range(100):
+        assert all(0 <= f.start < f.end <= .05 for f in randomized_schedule(.05, seed))

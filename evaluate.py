@@ -4,7 +4,8 @@
     python evaluate.py --seqs 36       # the full TLIO test split
     python evaluate.py --synthetic     # no dataset needed: synthetic head walks
 
-Writes results/summary.json, results/report.html and results/*.png.
+Writes summary.json, report.html and figures into a new results/runs/legacy-* directory.
+Use --out to select a new directory; existing directories are refused.
 """
 
 import argparse
@@ -92,13 +93,19 @@ def fig_to_b64(fig, name):
 
 
 def main():
+    global OUT
     ap = argparse.ArgumentParser()
     ap.add_argument("--seqs", type=int, default=10)
     ap.add_argument("--clip", type=float, default=60.0)
     ap.add_argument("--synthetic", action="store_true")
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--out", type=Path, help="New output directory (must not already exist)")
     args = ap.parse_args()
-    OUT.mkdir(exist_ok=True)
+    from datetime import datetime, timezone
+    from uuid import uuid4
+    OUT = args.out or Path("results/runs") / (
+        "legacy-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid4().hex[:12])
+    OUT.mkdir(parents=True, exist_ok=False)
     t0 = time.time()
     ours, tl = load_models()
     seqs = sequences(args.seqs, args.clip, args.synthetic)
@@ -174,7 +181,7 @@ def main():
                "model": perf, "runtime_s": time.time() - t0, "synthetic": args.synthetic}
     (OUT / "summary.json").write_text(json.dumps(summary, indent=1))
     write_report(summary, example, methods)
-    print(f"done in {time.time() - t0:.0f}s -> results/report.html")
+    print(f"done in {time.time() - t0:.0f}s -> {OUT / 'report.html'}")
 
 
 def write_report(S, example, methods):

@@ -19,6 +19,7 @@ dependencies = [
 vision = ["opencv-python-headless>=4.9,<5", "PyYAML>=6,<7"]
 model = ["torch>=2.2,<3"]
 plots = ["matplotlib>=3.8,<4"]
+profile = ["psutil>=7,<8"]
 export = ["onnx>=1.16", "onnxruntime>=1.18"]
 data = ["gdown>=5.0"]
 dev = ["pytest>=8,<9"]

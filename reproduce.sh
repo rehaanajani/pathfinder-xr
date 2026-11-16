@@ -1,35 +1,47 @@
 #!/usr/bin/env bash
-# Everything in one command: environment, data, models, tests, benchmark, report.
+# Everything in one command: locked core environment, tests, and an isolated evaluation run.
 #
 #   bash reproduce.sh               # downloads and SHA-256-verifies the released models (fails if it cannot;
 #                                   # it never retrains silently)
-#   bash reproduce.sh --synthetic   # no download: synthetic head walks, ~3 min
+#   bash reproduce.sh --synthetic   # no dataset/model download: generated stereo smoke evaluation
 #   bash reproduce.sh --train       # intentionally retrain both models (new model identity, see train.py)
-# Real-vision (TUM-VI) workflow: docs/REPRODUCIBILITY.md.
+# Real-vision (TUM-VI) workflow: docs/REPRODUCE.md.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 SYN=0; TRAIN=0
 for a in "$@"; do
-  case "$a" in --synthetic) SYN=1 ;; --train) TRAIN=1 ;; esac
+  case "$a" in --synthetic) SYN=1 ;; --train) TRAIN=1 ;; *) echo "Unknown option: $a" >&2; exit 2 ;; esac
 done
 
 if [ ! -d .venv ]; then
-  if command -v uv >/dev/null; then uv venv -q --python 3.11 .venv; else python3 -m venv .venv; fi
+  if command -v uv >/dev/null; then uv venv -q --python 3.13 .venv; else python3 -m venv .venv; fi
 fi
 # Windows venvs put the interpreter in Scripts/, POSIX venvs in bin/.
 if [ -x .venv/Scripts/python.exe ]; then PY=.venv/Scripts/python.exe; else PY=.venv/bin/python; fi
-if command -v uv >/dev/null; then uv pip install -q --python $PY -r requirements.txt; else $PY -m pip install -q -r requirements.txt; fi
+"$PY" -c 'import sys; assert sys.version_info[:2] == (3, 13), "Use a Python 3.13 venv for the locked environment"'
+if command -v uv >/dev/null; then
+  uv pip install -q --python "$PY" --require-hashes -r requirements/core-dev-py313.lock
+else
+  "$PY" -m pip install -q --require-hashes -r requirements/core-dev-py313.lock
+fi
 
 echo "== tests"
 $PY -m pytest -q tests
 
 if [ "$SYN" = 1 ]; then
-  echo "== benchmark (synthetic)"
-  $PY evaluate.py --synthetic --seqs 5 --clip 60
+  echo "== synthetic stereo smoke evaluation"
+  "$PY" tools/smoke_eval.py --out results/runs
   exit 0
 fi
 
+# Legacy learned-model evaluation needs optional packages beyond the hash-locked core.
+# These installs are not hash-locked; preserve the tested core versions using constraints.
+if command -v uv >/dev/null; then
+  uv pip install -q --python "$PY" -c requirements/core-dev.in 'torch==2.8.0' 'gdown>=5,<6'
+else
+  "$PY" -m pip install -q -c requirements/core-dev.in 'torch==2.8.0' 'gdown>=5,<6'
+fi
 if [ ! -f local_data/tlio_golden/test_list.txt ]; then
   echo "== downloading the TLIO headset dataset (Meta, CC BY-NC 4.0, 3.8 GB zip, 8.5 GB unpacked)"
   mkdir -p local_data
@@ -47,7 +59,5 @@ else
 fi
 
 echo "== benchmark"
-$PY evaluate.py --seqs 36 --clip 60
-echo "== demo"
-$PY make_demo.py
-echo "Open results/report.html and demo/index.html"
+"$PY" evaluate.py --seqs 36 --clip 60
+# Evaluation prints its new output directory; historical committed reports are preserved.

@@ -64,12 +64,15 @@ def main(argv=None):
     ap.add_argument("--sync", default=None)
     ap.add_argument("--model-shift", default=None, help="run dir of tools/model_shift.py")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--allow-failed", action="store_true", help="Export a failed run as diagnostic evidence only")
     a = ap.parse_args(argv)
     run = Path(a.run)
-    status = json.loads((run / "status.json").read_text())
-    manifest = json.loads((run / "manifest.json").read_text())
-    protocol = json.loads((run / "protocol.json").read_text())
-    rows = [json.loads(ln) for ln in (run / "rows.jsonl").read_text().splitlines() if ln.strip()]
+    status = json.loads((run / "status.json").read_text(encoding="utf-8"))
+    if status.get("state") != "complete" and not a.allow_failed:
+        sys.exit("Only complete runs may be promoted; --allow-failed exports diagnostic evidence")
+    manifest = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
+    protocol = json.loads((run / "protocol.json").read_text(encoding="utf-8"))
+    rows = [json.loads(ln) for ln in (run / "rows.jsonl").read_text(encoding="utf-8").splitlines() if ln.strip()]
     out = Path(a.out or ROOT / "results" / "vision" / run.name)
     if out.exists():
         sys.exit(f"{out} exists; promoted bundles are immutable")
@@ -109,14 +112,16 @@ def main(argv=None):
                                 "nees99_inside_all": g(f, "nees_cov_inside_all", "0.99")})
     for r in failures:
         T["failures"].append({"scenario": r["scenario"], "system": r["system"], "status": r["status"]})
-    for x, y in PAIRS:
+    for x, y in (*PAIRS, ("pathfinder", "conventional_gated"), ("pathfinder_no_reanchor", "pathfinder")):
         if x not in systems or y not in systems:
             continue
-        d, worst = [], None
+        d, worst, dropped, included = [], None, [], []
         for sc in scen:
             ax, ay = ate(sc, x), ate(sc, y)
-            if ax is None or ay is None:
+            if ax is None or ay is None or not np.isfinite([ax, ay]).all():
+                dropped.append(sc)
                 continue
+            included.append(sc)
             d.append(ax - ay)
             if worst is None or ax - ay > worst[1]:
                 worst = (sc, ax - ay)
@@ -125,17 +130,22 @@ def main(argv=None):
         T["pairs"].append({"a": x, "b": y, "n_scenarios": int(len(d)), "median_delta_m": float(np.median(d)) if len(d) else None,
                            "mean_delta_m": float(d.mean()) if len(d) else None, "a_better": int((d < 0).sum()),
                            "b_better": int((d > 0).sum()), "boot95_median": [lo, hi], "worst_for_a": worst,
+                           "dropped_scenarios": dropped, "n_dropped": len(dropped),
+                           "subsets": {kind: {"n": len(values), "median_delta_m": float(np.median(values)) if values else None,
+                                               "mean_delta_m": float(np.mean(values)) if values else None}
+                               for kind, values in (("fixed", [v for sc, v in zip(included, d) if not sc.startswith("random_")]),
+                                                    ("random", [v for sc, v in zip(included, d) if sc.startswith("random_")]))},
                            "delta_definition": "ATE RMSE(a) - ATE RMSE(b), same corrupted inputs; negative = a better"})
     fe_ms = [g(r, "frontend", "ms_per_frame") for r in rows if r["system"] == "pathfinder" and r["scenario"] == "clean"]
     T["runtime"]["frontend_clean_ms_per_frame"] = fe_ms[0] if fe_ms else None
     T["runtime"]["estimator_us_per_imu_sample"] = {sy: g(by.get(("clean", sy)) or {}, "diagnostics", "estimator_us_per_imu_sample")
                                                   for sy in systems}
     if a.profile:
-        T["runtime"]["profile"] = json.loads((Path(a.profile) / "profile.json").read_text())
+        T["runtime"]["profile"] = json.loads((Path(a.profile) / "profile.json").read_text(encoding="utf-8"))
     if a.model_shift:
-        T["model_shift"] = json.loads((Path(a.model_shift) / "model_shift.json").read_text())
+        T["model_shift"] = json.loads((Path(a.model_shift) / "model_shift.json").read_text(encoding="utf-8"))
         T["model_shift"]["run"] = Path(a.model_shift).name
-    (out / "tables.json").write_text(json.dumps(T, indent=1))
+    (out / "tables.json").write_text(json.dumps(T, indent=1), encoding="utf-8", newline="\n")
 
     # ------------------------------------------------------------------ figures
     figs = []
@@ -250,7 +260,14 @@ def main(argv=None):
         wc = p["worst_for_a"]
         w(f"| {p['a']} vs {p['b']} | {p['n_scenarios']} | {fmt(p['median_delta_m'])} | {fmt(p['mean_delta_m'])} | "
           f"{p['a_better']} | {p['b_better']} | [{fmt(lo)}, {fmt(hi)}] | {wc[0] if wc else '–'} ({fmt(wc[1] if wc else None)}) |")
-    w("\nIntervals resample scenarios on one recording (fault-schedule variability), not recordings.\n")
+    w("\nThese are descriptive resampling intervals over this fixed list of development scenarios, not population confidence intervals.\n")
+    for pair in T["pairs"]:
+        w(f"- {pair['a']} vs {pair['b']}: excluded {pair['n_dropped']} unavailable/non-finite pairs: "
+          + (", ".join(pair["dropped_scenarios"]) or "none"))
+        for kind, subset in pair["subsets"].items():
+            w(f"  {kind}: n={subset['n']}, mean delta={fmt(subset['mean_delta_m'])} m, median delta={fmt(subset['median_delta_m'])} m.")
+    w("\nNEES uses aligned errors with marginal position covariance, without anchor cross-covariance correction. "
+      "It is a gauge-unadjusted diagnostic, not a calibration certificate.\n")
     w("## Clean run detail\n")
     w("| system | ATE | max err | 4-DoF ATE | rot RMSE deg | RPE 1 s m | RPE 1 s deg | final drift % path | "
       "held-out 60–141 s ATE | NEES≤χ²99% (all) | VO used/rejected |")
@@ -295,6 +312,23 @@ def main(argv=None):
           f"({g(p, 'frame_total_ms', 'missed_deadline')} of {g(p, 'frame_total_ms', 'n')} frames over 50 ms); IMU step "
           f"p50/p99 {fmt(g(p, 'imu_estimator_ms_steady', 'p50'), 2)}/{fmt(g(p, 'imu_estimator_ms_steady', 'p99'), 2)} ms; "
           f"real-time factor {fmt(p['real_time_factor'], 2)}; peak RSS {fmt(p['rss_mb_peak_sampled'], 0)} MB. {p['label']}.")
+    if T.get("model_shift"):
+        shift = T["model_shift"]
+        w("\n## Learned model\n")
+        w(f"Diagnostic source run: `{shift.get('run', 'unknown')}`. {shift.get('label', '')}")
+        w("These windows overlap and are development/validation diagnostics, not independent held-out trajectory evidence.")
+        w("\n| Domain | RMSE (m) | Mean NEES | Integrated autocorrelation time |")
+        w("|---|---:|---:|---:|")
+        for domain in ("tlio_val_in_domain", "tumvi_room1_cross_device"):
+            item = shift.get(domain, {})
+            w(f"| {domain} | {fmt(item.get('rmse_m'))} | {fmt(item.get('nees_mean'))} | "
+              f"{fmt(item.get('integrated_autocorrelation_updates'))} |")
+        source_rmse = g(shift, "tlio_val_in_domain", "rmse_m")
+        target_rmse = g(shift, "tumvi_room1_cross_device", "rmse_m")
+        if source_rmse and target_rmse is not None:
+            w(f"Cross-device/in-domain displacement RMSE ratio: {target_rmse / source_rmse:.2f}.")
+    if status.get("state") != "complete":
+        w("\n**Diagnostic failed/incomplete run. This bundle is not a current successful evaluation.**")
     w("\n## Figures\n")
     for f in figs:
         w(f"![{f}]({f})")
@@ -304,21 +338,33 @@ def main(argv=None):
     w("- One development recording: no recording-level statistics, no cross-device result, no untouched final test.")
     w("- VO covariance validity is not established; the learned model is evaluated cross-device without calibration.")
     w("- Runtime is a laptop replay; no headset, NPU, thermal or multi-threaded scheduler measurement.")
-    (out / "REPORT.md").write_text("\n".join(L) + "\n", encoding="utf-8")
+    (out / "REPORT.md").write_text("\n".join(L) + "\n", encoding="utf-8", newline="\n")
 
     # ------------------------------------------------------------------ provenance
     src = {n: sha(run / n) for n in ("manifest.json", "protocol.json", "rows.jsonl", "summary.json", "status.json")
            if (run / n).exists()}
-    shutil.copy(run / "manifest.json", out / "source_manifest.json")
-    shutil.copy(run / "protocol.json", out / "source_protocol.json")
+    for source, target in (("manifest.json", "source_manifest.json"), ("protocol.json", "source_protocol.json")):
+        (out / target).write_text((run / source).read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
+    auxiliary = {}
+    for label, value, filename in (("profile", a.profile, "profile.json"),
+                                   ("model_shift", a.model_shift, "model_shift.json"),
+                                   ("sync", a.sync, "sync.json")):
+        if value:
+            source = Path(value)
+            if source.is_dir():
+                source = source / filename
+            auxiliary[label] = {"run": source.parent.name, "file": source.name, "sha256": sha(source)}
+            (out / ("source_" + filename)).write_text(source.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
     files = {p.name: sha(p) for p in sorted(out.iterdir()) if p.is_file()}
     bundle = {"schema": "pathfinder.result-bundle/1", "source_run": run.name, "source_status": status["state"],
               "source_sha256": src, "protocol": protocol["protocol"], "code": manifest.get("code"),
-              "generator": "tools/vision_report.py", "generator_sha256": sha(Path(__file__)),
+              "generator": "tools/vision_report.py", "generator_sha256": hashlib.sha256(Path(__file__).read_bytes().replace(b"\r\n", b"\n")).hexdigest(),
+              "generator_hash_normalization": "LF", "auxiliary_sources": auxiliary,
+              "diagnostic_only": status.get("state") != "complete",
               "profile_run": Path(a.profile).name if a.profile else None, "files": files,
               "rows_jsonl_note": "rows.jsonl (full per-run metrics + 10 Hz series) stays in the source run directory; "
                                  "tables.json carries every reported number"}
-    (out / "bundle.json").write_text(json.dumps(bundle, indent=1))
+    (out / "bundle.json").write_text(json.dumps(bundle, indent=1), encoding="utf-8", newline="\n")
     print("bundle:", out)
 
 

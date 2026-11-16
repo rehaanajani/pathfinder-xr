@@ -96,3 +96,29 @@ def test_blackout_breaks_tracking_and_restart_emits_keyframe_first():
     assert kinds[2] == []                  # no tracks, no stereo map: nothing emitted
     assert kinds[3] == ["kf"]              # restart: clone first, no relative measurement
     assert kinds[4] == ["rel", "kf"]
+
+
+def test_wide_angle_pnp_uses_image_pixel_inliers():
+    rng = np.random.default_rng(7)
+    angles = rng.uniform(np.deg2rad(55), np.deg2rad(70), 30)
+    az = rng.uniform(-np.pi, np.pi, 30)
+    z = rng.uniform(2, 6, 30)
+    X = np.c_[np.tan(angles) * z * np.cos(az), np.tan(angles) * z * np.sin(az), z]
+    uv = EQUI.project(X) + rng.normal(0, .5, (30, 2))
+    result = StereoVO(_rig(EQUI))._pnp(X, np.tile(np.eye(3) * 1e-8, (30, 1, 1)), uv)
+    assert result is not None
+    T, covariance, inliers, rms = result
+    assert inliers >= 25 and rms < 1.
+    assert np.linalg.norm(T[:3, 3]) < .1
+    assert np.linalg.eigvalsh(covariance).min() > 0
+
+
+def test_degenerate_patch_cannot_emit_exploded_pose():
+    rng = np.random.default_rng(1)
+    X = np.c_[rng.uniform(-.05, .05, (40, 2)), np.full(40, 12.)]
+    uv = EQUI.project(X) + rng.normal(0, .5, (40, 2))
+    result = StereoVO(_rig(EQUI))._pnp(X, np.tile(np.eye(3) * 1e-8, (40, 1, 1)), uv)
+    if result is not None:
+        T, cov, _, _ = result
+        assert np.isfinite(T).all() and np.linalg.norm(T[:3, 3]) < 1.
+        assert np.linalg.eigvalsh(cov).min() > 0

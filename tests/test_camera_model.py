@@ -38,6 +38,13 @@ def test_rational8_matches_opencv_and_roundtrips():
     assert np.max(np.abs(xy - X[:, :2] / X[:, 2:])) < 1e-6
 
 
+def test_radtan_fold_does_not_return_mirror_ray():
+    cam = CameraModel("radtan", 300, 300, 320, 240, (-.3, 0, 0, 0), 640, 480)
+    rays = cam.unproject([[440, 240], [639, 240]])
+    assert np.isfinite(rays[0]).all() and rays[0, 0] > 0
+    assert np.isnan(rays[1]).all()
+
+
 def test_wrong_model_is_measurably_wrong():
     # Applying the fisheye model to a rational-model camera (the PR #7 assumption) misplaces rays.
     X = _points(max_angle=0.8)

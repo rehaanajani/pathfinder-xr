@@ -104,6 +104,7 @@ class CameraModel:
             xy = xd * s[:, None]
         else:
             xy = xd.copy()
+            valid = np.isfinite(xd).all(1)
             eps = 1e-7
             for _ in range(iters):
                 f = self._distort(xy) - xd
@@ -112,7 +113,31 @@ class CameraModel:
                     step = np.zeros(2)
                     step[j] = eps
                     J[:, :, j] = (self._distort(xy + step) - self._distort(xy - step)) / (2 * eps)
-                xy = xy - np.linalg.solve(J, f[:, :, None])[:, :, 0]
+                valid &= np.isfinite(J).all((1, 2)) & (np.linalg.det(J) > 1e-12)
+                # Follow only the orientation-preserving branch connected to the
+                # optical axis. A numerical root across a distortion fold is not a ray.
+                indices = np.flatnonzero(valid)
+                if len(indices):
+                    try:
+                        proposal = xy[indices] - np.linalg.solve(J[indices], f[indices, :, None])[:, :, 0]
+                        good = np.isfinite(proposal).all(1) & (np.sum(proposal * xd[indices], axis=1) >= 0)
+                        valid[indices[~good]] = False
+                        xy[indices[good]] = proposal[good]
+                    except np.linalg.LinAlgError:
+                        # Rare numerical singularity after the determinant check:
+                        # isolate it without failing every point in the batch.
+                        for i in indices:
+                            try:
+                                proposal = xy[i] - np.linalg.solve(J[i], f[i])
+                            except np.linalg.LinAlgError:
+                                valid[i] = False
+                                continue
+                            if np.dot(proposal, xd[i]) < 0 or not np.isfinite(proposal).all():
+                                valid[i] = False
+                            else:
+                                xy[i] = proposal
+                xy[~valid] = 0.0
+            xy[~valid] = np.nan
         err = np.linalg.norm((self._distort(xy) - xd) * [self.fx, self.fy], axis=1)
         xy[~(np.isfinite(err) & (err < 1e-3))] = np.nan
         return xy

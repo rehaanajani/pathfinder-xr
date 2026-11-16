@@ -10,7 +10,7 @@ A run directory ``results/runs/<utc>-<name>-<sha7>[-dirty]`` holds
     status.json     "running" -> "complete" | "failed" (with traceback) | "interrupted"
     ...             the runner's own outputs
 Nothing is ever deleted or rewritten here; promotion into committed artifacts is an explicit,
-separate step (``tools/promote.py``) that records the source run id.
+separate step (``tools/vision_report.py``) that records the source run id.
 """
 
 import hashlib
@@ -21,6 +21,7 @@ import subprocess
 import sys
 import time
 import traceback
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -42,7 +43,8 @@ def sha256_file(path, chunk=1 << 20) -> str | None:
 
 def _git(*args) -> str | None:
     try:
-        return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=True,
+        return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True,
+                              encoding="utf-8", errors="surrogateescape", check=True,
                               timeout=30).stdout.strip()
     except Exception:
         return None
@@ -52,7 +54,7 @@ def code_state() -> dict:
     diff = _git("diff", "HEAD")
     return {"commit": _git("rev-parse", "HEAD"),
             "dirty": bool(_git("status", "--porcelain", "--untracked-files=no")),
-            "diff_sha256": hashlib.sha256(diff.encode()).hexdigest() if diff else None,
+            "diff_sha256": hashlib.sha256(diff.encode("utf-8", errors="surrogateescape")).hexdigest() if diff else None,
             "branch": _git("rev-parse", "--abbrev-ref", "HEAD")}
 
 
@@ -77,7 +79,7 @@ class Run:
         p = self.path / name
         if p.exists():
             raise FileExistsError(f"{p} already written; run bundles are immutable")
-        p.write_text(json.dumps(obj, indent=1, default=_default))
+        p.write_text(json.dumps(obj, indent=1, default=_default), encoding="utf-8", newline="\n")
         return p
 
     def file(self, name) -> Path:
@@ -88,7 +90,7 @@ class Run:
 
     def status(self, state, **extra):
         (self.path / "status.json").write_text(json.dumps({"state": state, "t": time.time(), **extra},
-                                                          indent=1, default=_default))
+                                                          indent=1, default=_default), encoding="utf-8", newline="\n")
 
 
 def _default(o):
@@ -110,13 +112,14 @@ def run_bundle(name: str, config: dict, inputs: dict | None = None, protocol: st
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     sha = (code["commit"] or "nogit")[:7] + ("-dirty" if code["dirty"] else "")
     safe = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in name)
-    path = Path(root) / f"{stamp}-{safe}-{sha}"
+    path = Path(root) / f"{stamp}-{safe}-{sha}-{uuid.uuid4().hex[:12]}"
     path.mkdir(parents=True, exist_ok=False)
     manifest = {"schema": SCHEMA, "name": name, "created_utc": stamp, "command": sys.argv,
                 "code": code, "environment": environment(), "config": config, "seeds": seeds,
                 "protocol": protocol,
                 "inputs": {k: {"path": str(v), "sha256": sha256_file(v)} for k, v in (inputs or {}).items()}}
-    (path / "manifest.json").write_text(json.dumps(manifest, indent=1, default=_default))
+    (path / "manifest.json").write_text(json.dumps(manifest, indent=1, default=_default),
+                                       encoding="utf-8", newline="\n")
     run = Run(path, manifest)
     run.status("running")
     try:
