@@ -14,6 +14,19 @@ organisers' script), scored with `tools/score_track3.py` (ATE matches `evo_ape -
 | `budget.json` | peak RSS and CPU per second of IMU, the process's own (`tools/measure_budget.py`, 3 repeats) | worst 2.28 MB of 8, 1.96 ms of 20 |
 | `mount_guard_check.json` | guard on vs off on all 16 recordings, and the same files rotated 90° about x (`tools/check_mount_guard.py`) | normal: 16/16 quiet and byte-identical; rotated: 14/16 switch (MH_01: not at rest at start-up, guard holds off by design; MH_03: rotation moves gravity only ~25°, inside the threshold) |
 
+**On the organisers' own degradation script** (sent 16 Nov; `tools/eval_organiser.py --script <their file>`, their
+fixed seed 42; MH_04, V1_03, MH_05, V2_03, room6; ATE / checkpoints / blind 5 s / dropouts, m; every run one pose per
+input row):
+
+| File | Input layout | Ours | Standing still | Earlier network |
+|---|---|---|---|---|
+| `final_org_accel_first_*.json` | accel-first (their script's documented order) | **3.395 / 3.216 / 2.468 / 3.206** | 3.663 / 3.439 / 2.511 / 3.442 | 3.556 / 3.338 / 2.403 / 3.336 |
+| `final_org_euroc_*.json` | EuRoC order (gyro first), fed unchanged | **3.370 / 3.184 / 2.438 / 3.184** | 3.663 / 3.438 / 2.511 / 3.442 | 3.544 / 3.330 / 2.398 / 3.334 |
+
+Their script documents accel-first columns; EuRoC is gyro-first. Since 16 Nov the entry detects the order, the
+timestamp unit and g vs m/s² itself (`--columns`, `--ts-unit`, `--accel-unit` force them). Without that, the
+accel-first case falls to standing-still level (MH_05: 6.85 vs 6.45 m).
+
 "Dropouts" is scored over each gap plus the second after it. With the default `--dropout-mode missing` the gap has no
 rows, so it is mostly the second after the gap; standing still is scored the same way.
 
