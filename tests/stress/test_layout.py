@@ -96,3 +96,21 @@ def test_forced_layout_flags(tmp_path):
     g, _ = run(tmp_path, "g.csv")
     a, _ = run(tmp_path, "a.csv", "--columns", "accel-first", "--ts-unit", "ns", "--accel-unit", "ms2")
     assert close(g, a, 0.0)
+
+
+def test_forced_columns_still_detect_g(tmp_path):
+    """--columns accel-first with an accelerometer in g: the g conversion must still happen."""
+    s = samples()
+    write(tmp_path / "g.csv", s, "gyro")
+    write(tmp_path / "ag.csv", s, "accel", g_units=True)
+    g, _ = run(tmp_path, "g.csv")
+    a, err = run(tmp_path, "ag.csv", "--columns", "accel-first")
+    assert "accel in g" in err and close(g, a, 1e-5)
+
+
+def test_forced_g_unit_picks_the_columns(tmp_path):
+    """--accel-unit g with a fast-spinning gyro (10 rad/s): the g-sized triplet is the accelerometer."""
+    s = [((10.0 + g[0], g[1], g[2]), a) for g, a in samples()]
+    write(tmp_path / "x.csv", s, "accel", g_units=True)
+    _, err = run(tmp_path, "x.csv", "--accel-unit", "g")
+    assert "accel columns first" in err
