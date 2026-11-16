@@ -95,15 +95,87 @@ def open_csv(path):
     return open(p, "r", newline="")
 
 
-def parse_rows(f):
-    """Yield (t_ns, gyro(3), acc(3), ok) per data row. Malformed numbers become NaN (row kept, marked bad)."""
+def detect_layout(inp, n_max=2000, columns="auto", ts_unit="auto", accel_unit="auto"):
+    """Column order and units (EuRoC: ns, gyro first, accel m/s^2; the organisers' degradation script documents
+    accel-first columns and accepts s/ms/us/ns timestamps and accel in g). Each can be forced; "auto" decides from the
+    first data rows:
+    - accelerometer: a triplet whose median magnitude is 6-14 (m/s^2, gravity) and the other's is not; only if neither
+      looks like m/s^2, a triplet at 0.6-1.4 (g) while the other is not. Otherwise the EuRoC order.
+    - timestamps: values above 1e17 can only be epoch nanoseconds; otherwise the unit follows the median spacing of
+      all rows (as the organisers' script does). A unit that would overflow int64 falls back to ns.
+    Returns (accel_first, t_scale_to_ns, accel_scale_to_m_s2, note)."""
+    t, x, y = [], [], []
+    with open_csv(inp) as f:
+        for line in f:
+            s = line.strip()
+            if not s or s[0] == "#" or s[0].isalpha():
+                continue
+            p = s.replace(";", ",").split(",")
+            try:
+                t0 = float(p[0])
+            except ValueError:
+                continue
+            if not math.isfinite(t0):
+                continue
+            t.append(t0)
+            try:
+                v = [float(c) for c in p[1:7]]
+            except ValueError:
+                v = []
+            if len(v) == 6 and all(math.isfinite(c) for c in v) and any(v):
+                x.append(norm3(v[0:3])); y.append(norm3(v[3:6]))
+            if len(t) >= n_max:
+                break
+    med = lambda z: sorted(z)[len(z) // 2]
+    notes = []
+    accel_first, a_scale = False, 1.0
+    if columns != "auto":
+        accel_first = columns == "accel-first"
+    elif len(x) >= 10:
+        mx, my = med(x), med(y)
+        si = lambda n: 6.0 <= n <= 14.0
+        gu = lambda n: 0.6 <= n <= 1.4
+        if si(mx) != si(my):
+            accel_first = si(mx)
+        elif not si(mx) and not si(my) and gu(mx) != gu(my):
+            accel_first = gu(mx)
+            a_scale = G
+        else:
+            notes.append("column order unclear, using gyro first")
+    else:
+        notes.append("too few rows to check columns, using gyro first")
+    if accel_unit == "g":
+        a_scale = G
+    elif accel_unit == "ms2":
+        a_scale = 1.0
+    t_scale = 1
+    if ts_unit != "auto":
+        t_scale = {"ns": 1, "us": 10 ** 3, "ms": 10 ** 6, "s": 10 ** 9}[ts_unit]
+    elif t and max(abs(c) for c in t) < 1e17:
+        dts = [b - a for a, b in zip(t, t[1:]) if b > a]
+        if dts:
+            dt = med(dts)
+            t_scale = 10 ** 9 if dt < 1.0 else 10 ** 6 if dt < 1e3 else 10 ** 3 if dt < 1e6 else 1
+            if max(abs(c) for c in t) * t_scale >= 9.2e18:
+                t_scale = 1
+                notes.append("timestamp unit would overflow, using ns")
+    return accel_first, t_scale, a_scale, "; ".join(notes)
+
+
+def parse_rows(f, layout=(False, 1, 1.0, "")):
+    """Yield (t_ns, gyro(3), acc(3)) per data row, in our order and units whatever the file's (see detect_layout).
+    Malformed numbers become NaN (row kept, marked bad)."""
+    accel_first, t_scale, a_scale = layout[:3]
     for line in f:
         s = line.strip()
         if not s or s[0] == "#" or s[0].isalpha():
             continue
         parts = s.replace(";", ",").split(",")
         try:
-            t = int(float(parts[0])) if "e" in parts[0].lower() or "." in parts[0] else int(parts[0])
+            if t_scale == 1:
+                t = int(float(parts[0])) if "e" in parts[0].lower() or "." in parts[0] else int(parts[0])
+            else:
+                t = int(round(float(parts[0]) * t_scale))
         except (ValueError, OverflowError):
             continue
         if not -(1 << 63) <= t < (1 << 63):         # as the C++ entry: timestamps must fit in int64
@@ -116,7 +188,10 @@ def parse_rows(f):
                 vals.append(float("nan"))
         while len(vals) < 6:
             vals.append(float("nan"))
-        yield t, tuple(vals[:3]), tuple(vals[3:6])
+        g, a = (vals[3:6], vals[:3]) if accel_first else (vals[:3], vals[3:6])
+        if a_scale != 1.0:
+            a = [c * a_scale for c in a]
+        yield t, tuple(g), tuple(a)
 
 
 # ---------------------------------------------------------------------------- the estimator
@@ -476,7 +551,7 @@ def rot_cov(q, m, s):
     return list(mw), sw
 
 
-def prescan_bias(inp, a):
+def prescan_bias(inp, a, layout=(False, 1, 1.0, "")):
     """First pass over the start of the file: gyro bias = mean gyro of the first still stretch (>= 0.5 s).
 
     The gyro bias about the vertical cannot be seen from gravity, and a recording does not have to begin at rest
@@ -485,7 +560,7 @@ def prescan_bias(inp, a):
     pf = PathFinder(a)
     acc_sum, n_still, t0 = [0.0, 0.0, 0.0], 0, None
     with open_csv(inp) as f:
-        for t, g, acc in parse_rows(f):
+        for t, g, acc in parse_rows(f, layout):
             t0 = t if t0 is None else t0
             if (t - t0) * 1e-9 > a.prescan:
                 break
@@ -501,9 +576,15 @@ def prescan_bias(inp, a):
 
 
 def run(inp, out, a, rec=None):
+    layout = detect_layout(inp, columns=a.columns, ts_unit=a.ts_unit, accel_unit=a.accel_unit)
+    accel_first, t_scale, a_scale, note = layout
+    if accel_first or t_scale != 1 or a_scale != 1.0 or note:
+        unit = {1: "ns", 10 ** 3: "us", 10 ** 6: "ms", 10 ** 9: "s"}[t_scale]
+        print(f"input layout: {'accel' if accel_first else 'gyro'} columns first, timestamps in {unit}, "
+              f"accel in {'g' if a_scale != 1.0 else 'm/s^2'}" + (f" ({note})" if note else ""), file=sys.stderr)
     pf = PathFinder(a)
     if a.prescan > 0 and a.zupt_gyro_std > 0:
-        bias = prescan_bias(inp, a)
+        bias = prescan_bias(inp, a, layout)
         if bias is not None:
             pf.bg = bias
             pf.bias_known = True
@@ -518,7 +599,7 @@ def run(inp, out, a, rec=None):
             x, y, z, qx, qy, qz, qw = pf.pose()
             o.write(f"{t * 1e-9:.9f} {x:.6f} {y:.6f} {z:.6f} {qx:.8f} {qy:.8f} {qz:.8f} {qw:.8f}\n")
 
-        for t, g, acc in parse_rows(f):
+        for t, g, acc in parse_rows(f, layout):
             ok = pf.healthy(g, acc)
             if not pf.initialised:
                 pending.append((t, g, acc, ok))
@@ -624,6 +705,10 @@ def args(argv=None):
     ap.add_argument("--yaw-q-blind", type=float, default=2.0, help="rad^2/s; heading uncertainty growth in dropouts")
     ap.add_argument("--model-blind-tau", type=float, default=0.7,
                     help="s; velocity decay during dropouts / the blind 5 s when the model is active (0: --blind-vel-tau)")
+    ap.add_argument("--columns", choices=["auto", "gyro-first", "accel-first"], default="auto",
+                    help="order of the sensor columns (EuRoC: gyro first; the organisers' script: accel first)")
+    ap.add_argument("--ts-unit", choices=["auto", "ns", "us", "ms", "s"], default="auto")
+    ap.add_argument("--accel-unit", choices=["auto", "ms2", "g"], default="auto")
     ap.add_argument("--acc-max", type=float, default=16 * G)
     ap.add_argument("--acc-min", type=float, default=1.0, help="m/s^2; a weaker reading has no gravity: unhealthy")
     ap.add_argument("--gyro-max", type=float, default=35.0)

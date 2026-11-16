@@ -71,6 +71,7 @@ static double pyround(double x) { return std::nearbyint(x); }   // Python round(
 // ------------------------------------------------------------------------------------------------ options
 struct Opt {
     std::string input, output = "estimated_trajectory.txt", model = "auto", preset, fallback_model = "auto";
+    std::string columns = "auto", ts_unit = "auto", accel_unit = "auto";
     double mount_guard_deg = 25.0;
     double extend_blind = 0; int init_samples = 200; double still_gyro_var = 4e-4; int zupt_window = 40;
     double zupt_gyro = 0.04, zupt_acc = 0.15, zupt_tau = 0.05, zupt_gyro_std = NaN, zupt_acc_std = 0.15;
@@ -93,7 +94,9 @@ static void parse_args(int argc, char** argv, Opt& a) {
     struct D { const char* n; double* d; int* i; std::string* s; };
     D table[] = {
         {"output", nullptr, nullptr, &a.output}, {"model", nullptr, nullptr, &a.model},
-        {"fallback-model", nullptr, nullptr, &a.fallback_model}, {"mount-guard-deg", &a.mount_guard_deg, nullptr, nullptr},
+        {"fallback-model", nullptr, nullptr, &a.fallback_model},
+        {"columns", nullptr, nullptr, &a.columns}, {"ts-unit", nullptr, nullptr, &a.ts_unit},
+        {"accel-unit", nullptr, nullptr, &a.accel_unit}, {"mount-guard-deg", &a.mount_guard_deg, nullptr, nullptr},
         {"preset", nullptr, nullptr, &a.preset}, {"extend-blind", &a.extend_blind, nullptr, nullptr},
         {"init-samples", nullptr, &a.init_samples, nullptr}, {"still-gyro-var", &a.still_gyro_var, nullptr, nullptr},
         {"zupt-window", nullptr, &a.zupt_window, nullptr}, {"zupt-gyro", &a.zupt_gyro, nullptr, nullptr},
@@ -145,6 +148,12 @@ static void parse_args(int argc, char** argv, Opt& a) {
         a.model = stat(cand.c_str(), &st) == 0 ? cand : "";
     } else if (a.model == "none") a.model = "";
     if (!std::isfinite(a.mount_guard_deg)) usage_exit("--mount-guard-deg must be a finite number");
+    if (a.columns != "auto" && a.columns != "gyro-first" && a.columns != "accel-first")
+        usage_exit("--columns must be auto, gyro-first or accel-first");
+    if (a.ts_unit != "auto" && a.ts_unit != "ns" && a.ts_unit != "us" && a.ts_unit != "ms" && a.ts_unit != "s")
+        usage_exit("--ts-unit must be auto, ns, us, ms or s");
+    if (a.accel_unit != "auto" && a.accel_unit != "ms2" && a.accel_unit != "g")
+        usage_exit("--accel-unit must be auto, ms2 or g");
     if (a.fallback_model == "auto") {           // the gravity-aligned network, used when the mount guard fires
         std::string self = argv[0];
         size_t sl = self.find_last_of("/\\");
@@ -312,6 +321,11 @@ static bool py_int(const std::string& s0, long long& out) {
 
 struct Row { long long t; V3 g, a; };
 
+// Column order and units of the input (see main.py detect_layout): EuRoC is ns, gyro first, accel in m/s^2; the
+// organisers' degradation script documents accel-first columns and accepts s/ms/us/ns timestamps and accel in g.
+struct Layout { bool accel_first = false; long long t_scale = 1; double a_scale = 1.0; };
+static Layout g_layout;
+
 // One data row as main.py's parse_rows reads it; false for lines that are skipped.
 static bool parse_line(const std::string& raw, Row& r) {
     std::string s = trim(raw);
@@ -330,7 +344,13 @@ static bool parse_line(const std::string& raw, Row& r) {
     const std::string& p0 = parts[0];
     bool fl = false;
     for (char c : p0) if (c == 'e' || c == 'E' || c == '.') fl = true;
-    if (fl) {
+    if (g_layout.t_scale != 1) {                 // timestamps in s / ms / us: convert to ns (Python: round(v * scale))
+        double v;
+        if (!py_float(p0, v) || !std::isfinite(v)) return false;
+        v = std::nearbyint(v * (double)g_layout.t_scale);
+        if (!(v >= -9223372036854775808.0 && v < 9223372036854775808.0)) return false;
+        r.t = (long long)v;
+    } else if (fl) {
         double v;
         if (!py_float(p0, v) || !std::isfinite(v)) return false;
         v = std::trunc(v);
@@ -342,9 +362,87 @@ static bool parse_line(const std::string& raw, Row& r) {
         vals[i] = NaN;
         if (i + 1 < (int)parts.size()) { double v; if (py_float(parts[i + 1], v)) vals[i] = v; }
     }
-    r.g = {{vals[0], vals[1], vals[2]}};
-    r.a = {{vals[3], vals[4], vals[5]}};
+    int gi = g_layout.accel_first ? 3 : 0, ai = g_layout.accel_first ? 0 : 3;
+    r.g = {{vals[gi], vals[gi + 1], vals[gi + 2]}};
+    r.a = {{vals[ai], vals[ai + 1], vals[ai + 2]}};
+    if (g_layout.a_scale != 1.0)
+        for (int i = 0; i < 3; i++) r.a[i] = r.a[i] * g_layout.a_scale;
     return true;
+}
+
+static double median_of(std::vector<double> z) {
+    std::sort(z.begin(), z.end());
+    return z[z.size() / 2];
+}
+
+// First data rows -> column order and units (same rules and thresholds as main.py detect_layout; each can be forced).
+static Layout detect_layout(const std::string& path, const std::string& columns, const std::string& ts_unit,
+                            const std::string& accel_unit, std::string& note, size_t n_max = 2000) {
+    Layout L;
+    Source src;
+    open_source(src, path);
+    std::vector<double> t, x, y;
+    while (t.size() < n_max && src.getline()) {
+        std::string s = trim(src.line);
+        if (s.empty()) continue;
+        unsigned char c0 = (unsigned char)s[0];
+        if (c0 == '#' || std::isalpha(c0) || c0 >= 0x80) continue;
+        for (char& c : s) if (c == ';') c = ',';
+        std::vector<std::string> parts;
+        size_t st = 0;
+        for (;;) {
+            size_t k = s.find(',', st);
+            parts.push_back(s.substr(st, k == std::string::npos ? std::string::npos : k - st));
+            if (k == std::string::npos) break;
+            st = k + 1;
+        }
+        double t0;
+        if (!py_float(parts[0], t0) || !std::isfinite(t0)) continue;
+        t.push_back(t0);
+        if (parts.size() < 7) continue;
+        double v[6];
+        bool ok = true, nonzero = false;
+        for (int i = 0; i < 6 && ok; i++) ok = py_float(parts[i + 1], v[i]) && std::isfinite(v[i]);
+        if (!ok) continue;
+        for (int i = 0; i < 6; i++) if (v[i] != 0.0) nonzero = true;
+        if (!nonzero) continue;
+        x.push_back(std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]));
+        y.push_back(std::sqrt(v[3] * v[3] + v[4] * v[4] + v[5] * v[5]));
+    }
+    close_source(src);
+    std::vector<std::string> notes;
+    if (columns != "auto") L.accel_first = columns == "accel-first";
+    else if (x.size() >= 10) {
+        double mx = median_of(x), my = median_of(y);
+        auto si = [](double n) { return n >= 6.0 && n <= 14.0; };
+        auto gu = [](double n) { return n >= 0.6 && n <= 1.4; };
+        if (si(mx) != si(my)) L.accel_first = si(mx);
+        else if (!si(mx) && !si(my) && gu(mx) != gu(my)) { L.accel_first = gu(mx); L.a_scale = G; }
+        else notes.push_back("column order unclear, using gyro first");
+    } else notes.push_back("too few rows to check columns, using gyro first");
+    if (accel_unit == "g") L.a_scale = G;
+    else if (accel_unit == "ms2") L.a_scale = 1.0;
+    if (ts_unit != "auto") {
+        L.t_scale = ts_unit == "s" ? 1000000000LL : ts_unit == "ms" ? 1000000LL : ts_unit == "us" ? 1000LL : 1LL;
+    } else if (!t.empty()) {
+        double tmax = 0;
+        for (double c : t) tmax = std::max(tmax, std::fabs(c));
+        if (tmax < 1e17) {
+            std::vector<double> dts;
+            for (size_t i = 1; i < t.size(); i++) if (t[i] > t[i - 1]) dts.push_back(t[i] - t[i - 1]);
+            if (!dts.empty()) {
+                double dt = median_of(dts);
+                L.t_scale = dt < 1.0 ? 1000000000LL : dt < 1e3 ? 1000000LL : dt < 1e6 ? 1000LL : 1LL;
+                if (tmax * (double)L.t_scale >= 9.2e18) {
+                    L.t_scale = 1;
+                    notes.push_back("timestamp unit would overflow, using ns");
+                }
+            }
+        }
+    }
+    note.clear();
+    for (size_t i = 0; i < notes.size(); i++) note += (i ? "; " : "") + notes[i];
+    return L;
 }
 
 // ------------------------------------------------------------------------------------------------ the network
@@ -833,6 +931,15 @@ int main(int argc, char** argv) {
     VelNet net;
     VelNet* np = nullptr;
     if (!a.model.empty()) { if (!net.load(a.model)) return 1; np = &net; }
+    std::string note;
+    g_layout = detect_layout(a.input, a.columns, a.ts_unit, a.accel_unit, note);
+    if (g_layout.accel_first || g_layout.t_scale != 1 || g_layout.a_scale != 1.0 || !note.empty()) {
+        const char* unit = g_layout.t_scale == 1000000000LL ? "s" : g_layout.t_scale == 1000000LL ? "ms"
+                         : g_layout.t_scale == 1000LL ? "us" : "ns";
+        std::fprintf(stderr, "input layout: %s columns first, timestamps in %s, accel in %s%s%s%s\n",
+                     g_layout.accel_first ? "accel" : "gyro", unit, g_layout.a_scale != 1.0 ? "g" : "m/s^2",
+                     note.empty() ? "" : " (", note.c_str(), note.empty() ? "" : ")");
+    }
     PathFinder pf(a, np);
     if (a.prescan > 0 && a.zupt_gyro_std > 0) {
         V3 b;
