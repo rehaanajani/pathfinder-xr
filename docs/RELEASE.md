@@ -9,7 +9,7 @@ change, and creating one is an owner decision (issue #3 D).
 |---|---|---|
 | Source at a tagged commit | git tag (owners) | CI on the tag |
 | Model checkpoints + exports | GitHub release `models-v1` | `models/MODELS.json` digests, `tools/fetch_models.py --verify-only` |
-| VO calibration | `calibration/vo_room1_v1.json` | front-end source hash (`evaluate_vision.py` refuses a mismatch) |
+| VO calibration | `calibration/vo_room1_v2.json` | front-end source hash (`evaluate_vision.py` refuses a mismatch) |
 | Frozen protocol + exposure | `docs/PROTOCOL.md`, `data/exposure.json` | `tools/check_repo.py` schema check |
 | Promoted results | `results/vision/<run>/bundle.json` | SHA-256 of every file and of the source run's rows |
 | Environment | `requirements/core-dev-py313.lock`, `pyproject.toml` | hash-checked install |
@@ -34,7 +34,7 @@ pins the checkpoint.
 ## Backup (issue #3 C)
 
 Non-git essentials are the release assets (models), the TLIO and TUM-VI archives (both public,
-re-downloadable, with archive SHA-256 recorded in `data/exposure.json`), `results/runs/*` evaluation
+re-downloadable; only the TUM-VI room1 archive SHA-256 is currently recorded in `data/exposure.json`), `results/runs/*` evaluation
 run directories (gitignored, local to this machine), and `local_data/cache` (disposable).
 
 **Open:** durable backup of `results/runs/` to an approved store, plus a restore test. No such store

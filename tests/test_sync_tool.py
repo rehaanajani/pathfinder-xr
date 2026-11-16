@@ -40,3 +40,12 @@ def test_offsets_are_recovered(fx, shift_ms):
     g = check_sync.gravity(s, ref, m["offset_s"])
     # 6 s of an 8 s-period motion: the mean acceleration is not zero, so only a coarse check.
     assert g["angle_from_plus_z_deg"] < 3.0
+
+
+@pytest.mark.parametrize("events", [[], [{"kind": "rel", "kf": 99, "t": 1., "dR": np.eye(3)}]])
+def test_missing_camera_support_does_not_fabricate_offset(fx, events):
+    s = D.load_streams("smoke", fx)
+    rig = RigCalibration.from_kalibr(s.calib_path)
+    result = check_sync.camera_imu(s, rig, events, np.array([-.05, 0., .05]))
+    assert result["status"] == "unsupported"
+    assert result["offset_s"] is None and result["n_increments"] == 0

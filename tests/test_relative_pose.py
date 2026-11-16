@@ -47,6 +47,66 @@ def _random_state(seed=1):
     return f
 
 
+@pytest.mark.parametrize("bad", ["reflection", "nan_covariance", "diverged"])
+def test_invalid_relative_state_or_rotation_is_rejected_without_mutation(bad):
+    f = _random_state()
+    log = FilterLog()
+    dR = np.eye(3)
+    if bad == "reflection":
+        dR[2, 2] = -1
+    elif bad == "nan_covariance":
+        f.P[0, 0] = np.nan
+    else:
+        f.diverged = True
+    before = f.p.copy()
+    assert f.relative_pose_update(("cam", 1), np.zeros(3), dR, np.eye(6), 1, log) == "invalid"
+    assert log.cam_invalid == 1
+    np.testing.assert_array_equal(f.p, before)
+
+
+def test_duplicate_clone_does_not_shadow_original():
+    f = _random_state()
+    before = f.P.copy()
+    with pytest.raises(ValueError, match="duplicate"):
+        f.add_clone(("cam", 1), 3)
+    np.testing.assert_array_equal(f.P, before)
+
+
+@pytest.mark.parametrize("value", [True, np.inf, np.nan, 0, 1.5])
+def test_invalid_clone_limit(value):
+    with pytest.raises(ValueError):
+        FilterConfig(vo_max_clones=value)
+
+
+def test_recovery_window_rejects_low_health_without_bias_or_velocity_write():
+    f = _random_state()
+    f.vo_bypass_until = 10.
+    log = FilterLog()
+    before = np.r_[f.v, f.bg, f.ba].copy()
+    assert f.relative_pose_update(("cam", 1), np.array([2., 0, 0]),
+        Rot.from_rotvec([.2, 0, 0]).as_matrix(), np.eye(6) * 1e-4, .01, log, .2) == "rejected"
+    np.testing.assert_array_equal(np.r_[f.v, f.bg, f.ba], before)
+
+
+@pytest.mark.parametrize("interruption", ["skipped", "invalid", "no_anchor", "gap"])
+def test_scattered_rejections_cannot_trigger_recovery(interruption):
+    f = ESKF(FilterConfig(), np.zeros(3), np.zeros(3), [0, 0, 0, 1])
+    f.add_clone(("cam", 0), 3)
+    log = FilterLog()
+    def update(t, key=("cam", 0), health=1., rotation=None):
+        return f.relative_pose_update(key, np.array([1., 0, 0]),
+            np.eye(3) if rotation is None else rotation, np.eye(6) * 1e-6, health, log, t)
+    assert update(0.) == "rejected"
+    if interruption == "skipped":
+        assert update(.1, health=0) == "skipped"
+    elif interruption == "invalid":
+        assert update(.1, rotation=np.diag([1, 1, -1])) == "invalid"
+    elif interruption == "no_anchor":
+        assert update(.1, key=("cam", 5)) == "no_anchor"
+    assert update(2.1) == "rejected"
+    assert log.vo_reanchored == 0
+
+
 def test_relative_pose_jacobian_matches_finite_differences():
     f = _random_state()
     h_t, h_R, H = f.relative_pose_measurement(("cam", 1))
@@ -197,7 +257,11 @@ def test_persistent_healthy_vo_after_an_outage_reanchors_a_diverged_inertial_sta
     assert 17.0 < first < 19.5                         # after the outage: inertial state suspect after ~1 s
     late = seq.t > 25
     assert np.nanmax(e[late]) < 0.5 * np.nanmax(e_off[late])
-    assert log_off.vo_rejected > 10 * log.vo_rejected   # without recovery every later VO update is rejected
+    # Recovery retains the innovation gate, so some later samples may still be rejected.
+    # Require more accepted evidence and keep the trajectory-error requirement above;
+    # the old tenfold rejection-count requirement rewarded the unsafe ungated window.
+    assert log.vo_used > log_off.vo_used
+    assert log.vo_rejected < log_off.vo_rejected
     k = np.searchsorted(out["t"], first)
     assert out["reasons"][k] & REASONS["CAMERA_REANCHORED"]
 

@@ -141,7 +141,7 @@ __RESULTS__
 ## Run it
 
 ```bash
-bash reproduce.sh               # set up, download data (3.8 GB), train or reuse models, test, benchmark, demo
+bash reproduce.sh               # set up, download data (3.8 GB), verify released models (retrain only with --train), test, benchmark, demo
 bash reproduce.sh --synthetic   # no download, synthetic head walks, ~3 min
 ```
 
@@ -194,8 +194,9 @@ Outputs: `results/report.html` (all numbers and plots), `results/summary.json`, 
   error cancels in it); it stays as an option. See `results/diagnostics/`.
 - **A wider network is training.** 1.46M parameters, 0.120 m per-window error after 17 of 30 epochs vs 0.136 m
   for the current network; not yet scored end to end.
-- **Not on a headset yet.** The network runs in ONNX Runtime at __MS__ ms on one CPU core (INT8: 0.4 MB); the
-  next step is ONNX Runtime Mobile or Qualcomm QNN on Snapdragon XR2+ Gen 2.
+- **Not on a headset yet.** The historical ONNX benchmark records 0.40 ms FP32 and
+  0.28 ms INT8 on an Apple M5 laptop, one CPU thread, ONNX Runtime 1.32.0
+  (`results/onnx_benchmark.json`). These are network-only timings, not full-pipeline or headset latency.
 
 ## Prior work we build on
 

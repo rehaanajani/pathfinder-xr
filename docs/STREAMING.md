@@ -23,7 +23,7 @@ radtan4/5/8. Its SHA-256 is recorded in every run manifest.
 
 These are `t, p, v, q, P_pos, P_vel, valid, track_state, camera_state, imu_state, reasons`
 (see `estimator.OUTPUT_FIELDS`, `REASONS`). In relative mode the frame is the **start pose**
-(`POSITION_FRAME_ARBITRARY`). Velocity starts unknown (`VELOCITY_ASSUMED_ZERO` until it converges).
+(`POSITION_FRAME_ARBITRARY`). Velocity starts unknown (`VELOCITY_ASSUMED_ZERO`, retained as session initialization provenance).
 `valid` stays false while `COVARIANCE_UNRELIABLE` holds: an uncalibrated learned model without
 anchoring, degraded vision, or relative-mode VO with `vo_covariance_validated=False` (the default in
 this release). Best-effort positions are still output. Consumers must not treat an invalid pose as
@@ -67,3 +67,6 @@ certified.
 Clock synchronisation between independent devices, inter-IMU time-offset estimation, multi-threaded
 scheduling, NPU offload, thermal management, and telemetry export. Diagnostics stay in memory
 (`FilterLog`). No recording leaves the process by default.
+
+A lifecycle reset also opens a new timestamp domain: a reconnected sensor may restart its clock.
+The reset event retains the last timestamp of the previous session; duplicates remain rejected within each session.

@@ -1,6 +1,6 @@
 """Real-vision evaluation under the frozen protocol (docs/PROTOCOL.md, issue #2).
 
-    python evaluate_vision.py --calibration models/vo_calibration_room1.json [--seq room1]
+    python evaluate_vision.py --calibration calibration/vo_room1_v2.json [--seq room1]
                               [--scenarios all|slice] [--workers 8] [--no-model]
 
 Writes one immutable run bundle ``results/runs/<utc>-vision-<seq>-<sha>/`` with ``manifest.json``,
@@ -36,10 +36,10 @@ from pathfinder.vision_eval import (IMU_FAULT_KINDS, Frozen, evaluate_scenario, 
                                     imu_noise_from_config)
 from pathfinder.vision_frontend import _src_hash  # noqa: E402
 
-PROTOCOL = "pathfinder.vision-protocol/2"
+PROTOCOL = "pathfinder.vision-protocol/3"
 SYSTEMS = ("vo_only", "imu_only", "conventional", "pathfinder", "pathfinder_no_gate", "pathfinder_uncal_cov",
            "pathfinder_no_adaptive_q", "pathfinder_no_health", "pathfinder_model", "pathfinder_model_no_selfcheck",
-           "pathfinder_model_biascorr")
+           "pathfinder_model_biascorr", "conventional_gated", "pathfinder_no_reanchor")
 MODEL_SYSTEMS = tuple(s for s in SYSTEMS if s.startswith("pathfinder_model"))
 RANDOM_SEEDS = tuple(range(100, 112))
 
@@ -79,10 +79,10 @@ def scenarios(duration: float) -> list:
         img = [f.as_dict() for f in randomized_schedule(duration, seed, n_faults=(1, 3))]
         rng = np.random.default_rng(10_000 + seed)
         imu = []
-        if rng.random() < 0.3:
+        if rng.random() < 0.3 and duration > 5:
             kind = str(rng.choice(IMU_FAULT_KINDS))
             start = float(rng.uniform(0, duration - 5))
-            imu.append({"kind": kind, "start": start, "end": start + float(rng.uniform(0.5, 10.0))})
+            imu.append({"kind": kind, "start": start, "end": min(duration, start + float(rng.uniform(0.5, 10.0)))})
         rnd.append({"name": f"random_s{seed}", "image_faults": img, "imu_faults": imu, "seed": seed})
     return fixed + rnd
 
@@ -100,9 +100,11 @@ def _worker(args):
         from pathfinder.predictor import Predictor
         pred = Predictor(model_path)
     from pathfinder.vision_frontend import run_frontend
+    frontend_start = time.perf_counter()
     fe = run_frontend(s.frame_t, s.frame_paths, rig, s.imu_t[0], schedule=scn.get("image_faults", []),
                       seed=scn.get("seed", 0), cfg=VOConfig(**vo_cfg), index_sha=D.index_sha256(seq),
                       time_shift=rig.time_shift + fz.camera_time_offset_s)
+    fe["retrieval_wall_s"] = time.perf_counter() - frontend_start
     return evaluate_scenario(scn, systems, fz, s, ref, rig, pred, frontend=fe)
 
 
@@ -114,6 +116,7 @@ def main(argv=None):
     ap.add_argument("--model", default="models/dispnet_faults/best.pt")
     ap.add_argument("--model-sha256", default="611e97fdad4ac7735a3086179e059edb772f6d93d13a40c3b88b8d4bfec3eba3")
     ap.add_argument("--no-model", action="store_true")
+    ap.add_argument("--allow-calibration-transfer", action="store_true", help="explicit cross-rig development transfer, not validated calibration")
     ap.add_argument("--scenarios", default="all", help="all | slice | comma-separated names")
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 2))
     ap.add_argument("--out", default=None)
@@ -127,12 +130,24 @@ def main(argv=None):
     s = D.load_streams(a.seq)
     duration = float(s.imu_t[-1] - s.imu_t[0])
     noise = imu_noise_from_config(s.dir / "dso" / "imu_config.yaml")
-    offset = 0.0
+    rig_check = RigCalibration.from_kalibr(s.calib_path)
+    calibration_mismatch = (cal.get("calibration_sha256") != rig_check.meta.get("sha256")
+        or cal.get("imu_config_sha256") != sha256_file(s.dir / "dso/imu_config.yaml")
+        or cal.get("imu_noise") != noise)
+    if calibration_mismatch and not a.allow_calibration_transfer:
+        raise SystemExit("calibration rig/noise mismatch; explicit --allow-calibration-transfer required")
+    offset = float(cal.get("camera_time_offset_s", 0.0))
     sync = None
     if a.sync:
         sync = json.loads(Path(a.sync).read_text())
+        measurement = sync.get("camera_imu", {})
+        if (measurement.get("status") == "unsupported" or measurement.get("offset_s") is None
+                or not np.isfinite(measurement["offset_s"])):
+            raise SystemExit("sync measurement has no supported finite camera/IMU offset")
         measured = float(sync["camera_imu"]["offset_s"])
         offset = measured if abs(measured) > 1e-3 else 0.0          # protocol: apply only if > 1 ms
+    if offset != float(cal.get("camera_time_offset_s", 0.0)):
+        raise SystemExit("sync offset differs from calibration; create a new calibration")
     model = None
     if not a.no_model:
         model = a.model
@@ -151,6 +166,9 @@ def main(argv=None):
         chosen = all_scn
     else:
         names = set(a.scenarios.split(","))
+        unknown = names - {x["name"] for x in all_scn}
+        if unknown:
+            raise SystemExit("unknown scenarios: " + ", ".join(sorted(unknown)))
         chosen = [x for x in all_scn if x["name"] in names]
     systems = tuple(x for x in SYSTEMS if model or x not in MODEL_SYSTEMS)
     inputs = {"imu": s.dir / "mav0/imu0/data.csv", "cam0_index": s.dir / "mav0/cam0/data.csv",

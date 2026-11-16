@@ -41,7 +41,8 @@ from .filter import FilterConfig
 # Units match FilterConfig: rad/s/sqrt(Hz), m/s^2/sqrt(Hz), rad/s^2/sqrt(Hz), m/s^3/sqrt(Hz).
 def imu_noise_from_config(path) -> dict:
     import yaml
-    c = yaml.safe_load(open(path))
+    with open(path, encoding="utf-8") as fh:
+        c = yaml.safe_load(fh)
     return {"sigma_g": float(c["gyroscope_noise_density"]), "sigma_a": float(c["accelerometer_noise_density"]),
             "sigma_bg": float(c["gyroscope_random_walk"]), "sigma_ba": float(c["accelerometer_random_walk"])}
 
@@ -49,7 +50,7 @@ def imu_noise_from_config(path) -> dict:
 @dataclass
 class Frozen:
     """Selected parameters. Changing any value requires a new protocol version (docs/PROTOCOL.md)."""
-    protocol: str = "pathfinder.vision-protocol/2"
+    protocol: str = "pathfinder.vision-protocol/3"
     imu_noise: dict = field(default_factory=dict)        # from the dataset's imu_config.yaml
     vo_cov_scale: float = 1.0                            # selected on the calibration segment
     camera_time_offset_s: float = 0.0                    # applied only if measured |offset| > 1 ms
@@ -69,8 +70,10 @@ def system_configs(fz: Frozen) -> dict:
     return {
         "imu_only": (replace(ours), False, False),
         "conventional": (conv, True, False),
+        "conventional_gated": (replace(conv, use_gate=True, vo_reanchor=False), True, False),
         "pathfinder": (ours, True, False),
         "pathfinder_no_gate": (replace(ours, use_gate=False), True, False),
+        "pathfinder_no_reanchor": (replace(ours, vo_reanchor=False), True, False),
         "pathfinder_uncal_cov": (replace(ours, vo_cov_scale=1.0), True, False),
         "pathfinder_no_adaptive_q": (replace(ours, adaptive_q=False), True, False),
         "pathfinder_no_health": (replace(ours, use_health=False), True, False),
@@ -126,13 +129,20 @@ def vo_only_trajectory(t, events):
     cur = None              # current (R, p)
     measured = False        # was the latest frame linked to its predecessor by a relative solve?
     linked = False
+    linked_t = None
     times, Ps, Qs, ok = [], [], [], []
     for e in events:
+        if e["kind"] not in ("kf", "rel"):
+            raise ValueError("unknown vision event kind")
+        measured = False
+        if e["t"] != linked_t:
+            linked = False
         if e["kind"] == "rel":
             if e["kf"] in poses:
                 Rk, pk = poses[e["kf"]]
                 cur = (Rk * Rot.from_matrix(e["dR"]), pk + Rk.apply(e["dp"]))
                 linked = True
+                linked_t = e["t"]
         else:
             if cur is None:
                 cur = (Rot.identity(), np.zeros(3))      # first keyframe defines the odometry frame
@@ -157,7 +167,8 @@ def vo_only_trajectory(t, events):
         p[have] = np.array(Ps)[j[have]]
         q[have] = np.array(Qs)[j[have]]
         valid[have] = np.array(ok)[j[have]]
-    return {"t": t, "p": p, "q": q, "valid": valid, "P_pos": np.full((N, 3, 3), np.nan)}
+    return {"t": t, "p": p, "q": q, "tracked": valid, "valid": np.zeros(N, bool),
+            "P_pos": np.full((N, 3, 3), np.nan)}
 
 
 # Declared room1 split (data/exposure.json): calibration segment and within-recording hold-out.
@@ -188,6 +199,8 @@ def run_system(name, cfg, uses_camera, uses_model, imu_t, gyro, acc, events, pre
                 "disp_skipped": log.disp_skipped, "disp_withheld": log.disp_withheld,
                 "vo_nis_mean": float(nis.mean()) if len(nis) else None,
                 "vo_nis_median": float(np.median(nis)) if len(nis) else None,
+                "vo_nis_p95": float(np.percentile(nis, 95)) if len(nis) else None,
+                "vo_reanchored": log.vo_reanchored,
                 "reason_counts": reasons, "events": [list(map(str, e)) for e in log.events[:50]]}
     wall = time.perf_counter() - c0
     _, peak = tracemalloc.get_traced_memory()
@@ -208,6 +221,8 @@ def evaluate_scenario(scn, systems, fz, streams, ref, rig, predictor=None, front
                                   index_sha=D.index_sha256(streams.name),
                                   time_shift=rig.time_shift + fz.camera_time_offset_s)
     fe_wall = time.perf_counter() - t0
+    if frontend is not None:
+        fe_wall = frontend.get("retrieval_wall_s")
     g, a = corrupt_imu(streams.imu_t, streams.gyro, streams.acc, scn.get("imu_faults", []), scn.get("seed", 0))
     cfgs = system_configs(fz)
     frames = fe["frames"]
@@ -216,6 +231,7 @@ def evaluate_scenario(scn, systems, fz, streams, ref, rig, predictor=None, front
                    for f in fe["schedule"]] + [{"start": f["start"], "end": f["end"], "kind": "imu:" + f["kind"]}
                                                for f in scn.get("imu_faults", [])]
     rows = []
+    full_errors = []
     for sysname in systems:
         if sysname == "vo_only":
             cfg, cam, mdl = None, True, False
@@ -229,6 +245,7 @@ def evaluate_scenario(scn, systems, fz, streams, ref, rig, predictor=None, front
             import traceback
             res, series, diag, status = {}, None, {"traceback": traceback.format_exc()}, \
                 f"harness_error: {type(exc).__name__}: {exc}"
+        full_errors.append(None if series is None else series["err"])
         rows.append({"scenario": scn["name"], "system": sysname, "status": status, "metrics": res,
                      "diagnostics": diag, "series": _thin(series),
                      "frontend": {"key": fe["key"], "stats": fe["stats"], "cached": fe.get("cached", False),
@@ -237,6 +254,15 @@ def evaluate_scenario(scn, systems, fz, streams, ref, rig, predictor=None, front
                                   "ms_per_frame": _pct(fe_ms), "vo_ms_per_frame": _pct(frames[:, 4]) if len(frames) else {},
                                   "load_ms_per_frame": _pct(frames[:, 2]) if len(frames) else {}},
                      "scenario_def": {k: v for k, v in scn.items() if k != "name"}})
+    if full_errors and all(x is not None for x in full_errors):
+        common = np.logical_and.reduce([np.isfinite(x) for x in full_errors])
+        for row, errors in zip(rows, full_errors):
+            row["metrics"]["common_support_ate"] = {
+                **scoring.stats(errors[common]),
+                "alignment": "each system's declared start-SE3; common scored timestamps across all requested systems"}
+    else:
+        for row in rows:
+            row["metrics"]["common_support_ate"] = {"n": 0, "status": "unavailable_system_output"}
     return rows
 
 

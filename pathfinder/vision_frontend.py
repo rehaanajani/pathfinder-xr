@@ -82,7 +82,23 @@ def run_frontend(frame_t, frame_paths, rig: RigCalibration, stream_t0: float, sc
     schedule = [f if isinstance(f, ImageFault) else ImageFault(**f) for f in schedule]
     shift = rig.time_shift if time_shift is None else float(time_shift)
     i0, i1 = frame_range[0], len(frame_t) if frame_range[1] is None else frame_range[1]
-    key = cache_key(index_sha, rig.meta.get("sha256", ""), cfg, schedule, seed, shift, (i0, i1))
+    calibration = {"cam0": asdict(rig.cam0), "cam1": asdict(rig.cam1),
+                   "T_c0_i": rig.T_c0_i.tolist(), "T_c1_c0": rig.T_c1_c0.tolist(),
+                   "time_shift": rig.time_shift}
+    calib_sha = hashlib.sha256(json.dumps(calibration, sort_keys=True).encode()).hexdigest()
+    # Programmatic rigs and streams may not carry file hashes. Never let the
+    # empty default identify unrelated recordings or calibrations as the same input.
+    stream_hash = hashlib.sha256(index_sha.encode())
+    stream_hash.update(np.asarray(frame_t, dtype="<f8").tobytes())
+    stream_hash.update(np.asarray([stream_t0], dtype="<f8").tobytes())
+    for pair in frame_paths:
+        for image_path in pair:
+            stream_hash.update(str(Path(image_path).resolve()).encode())
+            if cache and not index_sha:
+                with Path(image_path).open("rb") as fh:
+                    for block in iter(lambda: fh.read(1 << 20), b""):
+                        stream_hash.update(block)
+    key = cache_key(stream_hash.hexdigest(), calib_sha, cfg, schedule, seed, shift, (i0, i1))
     path = Path(cache_dir) / f"{key}.pkl"
     if cache and path.is_file():
         with open(path, "rb") as fh:

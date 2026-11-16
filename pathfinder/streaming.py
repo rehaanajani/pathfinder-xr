@@ -38,15 +38,39 @@ class LaggedStream:
 
     # ---------------------------------------------------------------- inputs
     def add_imu(self, t, gyro, acc, **quality) -> list:
+        # Validate before advancing the clock or touching the FIFO. Non-finite
+        # sensor values remain valid inputs: the estimator reports them as faults.
+        gyro, acc = np.array(gyro, float), np.array(acc, float)
+        if gyro.shape != (3,) or acc.shape != (3,):
+            raise ValueError("gyro and acc must each have 3 components")
+        if set(quality) - {"q_add_g", "q_add_a", "imu_state", "imu_conf"}:
+            raise ValueError("unknown IMU quality field")
+        for key in ("q_add_g", "q_add_a"):
+            value = quality.get(key, 0.0)
+            if not np.isscalar(value) or not np.isfinite(value) or value < 0:
+                raise ValueError("IMU noise densities must be finite/nonnegative")
+        conf = quality.get("imu_conf", 1.0)
+        if not np.isscalar(conf) or not np.isfinite(conf) or not 0 <= conf <= 1:
+            raise ValueError("IMU confidence must be in [0, 1]")
+        state = quality.get("imu_state")
+        if state is not None and state not in range(7):
+            raise ValueError("unknown IMU monitor state")
         if not np.isfinite(t) or t <= self.newest_t:
             self.stats["imu_rejected_order"] += 1
             return []
         self.newest_t = float(t)
-        self.buf.append((float(t), np.array(gyro, float), np.array(acc, float), quality))
+        self.buf.append((float(t), gyro, acc, quality.copy()))
         self.stats["max_buffered"] = max(self.stats["max_buffered"], len(self.buf))
         return self._release()
 
     def add_vision_events(self, events) -> None:
+        events = list(events)
+        for e in events:
+            if not isinstance(e, dict) or e.get("kind") not in ("kf", "rel"):
+                raise ValueError("vision events must be keyframes or relative poses")
+            required = {"t", "kf"} | ({"dp", "dR", "cov"} if e["kind"] == "rel" else set())
+            if not required <= e.keys():
+                raise ValueError("incomplete vision event")
         for e in events:
             if e["kind"] == "kf":
                 self.est.add_camera_keyframe(e["t"], e["kf"])
@@ -61,18 +85,24 @@ class LaggedStream:
 
     def reset(self) -> dict:
         """Lifecycle reset (e.g. sensor reconnection): drop buffered samples, new estimator/odometry frame."""
+        reset_t = self.newest_t
         dropped = len(self.buf)
         self.buf.clear()
         self.est = self.make_estimator()
         self.cam_done_t = -np.inf
+        self.newest_t = -np.inf
         self.stats["resets"] += 1
-        return {"event": "reset", "t": self.newest_t, "dropped_imu": dropped}
+        return {"event": "reset", "t": reset_t, "dropped_imu": dropped}
 
     def finish(self) -> list:
         out = []
         while self.buf:
-            out += self._emit(self.buf.popleft())
-        return out + self.est.finish()
+            out += self._emit(self.buf[0])
+            self.buf.popleft()
+        tail = self.est.finish()
+        for row in tail:
+            row["output_lag_s"] = self.newest_t - row["t"]
+        return out + tail
 
     # ---------------------------------------------------------------- release policy
     def _release(self) -> list:
@@ -87,7 +117,8 @@ class LaggedStream:
                 self.stats["overflow"] += 1
             else:
                 break
-            out += self._emit(self.buf.popleft())
+            out += self._emit(self.buf[0])
+            self.buf.popleft()
         return out
 
     def _emit(self, item) -> list:

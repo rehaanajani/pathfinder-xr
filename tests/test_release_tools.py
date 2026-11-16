@@ -88,3 +88,40 @@ def test_run_bundles_are_immutable_and_record_failures(tmp_path):
 def test_repo_check_passes():
     r = subprocess.run([sys.executable, str(ROOT / "tools" / "check_repo.py")], capture_output=True, text=True)
     assert r.returncode == 0, r.stdout[-2000:]
+
+
+def test_same_second_runs_are_distinct_and_text_is_lf(tmp_path, monkeypatch):
+    from pathfinder import provenance
+    monkeypatch.setattr(provenance.time, "strftime", lambda *args: "20260101T000000Z")
+    with run_bundle("same", {}, root=tmp_path) as first:
+        first.write_json("text.json", {"one": 1, "two": 2})
+    with run_bundle("same", {}, root=tmp_path) as second:
+        pass
+    assert first.path != second.path
+    for path in first.path.glob("*.json"):
+        assert b"\r\n" not in path.read_bytes()
+
+
+@pytest.mark.parametrize("name", [".", "./", "", "ds/file:secret", "ds\\file"])
+def test_unsafe_archive_names_are_rejected_without_crashing(name):
+    assert not extract_dataset._safe(name)
+
+
+def test_model_manifest_cannot_escape_model_directory(tmp_path, monkeypatch):
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({"schema": "pathfinder.models/1", "release": {"repo": "owner/repo", "tag": "v1"},
+        "models": {"bad": {"path": "models/../../outside", "asset": "model.pt", "bytes": 1, "sha256": "0" * 64}}}))
+    monkeypatch.setattr(fetch_models, "ROOT", tmp_path)
+    monkeypatch.setattr(fetch_models, "MANIFEST", manifest)
+    with pytest.raises(ValueError, match="unsafe model"):
+        fetch_models.main(["--verify-only"])
+
+
+def test_failed_report_is_not_promoted(tmp_path):
+    run, output = tmp_path / "run", tmp_path / "out"
+    run.mkdir()
+    (run / "status.json").write_text('{"state":"failed"}')
+    from tools.vision_report import main
+    with pytest.raises(SystemExit, match="Only complete"):
+        main([str(run), "--out", str(output)])
+    assert not output.exists()

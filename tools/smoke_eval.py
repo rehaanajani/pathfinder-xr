@@ -3,8 +3,8 @@
     python tools/smoke_eval.py --out ci-runs
 
 Runs clean and a 1 s image blackout through vo_only, imu_only, conventional and pathfinder into a new
-immutable run directory, then applies loose regression gates (finite outputs, error bounds, outage
-reported). Synthetic plumbing evidence only: never quote these numbers as accuracy.
+immutable run directory, then applies loose regression gates (finite filter outputs and error bounds).
+Outage and validity flags are checked separately by tests/test_smoke_pipeline.py. Synthetic plumbing evidence only: never quote these numbers as accuracy.
 """
 
 import argparse

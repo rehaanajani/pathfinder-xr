@@ -20,7 +20,9 @@ def reference_at(ref_t, ref_p, ref_q, t, max_gap=0.05):
     inside = (t >= ref_t[0]) & (t <= ref_t[-1])
     j = np.clip(np.searchsorted(ref_t, t), 1, len(ref_t) - 1)
     gap = ref_t[j] - ref_t[j - 1]
-    ok = inside & (gap <= max_gap)
+    exact = np.searchsorted(ref_t, t)
+    exact_hit = (exact < len(ref_t)) & (ref_t[np.minimum(exact, len(ref_t) - 1)] == t)
+    ok = inside & ((gap <= max_gap) | exact_hit)
     p = np.full((len(t), 3), np.nan)
     q = np.full((len(t), 4), np.nan)
     if ok.any():
@@ -32,7 +34,8 @@ def reference_at(ref_t, ref_p, ref_q, t, max_gap=0.05):
 def align_start_se3(p, q, gp, gq, i0):
     A = Rot.from_quat(gq[i0]) * Rot.from_quat(q[i0]).inv()
     pa = A.apply(p - p[i0]) + gp[i0]
-    qa = (A * Rot.from_quat(np.where(np.isfinite(q), q, [0, 0, 0, 1]))).as_quat()
+    good_q = np.isfinite(q).all(1) & (np.linalg.norm(q, axis=1) > 0)
+    qa = (A * Rot.from_quat(np.where(good_q[:, None], q, [0, 0, 0, 1]))).as_quat()
     return pa, qa, A
 
 
@@ -89,7 +92,7 @@ def coverage(nees, levels=(0.5, 0.9, 0.99, 0.997), dof=3):
     return {str(l): (float(np.mean(n <= chi2.ppf(l, dof))) if len(n) else None) for l in levels}
 
 
-def recovery_time(t, err, t_end, bound, hold=2.0):
+def recovery_time(t, err, t_end, bound, hold=2.0, max_gap=0.05):
     """First time after t_end from which err stays <= bound for ``hold`` s (None = never recovers).
 
     This is a sustained criterion: crossing the bound once does not count."""
@@ -98,7 +101,9 @@ def recovery_time(t, err, t_end, bound, hold=2.0):
     ok = np.isfinite(ea) & (ea <= bound)
     for k in np.where(ok)[0]:
         win = (ta >= ta[k]) & (ta <= ta[k] + hold)
-        if ta[-1] - ta[k] >= hold and np.all(ok[win]):
+        stop = np.searchsorted(ta, ta[k] + hold)
+        if (stop < len(ta) and ta[stop] - (ta[k] + hold) <= max_gap
+                and np.all(ok[k:stop + 1]) and np.all(np.diff(ta[k:stop + 1]) <= max_gap)):
             return float(ta[k] - t_end)
     return None
 
@@ -117,11 +122,14 @@ def score(out, ref, faults=(), rec_bound=0.10, rec_hold=2.0, rpe_deltas=(1.0, 10
     """All metrics for one estimator output (dict of arrays with t, p, q, P_pos, valid)."""
     t = out["t"]
     gp, gq, sup = reference_at(ref.t, ref.p, ref.q, t, max_gap)
-    est = np.all(np.isfinite(out["p"]), 1) & np.all(np.isfinite(out["q"]), 1)
+    est = (np.all(np.isfinite(out["p"]), 1) & np.all(np.isfinite(out["q"]), 1)
+           & (np.linalg.norm(out["q"], axis=1) > 0))
     valid = out["valid"].astype(bool) & est
     res = {"samples": int(len(t)), "reference_supported": int(sup.sum()),
            "unsupported_excluded": int((~sup).sum()), "estimated": int((est & sup).sum()),
            "valid": int((valid & sup).sum()), "valid_fraction": float((valid & sup).sum() / max(sup.sum(), 1))}
+    if "tracked" in out:
+        res["tracked_fraction"] = float(np.sum(out["tracked"] & sup) / max(sup.sum(), 1))
     # Alignment anchor: the first initialised estimate with reference support. Outputs may be
     # best-effort (valid=False, e.g. uncertified covariance); they are scored over *all* estimated
     # samples and separately over valid ones, so an invalid flag never hides drift.
@@ -151,6 +159,8 @@ def score(out, ref, faults=(), rec_bound=0.10, rec_hold=2.0, rpe_deltas=(1.0, 10
         res[f"rpe_{d:g}s"] = {"trans_m": stats(et), "rot_deg": stats(er)}
     nees = nees_pos(pa - gp, out["P_pos"], A)
     res["nees"] = {"valid": coverage(nees[valid & scored]), "all": coverage(nees[scored]),
+                   "interpretation": "gauge-unadjusted marginal-covariance diagnostic, not calibrated coverage",
+                   "mean_all": float(np.nanmean(nees[scored])) if np.isfinite(nees[scored]).any() else None,
                    "mean_valid": float(np.mean(nv)) if len(nv := nees[valid & scored & np.isfinite(nees)]) else None,
                    "n_finite": int(np.isfinite(nees[scored]).sum())}
     false_valid = valid & scored & (nees > chi2.ppf(0.997, 3))
@@ -158,7 +168,8 @@ def score(out, ref, faults=(), rec_bound=0.10, rec_hold=2.0, rpe_deltas=(1.0, 10
     rel = t - t[0]
     step_dev = np.linalg.norm(np.diff(pa, axis=0) - np.diff(gp, axis=0), axis=1)
     sc = np.where(scored)[0]
-    path = float(np.nansum(np.linalg.norm(np.diff(gp[sc], axis=0), axis=1))) if len(sc) > 1 else 0.0
+    connected = scored[:-1] & scored[1:] & (np.diff(t) <= max_gap)
+    path = float(np.sum(np.linalg.norm(np.diff(gp, axis=0)[connected], axis=1)))
     res["path_length_m"] = path
     res["final_drift_pct_of_path"] = 100 * res["start_se3"]["final_err"] / path if path > 0 else None
     # Declared time segments (s since the first sample), e.g. calibration vs within-recording hold-out.
@@ -171,19 +182,22 @@ def score(out, ref, faults=(), rec_bound=0.10, rec_hold=2.0, rpe_deltas=(1.0, 10
     fr = []
     for f in faults:
         inside = scored & (rel >= f["start"]) & (rel < f["end"])
-        k_end = np.searchsorted(rel, f["end"])
-        k_start = np.searchsorted(rel, f["start"])
-        e_start = err[k_start] if k_start < len(err) else np.nan
-        e_end = err[min(k_end, len(err) - 1)]
+        before = np.where(scored & (rel < f["start"]) & (rel >= f["start"] - max_gap))[0]
+        ending = np.where(scored & (np.abs(rel - f["end"]) <= max_gap))[0]
+        e_start = float(err[before[-1]]) if len(before) else None
+        e_end = float(err[ending[np.argmin(np.abs(rel[ending] - f["end"]))]]) if len(ending) else None
         # Discontinuity: largest per-sample position step beyond the reference's own step, within
         # ``jump_window`` s after the fault ends (re-anchoring jumps; normal motion is subtracted).
         w = scored & (rel >= f["end"]) & (rel < f["end"] + jump_window)
         jump = float(np.nanmax(step_dev[w[1:]])) if w[1:].any() and np.isfinite(step_dev[w[1:]]).any() else None
-        bound = (e_start if np.isfinite(e_start) else 0.0) + rec_bound
-        fr.append({**f, "err_at_start": float(e_start), "err_at_end": float(e_end),
-                   "err_growth": float(e_end - e_start), "max_err_inside": float(np.nanmax(err[inside])) if inside.any() else None,
+        recovery = recovery_time(rel, err, f["end"], e_start + rec_bound, rec_hold, max_gap) if e_start is not None else None
+        fr.append({**f, "err_at_start": e_start, "err_at_end": e_end,
+                   "boundary_status": "supported" if e_start is not None and e_end is not None else "insufficient_support",
+                   "err_growth": e_end - e_start if e_end is not None and e_start is not None else None,
+                   "max_err_inside": float(np.nanmax(err[inside])) if inside.any() else None,
                    "valid_fraction_inside": float(valid[inside].mean()) if inside.any() else None,
-                   "recovery_s": recovery_time(rel, err, f["end"], bound, rec_hold),
+                   "recovery_s": recovery,
+                   "recovery_status": "unknown_baseline" if e_start is None else ("recovered" if recovery is not None else "not_observed"),
                    "max_step_dev_after_m": jump, "nees_cov_inside_valid": coverage(nees[inside & valid]),
                    "nees_cov_inside_all": coverage(nees[inside])})
     res["faults"] = fr

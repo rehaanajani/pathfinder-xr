@@ -111,7 +111,8 @@ def test_vo_only_chains_and_holds_across_a_break():
     np.testing.assert_allclose(out["p"][4], x2, atol=1e-12)      # held through the break
     assert not out["valid"][4]
     np.testing.assert_allclose(out["p"][5], x2 + R1 @ np.array([0, 1.0, 0]), atol=1e-12)
-    assert out["valid"][5]
+    assert out["tracked"][5]
+    assert not out["valid"].any()  # visual tracking alone does not certify covariance
 
 
 def test_imu_corruption_is_confined_to_its_interval():
@@ -205,7 +206,7 @@ def test_loader_never_follows_symlinked_images(tmp_path):
 
 
 RUNTIME = ("estimator.py", "filter.py", "stereo_vo.py", "camera_model.py", "image_faults.py",
-           "vision_frontend.py", "imu_health.py", "predictor.py")
+           "vision_frontend.py", "imu_health.py", "predictor.py", "streaming.py", "parity.py", "model.py")
 
 
 @pytest.mark.parametrize("name", RUNTIME)

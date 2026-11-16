@@ -25,6 +25,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 
 from .camera_model import RigCalibration
+from .filter import valid_covariance
 
 
 @dataclass
@@ -45,6 +46,7 @@ class VOConfig:
     kf_every: int = 1            # frames tracked against one keyframe before the next relative solve
     kf_min_track_ratio: float = 0.5   # ... or earlier, when fewer than this fraction of its tracks survive
     stale_mad: float = 0.25      # mean |difference| (grey levels) below which a frame repeats the last one
+    max_frame_gap_s: float = 0.5  # restart tracking after a delivery/stale gap
 
 
 def _se3(R, t):
@@ -68,6 +70,8 @@ class StereoVO:
         self.stats = {"frames": 0, "rel": 0, "fail_track": 0, "fail_pnp": 0, "fail_stereo": 0, "fail_motion": 0,
                       "stale": 0}
         self.last_raw = None      # previous delivered left image (stale-frame check)
+        self.last_track_t = None
+        self.keyframe_t = None
 
     # ------------------------------------------------------------------ tracking primitives
     def _klt(self, a, b, pts, guess=None):
@@ -114,9 +118,14 @@ class StereoVO:
         P0 = np.hstack([np.eye(3), np.zeros((3, 1))])
         P1 = self.T_c1_c0[:3]
         Xh = cv2.triangulatePoints(P0, P1, n0.T, n1.T)
+        valid = np.isfinite(Xh).all(0) & (np.abs(Xh[3]) > 1e-12)
+        Xh, pts, n0, n1 = Xh[:, valid], pts[valid], n0[valid], n1[valid]
         X = (Xh[:3] / Xh[3]).T
         x1 = (P1 @ np.c_[X, np.ones(len(X))].T).T
-        rep = np.linalg.norm(x1[:, :2] / x1[:, 2:3] - n1, axis=1) * rig.cam1.focal
+        rep = np.full(len(X), np.inf)
+        front = x1[:, 2] > 1e-9
+        rep[front] = np.linalg.norm(rig.cam1.project(x1[front]) -
+            rig.cam1.project(np.c_[n1[front], np.ones(front.sum())]), axis=1)
         lo, hi = cfg.depth_range
         keep = (X[:, 2] > lo) & (X[:, 2] < hi) & (rep < cfg.stereo_rep_px) & (x1[:, 2] > lo)
         pts, X, n0 = pts[keep], X[keep], n0[keep]
@@ -146,54 +155,114 @@ class StereoVO:
         X, S, nq = X[ok], S[ok], nq[ok]
         if len(X) < cfg.min_inliers:
             return None
-        good, rvec, tvec, inl = cv2.solvePnPRansac(X, nq, np.eye(3), None, iterationsCount=200,
-                                                   reprojectionError=cfg.ransac_px / self.f, confidence=0.999,
-                                                   flags=cv2.SOLVEPNP_ITERATIVE)
-        if not good or inl is None or len(inl) < cfg.min_inliers:
-            return None
-        idx = inl[:, 0]
-        X, S, nq = X[idx], S[idx], nq[idx]
-        R = cv2.Rodrigues(rvec)[0]
-        t = tvec[:, 0].astype(float)
-        sig2 = (cfg.pixel_std / self.f) ** 2
-        for _ in range(8):                     # Gauss-Newton with per-landmark covariance weights
-            Y = X @ R.T + t
-            zc = Y[:, 2]
-            if np.any(zc <= 1e-6):
-                return None
-            r = (Y[:, :2] / zc[:, None] - nq).reshape(-1)
-            Jp = np.zeros((len(X), 2, 3))       # d proj / dY
-            Jp[:, 0, 0] = Jp[:, 1, 1] = 1 / zc
-            Jp[:, 0, 2] = -Y[:, 0] / zc ** 2
-            Jp[:, 1, 2] = -Y[:, 1] / zc ** 2
-            # Right perturbation T Exp([rho, phi]): Y = R (X + rho + phi x X) + t -> dY = R drho - R [X]x dphi
-            JX = Jp @ R                          # (N, 2, 3) wrt landmark / rho
-            Jphi = -np.einsum("nij,njk->nik", JX, _skew_n(X))
-            J = np.concatenate([JX, Jphi], 2)    # (N, 2, 6)
-            C = sig2 * np.eye(2)[None] + np.einsum("nij,njk,nlk->nil", JX, S, JX)
-            W = np.linalg.inv(C)
-            A = np.einsum("nji,njk,nkl->il", J, W, J)
-            b = np.einsum("nji,njk,nk->i", J, W, r.reshape(-1, 2))
+        uv = uv[ok]
+        # Generate minimal-pose hypotheses on rays, but score them in distorted
+        # image pixels: a normalized-plane threshold is invalid for wide-angle rays.
+        rng = np.random.default_rng(0)
+        best, best_mask, best_score = None, None, (-1, -np.inf)
+        limit = 200
+        trial = 0
+        while trial < limit:
+            trial += 1
+            sample = rng.choice(len(X), 4, replace=False)
             try:
-                dx = -np.linalg.solve(A, b)
+                solved = cv2.solvePnPGeneric(X[sample], nq[sample], np.eye(3), None,
+                                            flags=cv2.SOLVEPNP_AP3P)
+            except cv2.error:
+                continue
+            if not solved[0]:
+                continue
+            for rv, tv in zip(solved[1], solved[2]):
+                R0, t0 = cv2.Rodrigues(rv)[0], tv.ravel()
+                Y = X @ R0.T + t0
+                err = np.linalg.norm(cam.project(Y) - uv, axis=1)
+                mask = np.isfinite(err) & (err <= cfg.ransac_px) & (Y[:, 2] > 1e-6)
+                score = (int(mask.sum()), -float(np.minimum(np.nan_to_num(err, nan=1e6), cfg.ransac_px).sum()))
+                if score > best_score:
+                    best, best_mask, best_score = (R0, t0), mask, score
+                    fraction = score[0] / len(X)
+                    if fraction == 1:
+                        limit = trial
+                    elif fraction > 0:
+                        limit = min(limit, max(trial, int(np.ceil(np.log(.001) / np.log1p(-fraction ** 4)))))
+        if best is None or best_score[0] < cfg.min_inliers:
+            return None
+        X, S, uv = X[best_mask], S[best_mask], uv[best_mask]
+        R, t = best
+
+        def linearize(R, t):
+            Y = X @ R.T + t
+            if not np.isfinite(Y).all() or np.any(Y[:, 2] <= 1e-6):
+                return None
+            residual = cam.project(Y) - uv
+            Jp = np.empty((len(X), 2, 3))
+            eps = 1e-6 * np.maximum(1., np.linalg.norm(Y, axis=1))
+            for j in range(3):
+                step = np.zeros_like(Y)
+                step[:, j] = eps
+                Jp[:, :, j] = (cam.project(Y + step) - cam.project(Y - step)) / (2 * eps[:, None])
+            JX = Jp @ R
+            J = np.concatenate([JX, -np.einsum("nij,njk->nik", JX, _skew_n(X))], 2)
+            C = cfg.pixel_std ** 2 * np.eye(2)[None] + np.einsum("nij,njk,nlk->nil", JX, S, JX)
+            if not np.isfinite(J).all() or not np.isfinite(C).all():
+                return None
+            try:
+                W = np.linalg.inv(C)
             except np.linalg.LinAlgError:
                 return None
-            dR = Rot.from_rotvec(dx[3:]).as_matrix()
-            # T Exp(dx): R' = R dR, t' = R drho + t (first order in rho)
-            t = R @ dx[:3] + t
-            R = R @ dR
-            if np.linalg.norm(dx) < 1e-10:
+            A = np.einsum("nji,njk,nkl->il", J, W, J)
+            b = np.einsum("nji,njk,nk->i", J, W, residual)
+            return residual, W, A, b
+
+        converged = False
+        for _ in range(20):
+            lin = linearize(R, t)
+            if lin is None:
+                return None
+            residual, W, A, b = lin
+            if not np.isfinite(A).all() or np.linalg.cond(A) > 1e12:
+                return None
+            cost = float(np.einsum("ni,nij,nj->", residual, W, residual))
+            accepted = False
+            for damping in (0., 1e-6, 1e-4, .01, 1., 100.):
+                try:
+                    dx = -np.linalg.solve(A + damping * np.diag(np.maximum(np.diag(A), 1e-12)), b)
+                except np.linalg.LinAlgError:
+                    continue
+                if np.linalg.norm(dx) < 1e-9:
+                    converged = True
+                    break
+                R1 = R @ Rot.from_rotvec(dx[3:]).as_matrix()
+                t1 = t + R @ dx[:3]
+                Y1 = X @ R1.T + t1
+                if np.any(Y1[:, 2] <= 1e-6):
+                    continue
+                r1 = cam.project(Y1) - uv
+                cost1 = float(np.einsum("ni,nij,nj->", r1, W, r1))
+                if np.isfinite(cost1) and cost1 < cost:
+                    R, t = R1, t1
+                    accepted = True
+                    converged = (cost - cost1) <= 1e-8 * max(cost, 1.)
+                    break
+            if converged:
                 break
-        Y = X @ R.T + t
-        res = Y[:, :2] / Y[:, 2:3] - nq
-        chi2 = float(np.einsum("ni,nij,nj->", res, W, res))
-        dof = max(2 * len(X) - 6, 1)
-        scale = max(chi2 / dof, 1.0)           # inflate if residuals exceed the assumed noise
+            if not accepted:
+                return None
+        if not converged:
+            return None
+        lin = linearize(R, t)  # final-state Hessian, weights and cheirality
+        if lin is None:
+            return None
+        residual, W, A, _ = lin
+        cost = float(np.einsum("ni,nij,nj->", residual, W, residual))
         try:
-            cov = np.linalg.inv(A) * scale
+            cov = np.linalg.inv(A) * max(cost / max(2 * len(X) - 6, 1), 1.)
         except np.linalg.LinAlgError:
             return None
-        return _se3(R, t), cov, len(X), float(np.sqrt(np.mean(np.sum(res ** 2, 1)))) * self.f
+        cov = .5 * (cov + cov.T)
+        if not valid_covariance(cov, 6):
+            return None
+        return _se3(R, t), cov, len(X), float(np.sqrt(np.mean(np.sum(residual ** 2, 1))))
 
     def _imu_relative(self, T_cc_cp, cov_c):
         """Camera relative pose -> IMU pose now in the previous IMU frame, with propagated covariance."""
@@ -223,6 +292,10 @@ class StereoVO:
         therefore use disjoint stereo triangulations, so their errors are not shared through common
         landmarks (no measurement is fused twice)."""
         cfg = self.cfg
+        if not np.isfinite(t) or (self.last_track_t is not None and t <= self.last_track_t):
+            raise ValueError("frame timestamps must increase and be finite")
+        if self.last_track_t is not None and t - self.last_track_t > cfg.max_frame_gap_s:
+            self.prev = None
         self.stats["frames"] += 1
         # Stale-frame check (camera health from the images alone): a real sensor never delivers two
         # bit-identical consecutive exposures, because shot and read noise change every pixel. A
@@ -233,6 +306,7 @@ class StereoVO:
             self.stats["stale"] += 1
             self.last_raw = last
             return []
+        self.last_track_t = float(t)
         events = []
         new_kf = self.prev is None
         if self.prev is not None:
@@ -251,10 +325,13 @@ class StereoVO:
                     T_cc_cp, cov_c, n_in, rms_px = sol
                     dp, dR, cov6 = self._imu_relative(T_cc_cp, cov_c)
                     ang = np.linalg.norm(Rot.from_matrix(dR).as_rotvec())
-                    if ang > cfg.max_rot_rad * k or np.linalg.norm(dp) > cfg.max_trans_m * k                             or not np.isfinite(cov6).all():
+                    elapsed = t - self.keyframe_t
+                    if not valid_covariance(cov6, 6):
+                        self.stats["fail_pnp"] += 1
+                    elif ang > cfg.max_rot_rad * elapsed / .1 or np.linalg.norm(dp) > cfg.max_trans_m * elapsed / .1:
                         self.stats["fail_motion"] += 1
                     else:
-                        health = float(np.clip((n_in - cfg.min_inliers) / (cfg.good_inliers - cfg.min_inliers), 0, 1))
+                        health = .005 + .995 * float(np.clip((n_in - cfg.min_inliers) / (cfg.good_inliers - cfg.min_inliers), 0, 1))
                         events.append({"t": float(t), "kind": "rel", "kf": kf_p, "dp": dp, "dR": dR, "cov": cov6,
                                        "health": health, "inliers": int(n_in), "tracked": int(ok.sum()),
                                        "rms_px": rms_px, "frames": int(k)})
@@ -265,6 +342,7 @@ class StereoVO:
             pts, X, S = self.triangulate(img0, img1)
             if len(pts) >= cfg.min_inliers:
                 self.kf_id += 1
+                self.keyframe_t = float(t)
                 events.append({"t": float(t), "kind": "kf", "kf": self.kf_id, "landmarks": int(len(pts))})
                 self.prev = (img0, pts, X, S, self.kf_id, len(pts), 0)
             else:

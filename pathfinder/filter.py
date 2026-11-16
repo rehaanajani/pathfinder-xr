@@ -146,7 +146,8 @@ class FilterConfig:
     # recover_after_s of consecutive healthy rejections; while VO was anchored a disagreement is first
     # treated as a camera fault and held out for vo_recover_after_jump_s (shorter than the absolute-fix
     # hold-out: a rejected relative stream lets inertial drift grow without bound). Then velocity,
-    # attitude and bias covariance are inflated and VO is applied ungated for recover_after_s (reported).
+    # attitude/position/velocity covariance may increase, but the gate remains enabled and bias
+    # updates are frozen during recovery. No camera update is accepted solely on elapsed time.
     vo_reanchor: bool = True
     vo_recover_after_jump_s: float = 2.0  # hold-out for a disagreement that starts while VO is anchored
     vo_reanchor_vel_std: float = 1.0      # m/s added to the velocity std
@@ -182,7 +183,9 @@ class FilterConfig:
         if (self.gate_mode not in ("soft", "hard") or not np.isfinite(self.q_max) or self.q_max < 1
                 or not np.isfinite(self.low_conf_inflate) or self.low_conf_inflate < 1):
             raise ValueError("invalid gating or process-noise configuration")
-        if int(self.vo_max_clones) != self.vo_max_clones or self.vo_max_clones < 1:
+        if (isinstance(self.vo_max_clones, (bool, np.bool_)) or not np.isscalar(self.vo_max_clones)
+                or not np.isfinite(self.vo_max_clones) or int(self.vo_max_clones) != self.vo_max_clones
+                or self.vo_max_clones < 1):
             raise ValueError("vo_max_clones must be a positive integer")
         if self.min_episode_fixes < 3 or self.max_episode_fixes < self.min_episode_fixes + 2:
             raise ValueError("episode buffer is too short for the consistency fit")
@@ -305,6 +308,7 @@ class ESKF:
         self.good_since = None
         self.vo_rej_t0 = None             # start of the current run of healthy VO rejections
         self.vo_rej_hold = 0.0
+        self.vo_rejections = []
         self.vo_bypass_until = -np.inf    # end of the re-anchoring window
         self.provisional_until = -np.inf
         self._nis_b = 0.0
@@ -372,7 +376,7 @@ class ESKF:
         S = H @ self.P @ H.T + Rmeas
         return float(y @ np.linalg.solve(S, y))
 
-    def _update(self, y, H, Rmeas, mode: str = "soft"):
+    def _update(self, y, H, Rmeas, mode: str = "soft", freeze_bias: bool = False):
         """mode: "soft" (robust down-weighting outside the gate), "hard" (reject), "off" (no gate).
         Returns "accepted", "softened" or "rejected"."""
         if not (np.all(np.isfinite(y)) and valid_covariance(Rmeas, len(y))):
@@ -391,6 +395,8 @@ class ESKF:
             S = 0.5 * (S + S.T)
             result = "softened"
         K = np.linalg.solve(S, H @ self.P).T          # K = P H^T S^-1 (S, P symmetric)
+        if freeze_bias:
+            K[9:15] = 0.0
         dx = K @ y
         I_KH = np.eye(n) - K @ H
         self.P = I_KH @ self.P @ I_KH.T + K @ Rmeas @ K.T
@@ -409,6 +415,8 @@ class ESKF:
 
     def add_clone(self, k: int, max_clones: int):
         """Stochastic cloning (Roumeliotis & Burdick 2002): copy the current pose into the state."""
+        if k in self.clone_k:
+            raise ValueError("duplicate clone identifier")
         n = self.P.shape[0]
         J = np.zeros((n + 6, n))
         J[:n, :n] = np.eye(n)
@@ -459,17 +467,25 @@ class ESKF:
         end's covariance of [dp, dtheta] (rotation as a right perturbation of dR). Returns
         "no_anchor", "skipped", "invalid", "accepted", "rejected" or "reanchored". A relative measurement does not observe
         absolute position or heading, so it never re-anchors the world frame."""
+        if self.diverged or not np.isfinite(self.P).all():
+            log.cam_invalid += 1
+            self.vo_rej_t0 = None
+            return "invalid"
         if key not in self.clone_k:
+            self.vo_rej_t0 = None
             log.vo_no_anchor += 1
             return "no_anchor"
         if self.cfg.use_health and not health >= self.cfg.min_health:
+            self.vo_rej_t0 = None
             log.cam_skipped += 1               # front end reports essentially nothing usable
             return "skipped"
         dR = np.asarray(dR, float)
         cov6 = np.asarray(cov6, float) * self.cfg.vo_cov_scale
         if (np.shape(dp) != (3,) or not np.all(np.isfinite(dp)) or dR.shape != (3, 3) or not np.isfinite(dR).all()
-                or not np.allclose(dR @ dR.T, np.eye(3), atol=1e-6) or not valid_covariance(cov6, 6)):
+                or not np.allclose(dR @ dR.T, np.eye(3), atol=1e-6)
+                or np.linalg.det(dR) <= 0 or not valid_covariance(cov6, 6)):
             log.cam_invalid += 1
+            self.vo_rej_t0 = None
             return "invalid"
         h_t, h_R, H = self.relative_pose_measurement(key)
         y = np.r_[np.asarray(dp, float) - h_t, Rot.from_matrix(h_R.T @ dR).as_rotvec()]
@@ -478,40 +494,68 @@ class ESKF:
         nis = float(y @ np.linalg.solve(S, y))
         result = "accepted"
         c = self.cfg
-        if c.use_gate and nis > c.vo_gate and t <= self.vo_bypass_until:
-            result = "reanchored"               # inside the re-anchoring window: applied without the gate
-        elif c.use_gate and nis > c.vo_gate:
+        recovering = t <= self.vo_bypass_until
+        if recovering and health < c.recover_health:
+            self.vo_rej_t0 = None
+            log.vo_rejected += 1
+            log.vo_nis.append((t, nis, False))
+            return "rejected"
+        if c.use_gate and nis > c.vo_gate:
             if not (c.vo_reanchor and health >= c.recover_health):
+                self.vo_rej_t0 = None
                 log.vo_rejected += 1
                 log.vo_nis.append((t, nis, False))
                 return "rejected"
-            if self.vo_rej_t0 is None:
+            if (self.vo_rej_t0 is None or not self.vo_rejections
+                    or t - self.vo_rejections[-1][0] > c.outage_gap_s):
                 anchored = (t - self.last_good_t <= c.outage_gap_s and self.good_since is not None
                             and self.last_good_t - self.good_since >= c.anchor_min_s - 1e-9)
                 self.vo_rej_t0, self.vo_rej_hold = t, (c.vo_recover_after_jump_s if anchored else c.recover_after_s)
-            log.vo_rejected += 1
-            log.vo_nis.append((t, nis, False))
-            if t - self.vo_rej_t0 >= self.vo_rej_hold:
-                # Persistent healthy VO outlasted the hold-out: the inertial state is the suspect. Inflate what
-                # the IMU alone could have corrupted (velocity, attitude, biases). This measurement's relative
-                # position was propagated with the old covariance, so it is not applied; the following
-                # measurements (relative to the next keyframe clone, which carries the inflated covariance)
-                # are applied without the gate for recover_after_s. Frozen frames, the main *camera* fault
-                # that looks like healthy VO, are removed earlier by the front end's stale-frame check.
+                self.vo_rejections = []
+            # Compare innovations in one frame. A smooth offset/trend can support
+            # recovery; scattered timestamp failures cannot accumulate a timer.
+            Ri = self.clone_R[self.clone_k.index(key)].as_matrix()
+            T = np.zeros((6, 6))
+            T[:3, :3], T[3:, 3:] = Ri, self.R.as_matrix()
+            self.vo_rejections.append((t, T @ y, T @ cov6 @ T.T))
+            self.vo_rejections = self.vo_rejections[-c.max_episode_fixes:]
+            consistent = False
+            if len(self.vo_rejections) >= max(3, c.min_episode_fixes):
+                ts = np.array([v[0] for v in self.vo_rejections])
+                Y = np.array([v[1] for v in self.vo_rejections])
+                A = np.column_stack((np.ones(len(ts)), ts - ts[-1]))
+                residual = Y - A @ np.linalg.lstsq(A, Y, rcond=None)[0]
+                score = sum(float(e @ np.linalg.solve(v[2], e))
+                            for e, v in zip(residual, self.vo_rejections))
+                consistent = score <= chi2.ppf(.999, 6 * (len(ts) - 2))
+            if t - self.vo_rej_t0 >= self.vo_rej_hold and consistent:
+                # Increase only current pose/velocity uncertainty against the existing
+                # anchor, then KEEP the gate. Never inflate biases or open an ungated
+                # window. The trigger is reported only if this measurement is applied.
                 infl = np.zeros(self.P.shape[0])
-                infl[0:3] = np.deg2rad(c.vo_reanchor_att_deg) ** 2
+                infl[:3] = np.deg2rad(c.vo_reanchor_att_deg) ** 2
                 infl[3:6] = c.vo_reanchor_vel_std ** 2
-                infl[9:12] = c.vo_reanchor_bg_std ** 2
-                infl[12:15] = c.vo_reanchor_ba_std ** 2
-                self.P = self.P + np.diag(infl)
-                self.vo_bypass_until = t + c.recover_after_s
-                log.vo_reanchored += 1
-                log.events.append((t, "vo_reanchored", f"held {t - self.vo_rej_t0:.2f}s nis {nis:.1f}"))
-                self.vo_rej_t0 = None
-                return "reanchored"
-            return "rejected"
+                infl[6:9] = (c.vo_reanchor_vel_std * c.recover_after_s) ** 2
+                candidate = self.P + np.diag(infl)
+                S2 = H @ candidate @ H.T + cov6
+                if float(y @ np.linalg.solve(S2, y)) <= c.vo_gate:
+                    self.P = candidate
+                    self.vo_bypass_until = t + c.recover_after_s
+                    recovering = True
+                    result = "reanchored"
+                    log.vo_reanchored += 1
+                    log.events.append((t, "vo_reanchored", "gated pose/velocity recovery; biases frozen"))
+                else:
+                    log.events.append((t, "vo_reanchor_failed", "innovation exceeds recovery envelope"))
+                    self.vo_rej_t0 = None
+            if result != "reanchored":
+                log.vo_rejected += 1
+                log.vo_nis.append((t, nis, False))
+                return "rejected"
         self.vo_rej_t0 = None
-        self._update(y, H, cov6, mode="off")
+        self._update(y, H, cov6, mode="off", freeze_bias=recovering)
+        if recovering:
+            result = "reanchored"
         log.vo_used += 1
         log.vo_nis.append((t, nis, True))
         self.last_used_t = t
