@@ -5,7 +5,7 @@ EuRoC / TUM-VI input (see `docs/TRACK3_BRIEF.md`).
 
 ## Result in one paragraph
 
-On the held-out recordings (MH_05, V2_03, room6; degraded with seeds 1-3; never used for any choice),
+On the held-out recordings (MH_05, V2_03, room6; degraded with seeds 1-3; not used for any choice in this experiment. Later, on 17 Nov, they were looked at twice while choosing the position coupling, so they are no longer untouched; see `results/track3/coupling_sweep.md`),
 `python src/main.py <input> --model src/velnet_weights.bin` scores **3.19 m ATE against 3.28 m for stand still and
 4.54 m for the current `main.py`**. It is ahead of stand still on ATE, checkpoints, the blind 5 s and RPE, and level on
 dropouts, but the margin is small (about 3 %), and on the held-out set the retuned filter *without* the network does

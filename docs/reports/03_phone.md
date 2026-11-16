@@ -19,6 +19,8 @@ Same 5 degraded recordings as the Mac report, 5 runs each. Raw: [`results/report
 | EuRoC V1_03 | 20,300 | 20,300 | 4.01 MB | 4.82 ms |
 | **Worst** | | **one pose per row** | **4.04 MB of 8** | **4.97 ms of 20** |
 
+CPU is the best of the 5 runs for each recording (the Mac report gives the median); peak RAM is the largest of the 5.
+
 On a mid-range phone chip the entry uses half the memory budget and a quarter of the time budget, so as an Android
 library or APK it would run alongside a camera pipeline without strain. Memory is higher than on the Mac (2.5 MB)
 because of the Android C/C++ runtime, not the estimator.
@@ -32,9 +34,10 @@ that trusts every IMU reading, and Path Finder with its sensor checks and outage
 Walk: 20 s tracked, then the back camera covered with a hand while walking, then uncovered. Analysed with
 `demo_line/tools/live_demo/analyze.py`:
 
-Four camera blackouts in the full 14-minute session (80 m walked), error when ARCore returned:
+Four camera blackouts in the full 14-minute session (80 m walked). Error is the distance to ARCore's pose when the
+camera came back (ARCore is the reference here, not independent ground truth):
 
-| Blackout | Standard tracker | **Path Finder** | What Path Finder reported during it |
+| Blackout | Standard tracker | **Path Finder** | Path Finder's stated uncertainty (the analyser marks `valid` when it is under 1 m) |
 |---:|---:|---:|---|
 | 48.3 s | 227.25 m | **3.51 m** | ±12.6 m, `valid = False` |
 | 13.0 s | 12.18 m | **0.47 m** | ±3.4 m, `valid = False` |
