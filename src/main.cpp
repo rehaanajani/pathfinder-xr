@@ -897,6 +897,7 @@ int main(int argc, char** argv) {
             t += step;
             pf.step(t, z, z, false);
             emit(t);
+            n_out++;                                // the message counts every pose written
         }
     }
     close_source(src);

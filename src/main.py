@@ -556,6 +556,7 @@ def run(inp, out, a, rec=None):
                 t += step
                 pf.step(t, (0.0,) * 3, (0.0,) * 3, False)
                 emit(t)
+                n_out += 1                         # the message counts every pose written
     return n_out
 
 
