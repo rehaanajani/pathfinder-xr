@@ -18,3 +18,4 @@ src/pathfinder
 src/pathfinder.exe
 !models/MODELS.json
 fresh-setup/
+build/
