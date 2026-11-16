@@ -60,14 +60,31 @@ def load_streams(name: str, root: Path = ROOT) -> Streams:
     d = seq_dir(name, root)
     m = d / "mav0"
     imu = _csv(m / "imu0" / "data.csv")
+    if imu.shape[1] != 7:
+        raise ValueError("IMU index must have seven columns")
+    _check_times(imu[:, 0], "IMU")
     rows = [ln.split(",") for ln in (m / "cam0" / "data.csv").read_text().splitlines()
             if ln.strip() and not ln.startswith("#")]
     ts = np.array([int(r[0]) for r in rows], np.int64)
+    right_rows = [ln.split(",") for ln in (m / "cam1" / "data.csv").read_text().splitlines()
+                  if ln.strip() and not ln.startswith("#")]
+    if [[v.strip() for v in r] for r in rows] != [[v.strip() for v in r] for r in right_rows]:
+        raise ValueError("stereo indices must have matching timestamps and filenames")
+    _check_times(ts, "camera")
     pairs, keep = [], []
     for i, (_, fname) in enumerate(rows):
+        fname = fname.strip()
+        if not fname or fname in (".", "..") or any(c in fname for c in ("/", "\\", ":")):
+            raise ValueError("camera filename must be a plain basename")
         a, b = m / "cam0" / "data" / fname.strip(), m / "cam1" / "data" / fname.strip()
-        # Only regular extracted files: archive symlinks (e.g. dso/cam*/images) are never followed.
-        if a.is_file() and b.is_file() and not a.is_symlink() and not b.is_symlink():
+        # Directories inside the sequence (mav0, cam*, data) must be real: a linked directory could point
+        # anywhere. Where the sequence itself is stored (above mav0) is the user's choice and is not checked.
+        for path in (a, b):
+            for p in (path.parent, path.parent.parent, m):
+                if p.is_symlink() or _is_junction(p):
+                    raise ValueError("camera paths must not traverse links")
+        # Only regular extracted files: linked frames (e.g. archive symlinks) are skipped, never followed.
+        if all(f.is_file() and not f.is_symlink() and not _is_junction(f) for f in (a, b)):
             pairs.append((a, b))
             keep.append(i)
     calib = d / "dso" / "camchain.yaml"
@@ -99,8 +116,21 @@ def reference_sha256(name: str, root: Path = ROOT) -> str:
 def load_reference(name: str, root: Path = ROOT) -> Reference:
     gt = _csv(seq_dir(name, root) / "mav0" / "mocap0" / "data.csv")
     q = gt[:, [5, 6, 7, 4]]
-    q = q / np.linalg.norm(q, axis=1, keepdims=True)
+    _check_times(gt[:, 0], "reference")
+    norm = np.linalg.norm(q, axis=1, keepdims=True)
+    if not np.isfinite(gt).all() or np.any(norm <= 0):
+        raise ValueError("reference poses must be finite with nonzero quaternions")
+    q = q / norm
     return Reference(gt[:, 0] * 1e-9, gt[:, 1:4], q)
+
+
+def _is_junction(p):
+    return getattr(p, "is_junction", lambda: False)()
+
+
+def _check_times(t, name):
+    if not len(t) or not np.isfinite(t).all() or np.any(np.diff(t) <= 0):
+        raise ValueError(f"{name} timestamps must be finite, nonempty and strictly increasing")
 
 
 def check_conventions(name: str, root: Path = ROOT) -> dict:

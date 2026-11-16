@@ -1,4 +1,32 @@
-# Real-vision evaluation protocol `pathfinder.vision-protocol/2`
+# Real-vision evaluation protocol `pathfinder.vision-protocol/3`
+
+**v3 registered before new evaluation, 2026-11-16.** This review-driven development revision
+changes camera recovery (gate retained; bias gains frozen), distorted-pixel RANSAC/refinement,
+frame-time motion checks, corruption composition, input validation, and scoring support rules.
+Historical v1/v2 bundles remain evidence of the earlier implementations, not results for v3.
+No untouched recording has become available.
+
+For v3, calibration remains room1 0?60 s with the same scale and keyframe grids. Scale minimizes
+`abs(log(median NIS / chi2_6(.5))) + abs(log(p95 NIS / chi2_6(.95)))`.
+The keyframe interval minimizes **vision-only** calibration ATE; vision-only rotation RMSE breaks ties.
+Raw-gyro SO(3) increments are diagnostics, not reference truth. These rules do not validate covariance.
+The stored time offset must match evaluation; calibration transfer across rig/noise identities requires
+an explicit recorded flag. The v3 calibration file will be versioned separately after the run.
+
+The systems add `conventional_gated` and `pathfinder_no_reanchor`. `pathfinder_no_adaptive_q` remains
+for historical continuity but is not an informative ablation when relative mode supplies no adaptive-Q
+input. Health gating means a threshold, not continuous sensor weighting. Single-IMU plateau detections
+are not hardware fault labels; this evaluation still reports IMU quality as unverified rather than
+using the injected fault schedule to select a monitor. Real hardware range metadata and causal monitor
+integration remain required before claiming saturation detection.
+
+Fault baselines use the last supported sample before onset within 50 ms; end errors use the nearest
+supported sample within 50 ms. Missing boundaries are unknown, never zero. Recovery needs continuous
+sample support for its full hold. Reference gaps are not bridged in path length. VO-only tracking and
+covariance-validity are separate fields. NEES remains a gauge-unadjusted marginal-covariance diagnostic.
+Scenario resampling intervals are descriptive; unavailable pairs and fixed/random subsets are reported.
+
+The sections below retain the v1/v2 historical definitions where the v3 rules above supersede them.
 
 **Version history.** v1 was registered 2026-11-15 and evaluated once
 (`results/vision/20261115T165121Z-vision-room1-aaac9f1/`, retained unchanged). That run exposed an

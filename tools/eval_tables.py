@@ -8,6 +8,12 @@ import numpy as np
 R = Path(__file__).resolve().parents[1] / "runs" / "track3"
 
 
+def drift(o):
+    """1 s drift from score_track3; older result files call it rpe_1s_m."""
+    s = o["score_track3"]
+    return s["position_drift_1s_m"] if "position_drift_1s_m" in s else s["rpe_1s_m"]
+
+
 def evo_tables(tag="eval"):
     r = json.load(open(R / tag / "results.json"))
     names = list(dict.fromkeys(x["data"] for x in r))
@@ -26,14 +32,14 @@ def evo_tables(tag="eval"):
     for q in r:
         o = q["ours"]
         da = 100 * (o["score_track3"]["ate_rmse_m"] / o["evo_ape_se3"] - 1)
-        dr = 100 * (o["score_track3"]["rpe_1s_m"] / o["evo_rpe_1s"] - 1)
+        dr = 100 * (drift(o) / o["evo_rpe_1s"] - 1)
         for lab in ("still",):
             s = q[lab]
             da = max(da, 100 * (s["score_track3"]["ate_rmse_m"] / s["evo_ape_se3"] - 1), key=abs)
-            dr = max(dr, 100 * (s["score_track3"]["rpe_1s_m"] / s["evo_rpe_1s"] - 1), key=abs)
+            dr = max(dr, 100 * (drift(s) / s["evo_rpe_1s"] - 1), key=abs)
         if abs(da) > 5 or abs(dr) > 5:
             out.append(f"| {q['data']} | {q['seed']} | {o['evo_ape_se3']:.2f} | {o['score_track3']['ate_rmse_m']:.2f} | {da:+.1f} % | "
-                       f"{o['evo_rpe_1s']:.2f} | {o['score_track3']['rpe_1s_m']:.2f} | {dr:+.1f} % |")
+                       f"{o['evo_rpe_1s']:.2f} | {drift(o):.2f} | {dr:+.1f} % |")
     t2 = "\n".join(out)
     wins = {k: sum(q["ours"][k] < q["still"][k] for q in r) for k in ("evo_ape_se3", "evo_ape_sim3", "evo_rpe_1s")}
     return t1, t2, wins, r

@@ -80,3 +80,50 @@ def test_overflow_bound_reset_and_order_rejection(data):
     assert info["dropped_imu"] > 0 and len(stream.buf) == 0 and stream.stats["resets"] == 1
     with pytest.raises(ValueError):
         LaggedStream(_make, max_lag_s=-1)
+
+
+def test_reset_accepts_restarted_clock_and_preserves_reset_event_time():
+    stream = LaggedStream(_make, max_lag_s=100)
+    for i in range(10):
+        stream.add_imu(1.0 + i * .005, [0, 0, 0], [0, 0, 9.81])
+    event = stream.reset()
+    assert event["t"] == pytest.approx(1.045)
+    stream.add_imu(0.0, [0, 0, 0], [0, 0, 9.81])
+    stream.add_imu(.005, [0, 0, 0], [0, 0, 9.81])
+    assert stream.stats["imu_rejected_order"] == 0
+    assert len(stream.buf) == 2
+    stream.add_imu(.005, [0, 0, 0], [0, 0, 9.81])
+    assert stream.stats["imu_rejected_order"] == 1
+
+
+@pytest.mark.parametrize("gyro,quality", [([0, 0], {}), ([0, 0, 0], {"q_add_g": -1}),
+    ([0, 0, 0], {"imu_conf": 2}), ([0, 0, 0], {"imu_state": 9}),
+    ([0, 0, 0], {"unexpected": 1})])
+def test_bad_sample_does_not_mutate_buffer_or_clock(gyro, quality):
+    stream = LaggedStream(_make, max_lag_s=10)
+    stream.add_imu(0., [0, 0, 0], [0, 0, 9.81])
+    with pytest.raises(ValueError):
+        stream.add_imu(.1, gyro, [0, 0, 9.81], **quality)
+    assert stream.newest_t == 0 and len(stream.buf) == 1
+    stream.add_imu(.1, [0, 0, 0], [0, 0, 9.81])
+    rows = stream.finish()
+    assert len(rows) == 2
+    assert [r["output_lag_s"] for r in rows] == pytest.approx([.1, 0])
+
+
+def test_invalid_vision_batch_queues_nothing():
+    stream = LaggedStream(_make)
+    with pytest.raises(ValueError):
+        stream.add_vision_events([{"kind": "kf", "t": 0, "kf": 0}, {"kind": "typo"}])
+    assert not stream.est.pending
+
+
+def test_failed_estimator_call_preserves_fifo_sample(monkeypatch):
+    stream = LaggedStream(_make, max_lag_s=10)
+    stream.add_imu(0., [0, 0, 0], [0, 0, 9.81])
+    def fail(*args, **kwargs):
+        raise RuntimeError("estimator failure")
+    monkeypatch.setattr(stream.est, "add_imu", fail)
+    with pytest.raises(RuntimeError):
+        stream.finish()
+    assert len(stream.buf) == 1

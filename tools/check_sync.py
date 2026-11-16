@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from scipy.spatial.transform import Rotation as Rot
+from scipy.spatial.transform import Rotation as Rot, Slerp
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -115,7 +115,9 @@ def gravity(s, ref, offset):
     j = np.clip(np.searchsorted(ref.t, t[ok]), 1, len(ref.t) - 1)
     gap = ref.t[j] - ref.t[j - 1]
     good = gap < 0.02
-    Rw = R[j[good]]
+    if not good.any():
+        return {"status": "unsupported", "n": 0, "note": "no reference-supported IMU samples"}
+    Rw = Slerp(ref.t, R)(t[ok][good])
     f_w = Rw.apply(s.acc[ok][good])
     m = f_w.mean(0)
     ang = float(np.rad2deg(np.arccos(np.clip(m[2] / np.linalg.norm(m), -1, 1))))
@@ -127,6 +129,9 @@ def gravity(s, ref, offset):
 def camera_imu(s, rig, events, grid):
     kf_t = {e["kf"]: e["t"] for e in events if e["kind"] == "kf"}
     rel = [e for e in events if e["kind"] == "rel" and e["kf"] in kf_t]
+    if not rel:
+        return {"status": "unsupported", "offset_s": None, "n_increments": 0,
+                "reason": "no relative poses with an announced keyframe"}
     ta = np.array([kf_t[e["kf"]] for e in rel])
     tb = np.array([e["t"] for e in rel])
     vis = np.array([Rot.from_matrix(e["dR"]).as_rotvec() for e in rel])
@@ -139,6 +144,9 @@ def camera_imu(s, rig, events, grid):
 
     inner = (ta > s.imu_t[0] + 0.1) & (tb < s.imu_t[-1] - 0.1)
     ta, tb, vis = ta[inner], tb[inner], vis[inner]
+    if not len(ta):
+        return {"status": "unsupported", "offset_s": None, "n_increments": 0,
+                "reason": "no increments inside IMU support"}
     # Front-end times are t_cam + shift(file). Candidate d: true IMU time of the image = t + d.
 
     def cost(d):

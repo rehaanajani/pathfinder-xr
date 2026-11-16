@@ -111,7 +111,8 @@ def test_vo_only_chains_and_holds_across_a_break():
     np.testing.assert_allclose(out["p"][4], x2, atol=1e-12)      # held through the break
     assert not out["valid"][4]
     np.testing.assert_allclose(out["p"][5], x2 + R1 @ np.array([0, 1.0, 0]), atol=1e-12)
-    assert out["valid"][5]
+    assert out["tracked"][5]
+    assert not out["valid"].any()  # visual tracking alone does not certify covariance
 
 
 def test_imu_corruption_is_confined_to_its_interval():
@@ -189,8 +190,8 @@ def test_loader_never_follows_symlinked_images(tmp_path):
         (d / c / "data").mkdir(parents=True)
     (d / "imu0").mkdir()
     (d / "imu0" / "data.csv").write_text("#t,wx,wy,wz,ax,ay,az\n1000,0,0,0,0,0,9.8\n2000,0,0,0,0,0,9.8\n")
-    (d / "cam0" / "data.csv").write_text("#t,f\n1000,a.png\n2000,b.png\n")
     for c in ("cam0", "cam1"):
+        (d / c / "data.csv").write_text("#t,f\n1000,a.png\n2000,b.png\n")
         (d / c / "data" / "a.png").write_bytes(b"x")
     outside = tmp_path / "outside.png"
     outside.write_bytes(b"y")
@@ -204,8 +205,44 @@ def test_loader_never_follows_symlinked_images(tmp_path):
     assert [p[0].name for p in s.frame_paths] == ["a.png"]
 
 
+def _tiny_sequence(base):
+    d = base / "dataset-x_512_16" / "mav0"
+    (d / "imu0").mkdir(parents=True)
+    (d / "imu0" / "data.csv").write_text("#t,wx,wy,wz,ax,ay,az\n1000,0,0,0,0,0,9.8\n2000,0,0,0,0,0,9.8\n")
+    for c in ("cam0", "cam1"):
+        (d / c / "data").mkdir(parents=True)
+        (d / c / "data.csv").write_text("#t,f\n1000,a.png\n")
+        (d / c / "data" / "a.png").write_bytes(b"x")
+    return d
+
+
+def test_loader_rejects_a_linked_image_directory(tmp_path):
+    import shutil
+    from pathfinder import data_tumvi_raw as D
+    d = _tiny_sequence(tmp_path)
+    outside = tmp_path / "elsewhere"
+    shutil.move(str(d / "cam1" / "data"), str(outside))
+    try:
+        os.symlink(outside, d / "cam1" / "data", target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not permitted on this platform/account")
+    with pytest.raises(ValueError, match="links"):
+        D.load_streams("x", root=tmp_path)
+
+
+def test_loader_accepts_a_sequence_stored_under_a_linked_directory(tmp_path):
+    from pathfinder import data_tumvi_raw as D
+    _tiny_sequence(tmp_path / "real")
+    try:
+        os.symlink(tmp_path / "real", tmp_path / "data", target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not permitted on this platform/account")
+    s = D.load_streams("x", root=tmp_path / "data")
+    assert [p[0].name for p in s.frame_paths] == ["a.png"]
+
+
 RUNTIME = ("estimator.py", "filter.py", "stereo_vo.py", "camera_model.py", "image_faults.py",
-           "vision_frontend.py", "imu_health.py", "predictor.py")
+           "vision_frontend.py", "imu_health.py", "predictor.py", "streaming.py", "parity.py", "model.py")
 
 
 @pytest.mark.parametrize("name", RUNTIME)

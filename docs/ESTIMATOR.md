@@ -209,7 +209,7 @@ It has two event types:
 
 The front end reads images only, so the IMU information is not counted twice. Its covariance is the
 PnP information with the per-landmark stereo depth covariance, inflated by the residual scale and
-multiplied by `vo_cov_scale`, which is calibrated on development data (`calibration/vo_room1_v1.json`).
+multiplied by `vo_cov_scale`, which is calibrated on development data (`calibration/vo_room1_v2.json`).
 `vo_covariance_validated=False` (default) marks every relative-mode output
 `COVARIANCE_UNRELIABLE`/invalid until held-out coverage evidence exists. Initialisation in relative
 mode is the gravity start: the frame is the start pose, with yaw prior 0.1° because odometry fixes the
@@ -288,3 +288,18 @@ Before = the audit's `synthetic_eval.log` (same seeds, same scenarios); after = 
 | Real visual measurements (wrong-fix behaviour against a real VIO front end) | issue #2 |
 | 1e-4 false-alarm rate verification | needs ~10⁵–10⁶ independent windows, ideally real data |
 | Multiple simultaneous IMU faults, inter-IMU time offset estimation | not implemented |
+
+
+### PR26 review correction: relative-pose recovery
+
+Recovery requires a consecutive, healthy innovation history with no gap longer
+than `outage_gap_s` and a consistent offset/trend in a common frame. Invalid, missing-anchor
+and skipped measurements reset that history. A successful recovery increases only the
+current pose/velocity uncertainty relative to the existing clone and still passes the
+innovation gate. Bias gains are frozen during its recovery window. Low-health updates
+cannot steer that window. Failed recovery remains rejected and is logged.
+
+This remains a development policy: a coherent camera error can resemble an inertial
+error. It does not certify covariance or establish the cause of historical room1 failures.
+The committed protocol-v1/v2 results predate these corrections. New front-end source
+hashes require new calibration and a new result bundle; do not relabel old results.

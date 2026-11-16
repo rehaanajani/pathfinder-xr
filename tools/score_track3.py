@@ -5,7 +5,7 @@
 Ground truth: EuRoC state_groundtruth_estimate0/data.csv or TUM-VI mocap0/data.csv (#t_ns, p xyz, q wxyz, ...).
 Reports (metres): ATE RMSE after SE(3) alignment (as `evo_ape -a`), 1 s position drift (time-based pairs; not evo's pose RPE), and the three
 closeness parts of the brief: checkpoints (10 evenly spaced mission times), the blind 5 s after IMU failure, and
-inside dropouts. Alignment is fitted on the mission part only (before the failure), so the blind 5 s is scored as a
+dropouts (each dropout plus the 1 s after it; with --dropout-mode missing only the second after has rows). Alignment is fitted on the mission part only (before the failure), so the blind 5 s is scored as a
 genuine prediction. Also checks the output contract (one pose per input row, seconds, unit quaternions).
 """
 import argparse

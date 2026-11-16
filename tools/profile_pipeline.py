@@ -58,12 +58,29 @@ def cpu_name():
         except Exception:
             pass
     try:
-        for ln in open("/proc/cpuinfo"):
-            if ln.startswith("model name"):
-                return ln.split(":", 1)[1].strip()
+        with open("/proc/cpuinfo") as fh:
+            for ln in fh:
+                if ln.startswith("model name"):
+                    return ln.split(":", 1)[1].strip()
     except OSError:
         pass
     return platform.processor()
+
+
+class TimedPredictor:
+    def __init__(self, predictor):
+        self.predictor = predictor
+        self.calls_ms = []
+
+    def __getattr__(self, name):
+        return getattr(self.predictor, name)
+
+    def __call__(self, window):
+        start = time.perf_counter()
+        try:
+            return self.predictor(window)
+        finally:
+            self.calls_ms.append(1e3 * (time.perf_counter() - start))
 
 
 def main(argv=None):
@@ -75,6 +92,8 @@ def main(argv=None):
     ap.add_argument("--model", default=None)
     ap.add_argument("--out", default=None)
     a = ap.parse_args(argv)
+    if not np.isfinite(a.seconds) or a.seconds <= 0:
+        ap.error("--seconds must be finite and positive")
     import psutil
     proc = psutil.Process()
     rss0 = proc.memory_info().rss
@@ -83,24 +102,28 @@ def main(argv=None):
     fz = Frozen(imu_noise=imu_noise_from_config(s.dir / "dso/imu_config.yaml"), vo_cov_scale=a.vo_cov_scale)
     cfg, _, _ = system_configs(fz)["pathfinder"]
     pred = None
+    model_load_start = time.perf_counter()
     if a.model:
         import torch
         torch.set_num_threads(1)
         from pathfinder.predictor import Predictor
-        pred = Predictor(a.model)
+        pred = TimedPredictor(Predictor(a.model))
+    model_load_ms = 1e3 * (time.perf_counter() - model_load_start) if a.model else 0.
     t_start = time.perf_counter()
     vo = StereoVO(rig, VOConfig(kf_every=a.kf_every))
     est = StreamingEstimator(cfg, ReferenceFreeInit(), pred, expect_camera=True, camera_mode="relative")
     startup_ms = 1e3 * (time.perf_counter() - t_start)
     hi = s.imu_t[0] + a.seconds
     imu_idx = np.where(s.imu_t <= hi)[0]
-    fr_idx = np.where(s.frame_t <= hi)[0]
+    frame_imu_t = s.frame_t + rig.time_shift
+    fr_idx = np.where(frame_imu_t <= hi)[0]
     load_ms, vo_ms, imu_us, imu_ms_list, model_calls = [], [], [], [], 0
     fi = 0
+    init_k = None
     rss_peak = rss0
     wall0 = time.perf_counter()
     for i in imu_idx:
-        while fi < len(fr_idx) and s.frame_t[fr_idx[fi]] <= s.imu_t[i]:
+        while fi < len(fr_idx) and frame_imu_t[fr_idx[fi]] <= s.imu_t[i]:
             k = fr_idx[fi]
             c0 = time.perf_counter()
             left, right = load_pair(*s.frame_paths[k])
@@ -116,33 +139,36 @@ def main(argv=None):
             fi += 1
             if fi % 50 == 0:
                 rss_peak = max(rss_peak, proc.memory_info().rss)
-        n_disp = est.log.disp_used + est.log.disp_rejected + est.log.disp_skipped + est.log.disp_withheld
+        n_disp = len(pred.calls_ms) if pred else 0
+        initializing = est.f is None
         c0 = time.perf_counter()
         est.add_imu(s.imu_t[i], s.gyro[i], s.acc[i])
         dt = time.perf_counter() - c0
         imu_us.append(1e6 * dt)
-        if est.log.disp_used + est.log.disp_rejected + est.log.disp_skipped + est.log.disp_withheld != n_disp:
-            model_calls += 1
+        if initializing and est.f is not None:
+            init_k = len(imu_us) - 1
+        elif pred and len(pred.calls_ms) > n_disp:
             imu_ms_list.append(1e3 * dt)
     wall = time.perf_counter() - wall0
     rss_peak = max(rss_peak, proc.memory_info().rss)
     imu_ms = np.array(imu_us) / 1e3
     # The estimator replays its 3 s initialisation buffer in one call; report it separately.
-    init_k = int(np.argmax(imu_ms)) if len(imu_ms) else 0
-    steady = np.delete(imu_ms, init_k)
+    steady = np.delete(imu_ms, init_k) if init_k is not None else imu_ms
+    model_calls = len(pred.calls_ms) if pred else 0
     res = {
         "hardware": {"cpu": cpu_name(), "logical_cpus": os.cpu_count(), "platform": platform.platform(),
                      "python": platform.python_version(), "threads": "single thread (BLAS/OMP/torch = 1)",
                      "ram_gb": round(psutil.virtual_memory().total / 2 ** 30, 1)},
-        "label": "laptop CPU replay from disk; not headset/NPU evidence",
+        "label": "zero-latency timestamp replay from disk; does not measure live buffering, headset or NPU",
         "config": vars(a), "seconds_replayed": float(s.imu_t[imu_idx[-1]] - s.imu_t[0]),
         "frames": int(len(load_ms)), "imu_samples": int(len(imu_us)),
-        "startup_ms": startup_ms,
+        "startup_ms": startup_ms, "model_load_ms": model_load_ms,
+        "model_inference_ms": pct(pred.calls_ms) if pred else None,
         "frame_decode_ms": pct(load_ms),
         "frame_vo_ms": pct(vo_ms, 50.0),
         "frame_total_ms": pct(np.add(load_ms, vo_ms), 50.0),
         "imu_estimator_ms_steady": pct(steady, 5.0),
-        "imu_estimator_init_replay_ms": float(imu_ms[init_k]) if len(imu_ms) else None,
+        "imu_estimator_init_replay_ms": float(imu_ms[init_k]) if init_k is not None else None,
         "imu_samples_with_model_inference_ms": pct(imu_ms_list, 5.0) if imu_ms_list else None,
         "model_calls": model_calls,
         "wall_s": wall, "real_time_factor": wall / max(float(s.imu_t[imu_idx[-1]] - s.imu_t[0]), 1e-9),
@@ -152,7 +178,7 @@ def main(argv=None):
     }
     kw = {"root": Path(a.out)} if a.out else {}
     with run_bundle(f"profile-{a.seq}", vars(a), {"camchain": s.calib_path, **({"model": a.model} if a.model else {})},
-                    protocol="profiling") as run:
+                    protocol="profiling", **kw) as run:
         run.write_json("profile.json", res)
         print(json.dumps({k: res[k] for k in ("hardware", "frame_total_ms", "frame_vo_ms", "imu_estimator_ms_steady",
                                               "imu_samples_with_model_inference_ms", "real_time_factor",
