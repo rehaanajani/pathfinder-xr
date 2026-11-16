@@ -114,3 +114,18 @@ def test_forced_g_unit_picks_the_columns(tmp_path):
     write(tmp_path / "x.csv", s, "accel", g_units=True)
     _, err = run(tmp_path, "x.csv", "--accel-unit", "g")
     assert "accel columns first" in err
+
+
+def test_jittered_1khz_relative_nanoseconds_stay_nanoseconds(tmp_path):
+    """Device-uptime ns timestamps at ~1 kHz with jitter (median spacing just under 1e6 ns, as in the Monado VR
+    recordings) must stay ns: a spacing threshold read them as microseconds."""
+    s = samples(4000)
+    with open(tmp_path / "j.csv", "w") as f:
+        f.write("#timestamp [ns],w_x,w_y,w_z,a_x,a_y,a_z\n")
+        t = 8324806068490
+        for i, (g, a) in enumerate(s):
+            t += 995200 if i % 4 else 1009600
+            f.write(f"{t}," + ",".join(f"{v:.9g}" for v in (*g, *a)) + "\n")
+    rows, err = run(tmp_path, "j.csv")
+    assert "timestamps in" not in err
+    assert abs(rows[0][0] - 8324806068490e-9) < 0.01

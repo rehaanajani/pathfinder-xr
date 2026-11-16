@@ -63,3 +63,23 @@ def test_zip_with_many_members_stays_small(tmp_path):
                        capture_output=True, text=True, check=True)
     rss = int(next(l.split()[0] for l in p.stderr.splitlines() if "maximum resident set size" in l))
     assert rss < 4 * 2 ** 20, f"peak {rss / 2 ** 20:.1f} MiB"
+
+
+def test_long_missing_gap_does_not_snap_to_the_start(tmp_path):
+    """Rows missing for 3 s: the pull back to the start is exponential and split at the 1 s mark, so the position
+    after the gap is not forced to exactly zero (it was with a linear step over the whole gap)."""
+    path = tmp_path / "gap.csv"
+    with open(path, "w") as f:
+        f.write("#timestamp [ns],w_x,w_y,w_z,a_x,a_y,a_z\n")
+        t = T0
+        for i in range(3000):
+            if i == 2000:
+                t += 3_000_000_000                       # 3 s of missing rows
+            g = (0.01 * math.sin(i / 7), 0.02 * math.cos(i / 11), 0.005 * math.sin(i / 3))
+            a = (0.8 * math.sin(i / 60), 0.6 * math.cos(i / 45), 9.81 + 0.05 * math.sin(i / 5))
+            f.write(f"{t}," + ",".join(f"{v:.6f}" for v in (*g, *a)) + "\n")
+            t += 5_000_000
+    rows = run(path, tmp_path / "o.txt")
+    assert len(rows) == 3000
+    after = rows[2000]
+    assert any(abs(c) > 0 for c in after[1:4]), "position snapped to the start point after the gap"
