@@ -32,11 +32,17 @@ that trusts every IMU reading, and Path Finder with its sensor checks and outage
 Walk: 20 s tracked, then the back camera covered with a hand while walking, then uncovered. Analysed with
 `demo_line/tools/live_demo/analyze.py`:
 
-| Camera covered for 48.3 s while walking | Error when ARCore returned |
-|---|---:|
-| Standard tracker | **227.25 m** |
-| **Path Finder** | **3.51 m** (and it reported itself `valid = False`, ±12.6 m, during the outage) |
+Four camera blackouts in the full 14-minute session (80 m walked), error when ARCore returned:
 
-Total walk 36.5 m (ARCore path length); start-to-end closure 3.3 m for all three. This is the live, camera-plus-IMU
+| Blackout | Standard tracker | **Path Finder** | What Path Finder reported during it |
+|---:|---:|---:|---|
+| 48.3 s | 227.25 m | **3.51 m** | ±12.6 m, `valid = False` |
+| 13.0 s | 12.18 m | **0.47 m** | ±3.4 m, `valid = False` |
+| 15.0 s | 180.71 m | **10.05 m** | ±3.9 m, `valid = False`: it **underestimated** its own error here |
+| 1.0 s | 1.33 m | **1.17 m** | ±0.5 m, `valid = True` |
+
+Path Finder is far closer every time and flags every long blackout as not valid; in the 15 s case its stated
+uncertainty was too small (honest-uncertainty is a stated limit). Start-to-end closure 2.6 m for all three trackers.
+Raw session: `demo_line/runs/live/phone_test_17nov_full.jsonl` (kept locally; not in git). This is the live, camera-plus-IMU
 system (`demo_line/`), not the scored IMU-only entry; it shows the same idea — distrust a sensor that cannot be
 believed and say how unsure you are — on real hardware.
