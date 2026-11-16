@@ -19,9 +19,9 @@ or without Docker: `make -C src && src/pathfinder <imu folder | zip | csv> -o es
 | | |
 |---|---|
 | Entry | `src/main.cpp` (C++17 + zlib); `src/main.py` is the readable reference with the same output |
-| Peak RAM / compute | 5.2 MB / 6 ms per second of IMU on a Windows 11 laptop, one thread (5.0 MB of that is the Windows runtime with no network; the earlier network measured 2.2 MB / 4 ms on an Apple M5) |
+| Peak RAM / compute | **2.28 MB / 1.96 ms** per second of IMU, worst of 3 recordings, one thread, Apple M5 ([`results/track3/budget.json`](results/track3/budget.json)); 5.2 MB / 6 ms on a Windows 11 laptop (5.0 MB of that is the Windows runtime) |
 | Output contract | 24 tests: one pose per row through NaN, frozen, zero and missing rows, cut files, unknown gravity (`PF_ENTRY=cpp pytest tests/stress/test_main_contract.py`) |
-| Accuracy, held-out EuRoC MH_05 + V2_03 + TUM-VI room6 | ATE 3.08 m vs 3.28 m standing still, 3.19 m for the retuned filter alone or with our earlier network, and 4.54 m for our original filter settings. The network reads body-frame IMU with gravity kept (AirIO style); it is worse than the earlier one on the handheld TUM-VI rooms and if the IMU were mounted another way ([details](docs/AIRIO.md), [earlier network](docs/LEARNED_VELOCITY.md)) |
+| Accuracy, held-out EuRoC MH_05 + V2_03 + TUM-VI room6 | ATE 3.08 m vs 3.28 m standing still ([raw results](results/track3/README.md)), 3.19 m for the retuned filter alone or with our earlier network, and 4.54 m for our original filter settings. The network reads body-frame IMU with gravity kept (AirIO style); it is worse than the earlier one on the handheld TUM-VI rooms and if the IMU were mounted another way ([details](docs/AIRIO.md), [earlier network](docs/LEARNED_VELOCITY.md)) |
 | Bundle | `python tools/make_bundle.py <input>` writes `dist/CaliforniaBurrito.zip` with `metadata.json` |
 | Slides | [`deck/SRMIST_CaliforniaBurrito.pptx`](deck/SRMIST_CaliforniaBurrito.pptx) |
 

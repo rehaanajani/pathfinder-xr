@@ -1,0 +1,126 @@
+{
+ "args": [
+  "--model",
+  "src/velnet_weights_world.bin"
+ ],
+ "rows": [
+  {
+   "rows": 21521,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 6.7191806005640835,
+   "position_drift_1s_m": 1.0159408595995099,
+   "checkpoints_m": 6.133670241320637,
+   "blind_mean_m": 4.0271120509012945,
+   "blind_end_m": 4.1542988385440935,
+   "dropout_m": 7.514868398299741,
+   "data": "euroc:MH_05_difficult",
+   "seed": 1
+  },
+  {
+   "rows": 21521,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 6.774893880739523,
+   "position_drift_1s_m": 0.9883162902064289,
+   "checkpoints_m": 6.084982086427778,
+   "blind_mean_m": 4.096017103189199,
+   "blind_end_m": 4.172182389976035,
+   "dropout_m": 5.757842422516673,
+   "data": "euroc:MH_05_difficult",
+   "seed": 2
+  },
+  {
+   "rows": 21521,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 6.654303318714534,
+   "position_drift_1s_m": 1.0208206588043622,
+   "checkpoints_m": 6.104562627000546,
+   "blind_mean_m": 3.984482289075623,
+   "blind_end_m": 4.098446693346733,
+   "dropout_m": 7.560227455910507,
+   "data": "euroc:MH_05_difficult",
+   "seed": 3
+  },
+  {
+   "rows": 22170,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 2.0113970554299843,
+   "position_drift_1s_m": 0.8435206411492696,
+   "checkpoints_m": 1.7928532835865358,
+   "blind_mean_m": 2.567517971209506,
+   "blind_end_m": 2.6932368880047624,
+   "dropout_m": 1.9567272859920937,
+   "data": "euroc:V2_03_difficult",
+   "seed": 1
+  },
+  {
+   "rows": 22170,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 2.0598341490086147,
+   "position_drift_1s_m": 0.8330470960077062,
+   "checkpoints_m": 1.7608521636953458,
+   "blind_mean_m": 2.654729186580948,
+   "blind_end_m": 2.678458074060538,
+   "dropout_m": 1.8369665350190223,
+   "data": "euroc:V2_03_difficult",
+   "seed": 2
+  },
+  {
+   "rows": 22170,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 2.001601333553944,
+   "position_drift_1s_m": 0.7600866223018717,
+   "checkpoints_m": 1.7595817695598222,
+   "blind_mean_m": 2.7216610688176446,
+   "blind_end_m": 2.8214427497730634,
+   "dropout_m": 2.1298698773118843,
+   "data": "euroc:V2_03_difficult",
+   "seed": 3
+  },
+  {
+   "rows": 25084,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.8673339731673806,
+   "position_drift_1s_m": 0.45694170072495194,
+   "checkpoints_m": 0.9850896384830088,
+   "blind_mean_m": 0.41300299256113077,
+   "blind_end_m": 0.365535702100168,
+   "dropout_m": 0.9336221173885332,
+   "data": "tumvi:room6",
+   "seed": 1
+  },
+  {
+   "rows": 25084,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.8283110075112187,
+   "position_drift_1s_m": 0.4438725544415189,
+   "checkpoints_m": 0.8573256348560194,
+   "blind_mean_m": 0.39362152934763467,
+   "blind_end_m": 0.385688641504367,
+   "dropout_m": 0.9767500579161233,
+   "data": "tumvi:room6",
+   "seed": 2
+  },
+  {
+   "rows": 25085,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.8283034217029065,
+   "position_drift_1s_m": 0.44891217227097874,
+   "checkpoints_m": 0.8480462703936755,
+   "blind_mean_m": 0.4141585691260111,
+   "blind_end_m": 0.40887884043614803,
+   "dropout_m": 0.7825317021427445,
+   "data": "tumvi:room6",
+   "seed": 3
+  }
+ ],
+ "failed": []
+}

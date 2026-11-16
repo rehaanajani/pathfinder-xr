@@ -19,7 +19,11 @@ is collected, and says so on stderr. A rotation about gravity itself cannot be s
 ## Measured (C++ entry, `tools/degrade_imu.py`)
 
 - **Normal data:** on all 16 recordings (11 EuRoC + TUM-VI rooms 1-4, 6, seed 1) the guard stays quiet and the output
-  is byte-identical to the guard switched off. Every AirIO number stands.
+  is byte-identical to the guard switched off (`results/track3/mount_guard_check.json`, `tools/check_mount_guard.py`).
+  Every AirIO number stands.
+- **Same 16, rotated 90° about x:** 14 switch. MH_01 does not because the drone is not at rest at start-up (since #29 the
+  guard holds off then, so an accelerating start cannot trigger it); MH_03 does not because a 90° turn about x moves
+  EuRoC's gravity (which lies mostly along x) only ~25°, inside the threshold.
 - **Rotated data:** validation MH_04 + V1_03, seeds 1-2, IMU frame rotated (90° about x as in `tools/make_rotated.py`,
   and three random rotations). The guard fires on all four. Checkpoints / blind 5 s / dropouts, metres:
 

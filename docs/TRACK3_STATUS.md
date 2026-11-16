@@ -8,7 +8,7 @@ predicting for 5 s after the IMU dies, and stays inside **8 MB peak RAM and 20 m
 100 points: memory 20, runtime 20, checkpoints 30, blind 5 s 20, dropouts 10. Ranked with `evo` (ATE + RPE).
 The honest bar for accuracy: an IMU alone drifts without bound, so "stand still at the start" is hard to beat.
 
-## One branch holds everything: `track3-entry` (PR #12 into `main`)
+## Everything is on `main` (merged from `track3-entry`, #12 and #29, 16 Nov)
 
 | Folder | What | Merged from |
 |---|---|---|
@@ -24,13 +24,19 @@ Not scored: everything outside `src/`. It is the material for the slides, the vi
 
 | | Value |
 |---|---|
-| Peak RAM / compute (C++, Apple M5, 16 Nov) | **2.2-2.3 MB** of 8 / **2.0 ms** per second of IMU of 20; Docker on Linux 3.2 MB (Mayank) |
+| Peak RAM / compute (C++, Apple M5, 16 Nov) | **2.28 MB** of 8 / **1.96 ms** per second of IMU of 20, worst of 3 recordings (`results/track3/budget.json`); Docker on Linux 3.2 MB (Mayank); Windows 5.2 MB / 6 ms |
 | Output contract | 24 tests: one pose per row through NaN, frozen, zero and missing rows, cut files, rotated gravity |
-| Held-out accuracy (EuRoC MH_05 + V2_03 + TUM-VI room6, seeds 1-3; ATE / checkpoints / blind 5 s / dropouts, m) | **3.08 / 2.86 / 2.34 / 3.15**, vs stand still 3.28 / 3.03 / 2.38 / 3.27 and the previous network 3.19 / 2.93 / 2.36 / 3.27. Reproduced independently (Codex) |
+| Held-out accuracy (EuRoC MH_05 + V2_03 + TUM-VI room6, seeds 1-3; ATE / checkpoints / blind 5 s / dropouts, m) | **3.08 / 2.86 / 2.34 / 3.15** (exact mean 3.083), vs stand still 3.28 / 3.03 / 2.38 / 3.27 and the previous network 3.19 / 2.93 / 2.36 / 3.27. Re-run on the final code, raw files in `results/track3/`; reproduced independently (Codex) |
+| All 16 recordings (includes training recordings), seeds 1-2 | 2.44 / 2.23 / 2.34 / 2.39 vs stand still 2.71 / 2.55 / 2.38 / 2.46; better on ATE and checkpoints in 32/32 runs, blind 25/32, dropouts 20/32 |
+| **On the organisers' degradation script** (16 Nov; 5 recordings, their seed) | ATE **3.40** vs 3.66 m standing still (accel-first input) and **3.37** vs 3.66 (EuRoC order); ahead on checkpoints, blind and dropouts too (`results/track3/README.md`). The entry detects column order and units itself |
 | Real `evo` on all 11 EuRoC (previous network, Mayank, `docs/TRACK3_EVAL.md`) | our scorer matches evo on ATE to 0.01 % |
-| Mount guard (`docs/MOUNT_GUARD.md`) | if start-up gravity is > 25° from both training mounts (rotated IMU), switch to the gravity-aligned network. Quiet and byte-identical on all 16 normal recordings; ahead of the AirIO network on every rotated case. `--mount-guard-deg 0` turns it off |
+| Mount guard (`docs/MOUNT_GUARD.md`) | if start-up gravity is > 25° from both training mounts (rotated IMU), switch to the gravity-aligned network. Quiet and byte-identical on all 16 normal recordings (`results/track3/mount_guard_check.json`); switches on 14/16 rotated copies (one not at rest at start-up, one rotation inside the threshold); ahead of the AirIO network on every rotated case it catches. Holds off when the device is not at rest at start-up (#29). `--mount-guard-deg 0` turns it off |
 | Python = C++ | within 1e-6 m |
 | CI | entry (build, 38 tests, Python reference), Docker (incl. the guard inside the image), Nikhil's suite on Ubuntu and Windows, `demo_line/` tests |
+
+"Dropouts" is scored over each gap plus the second after it; with missing rows that is mostly the second after the
+gap (standing still is scored the same way). Known and left as is: a free-falling IMU (|a| < 1 m/s²) is treated as a
+bad sample, gyro included; real recordings never fall freely, and changing it would change the scored filter.
 
 Limits we state: the gain over standing still is about 6 % on held-out data; the blind 5 s is close to a tie (its
 error is set before the IMU dies); results use our degradation stand-in, not the organisers' script.
@@ -45,7 +51,7 @@ error is set before the IMU dies); results use our degradation stand-in, not the
 
 ## Left before 18 Nov, 11:59 PM
 
-1. Nikhil reviews and merges #12 into `main`.
+1. Done: Nikhil reviewed and merged everything into `main` (#26, #12 with his review fixes #29).
 2. Slides and video (at the end). Slide fixes: architecture "single pass, constant memory" → "streamed, bounded
    memory, one short pre-scan"; results footnote "physics only" → "original filter settings"; RPE → "1 s position
    drift"; new numbers 3.08 m and the mount guard.

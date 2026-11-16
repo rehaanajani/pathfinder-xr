@@ -45,6 +45,10 @@ def main():
     ap.add_argument("--out", default=str(ROOT / "dist"))
     ap.add_argument("--extend-blind", type=float, default=0.0,
                     help="only if the official input ends at the IMU failure instead of keeping invalid rows")
+    ap.add_argument("--columns", choices=["auto", "gyro-first", "accel-first"], default="auto",
+                    help="force the input column order if the organisers state it (default: detected)")
+    ap.add_argument("--ts-unit", choices=["auto", "ns", "us", "ms", "s"], default="auto")
+    ap.add_argument("--accel-unit", choices=["auto", "ms2", "g"], default="auto")
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -54,6 +58,9 @@ def main():
     cmd = [str(SRC / "pathfinder"), a.input, "-o", str(traj)]
     if a.extend_blind > 0:
         cmd += ["--extend-blind", str(a.extend_blind)]
+    forced = [f"--{k.replace('_', '-')}={v}" for k, v in (("columns", a.columns), ("ts_unit", a.ts_unit),
+                                                          ("accel_unit", a.accel_unit)) if v != "auto"]
+    cmd += forced
     # Measure the estimator process alone (wait4 gives that one child's own usage; RUSAGE_CHILDREN would also
     # count the compiler that make just ran).
     if not hasattr(os, "wait4"):
@@ -81,7 +88,7 @@ def main():
         "track": "Track 3: Path Finder, Trajectory Estimation Under Sensor Degradation",
         "entry": "src/main.cpp (C++17, single thread, offline); src/main.py is the reference implementation",
         "command": "src/pathfinder <input> -o estimated_trajectory.txt" + (
-            f" --extend-blind {a.extend_blind}" if a.extend_blind > 0 else ""),
+            f" --extend-blind {a.extend_blind}" if a.extend_blind > 0 else "") + "".join(" " + f for f in forced),
         "model": {"file": "src/velnet_weights.bin", "parameters": 42716, "input": "body frame (AirIO style), weights version 3",
                   "sha256": hashlib.sha256((SRC / "velnet_weights.bin").read_bytes()).hexdigest()},
         "input": {"imu_rows": len(rows), "duration_s": round(span, 3),

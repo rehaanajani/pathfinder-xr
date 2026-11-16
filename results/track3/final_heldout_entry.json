@@ -1,0 +1,123 @@
+{
+ "args": [],
+ "rows": [
+  {
+   "rows": 21521,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 6.382221382238015,
+   "position_drift_1s_m": 0.9451952153075093,
+   "checkpoints_m": 5.801690960562544,
+   "blind_mean_m": 4.061842700107304,
+   "blind_end_m": 4.194855391129478,
+   "dropout_m": 7.125974494389356,
+   "data": "euroc:MH_05_difficult",
+   "seed": 1
+  },
+  {
+   "rows": 21521,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 6.54327445538638,
+   "position_drift_1s_m": 0.9366081481577714,
+   "checkpoints_m": 5.973589031598086,
+   "blind_mean_m": 4.0881551140568515,
+   "blind_end_m": 4.233100402746309,
+   "dropout_m": 5.883197628110178,
+   "data": "euroc:MH_05_difficult",
+   "seed": 2
+  },
+  {
+   "rows": 21521,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 6.333739354148134,
+   "position_drift_1s_m": 0.9618331078143296,
+   "checkpoints_m": 5.799790433592086,
+   "blind_mean_m": 3.9744437139432502,
+   "blind_end_m": 4.099982083097718,
+   "dropout_m": 7.1793277021019515,
+   "data": "euroc:MH_05_difficult",
+   "seed": 3
+  },
+  {
+   "rows": 22170,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 1.9455502733297134,
+   "position_drift_1s_m": 0.7121351003739359,
+   "checkpoints_m": 1.7777670322069887,
+   "blind_mean_m": 2.6628804150360095,
+   "blind_end_m": 2.7709675226104094,
+   "dropout_m": 2.010970243921312,
+   "data": "euroc:V2_03_difficult",
+   "seed": 1
+  },
+  {
+   "rows": 22170,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 1.9918148936698021,
+   "position_drift_1s_m": 0.7385192450238545,
+   "checkpoints_m": 1.7355415745842175,
+   "blind_mean_m": 2.57734585353294,
+   "blind_end_m": 2.678514568974094,
+   "dropout_m": 1.5052789045102357,
+   "data": "euroc:V2_03_difficult",
+   "seed": 2
+  },
+  {
+   "rows": 22170,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 1.8976930957870375,
+   "position_drift_1s_m": 0.695644487500094,
+   "checkpoints_m": 1.652659267631703,
+   "blind_mean_m": 2.620823363453718,
+   "blind_end_m": 2.7273062969376034,
+   "dropout_m": 2.1258181242325103,
+   "data": "euroc:V2_03_difficult",
+   "seed": 3
+  },
+  {
+   "rows": 25084,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.8995064004264689,
+   "position_drift_1s_m": 0.47543242260155444,
+   "checkpoints_m": 1.0150708263958979,
+   "blind_mean_m": 0.36196962237830776,
+   "blind_end_m": 0.3639322076870733,
+   "dropout_m": 0.9526665531117599,
+   "data": "tumvi:room6",
+   "seed": 1
+  },
+  {
+   "rows": 25084,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.8931297823333365,
+   "position_drift_1s_m": 0.47508907560418157,
+   "checkpoints_m": 1.0135635540145103,
+   "blind_mean_m": 0.38617702777215074,
+   "blind_end_m": 0.34469636281670224,
+   "dropout_m": 0.9149156826322756,
+   "data": "tumvi:room6",
+   "seed": 2
+  },
+  {
+   "rows": 25085,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.863508441645644,
+   "position_drift_1s_m": 0.47273117424833083,
+   "checkpoints_m": 0.9753178439462727,
+   "blind_mean_m": 0.35006548695002415,
+   "blind_end_m": 0.34052410573356257,
+   "dropout_m": 0.6282189793786426,
+   "data": "tumvi:room6",
+   "seed": 3
+  }
+ ],
+ "failed": []
+}
