@@ -1,0 +1,57 @@
+{
+  "entry": "src/pathfinder (C++), default settings: AirIO network + mount guard",
+  "machine": {
+    "os": "macOS-27.2.1-arm64-arm-64bit",
+    "cpu": "arm"
+  },
+  "budget": {
+    "peak_rss_mb": 8,
+    "cpu_ms_per_s_of_imu": 20
+  },
+  "worst": {
+    "peak_rss_mb": 2.469,
+    "cpu_ms_per_s_of_imu": 1.838
+  },
+  "rows": [
+    {
+      "recording": "euroc:MH_05_difficult",
+      "seed": 1,
+      "imu_rows": 21521,
+      "imu_seconds": 113.6,
+      "peak_rss_mb": 2.469,
+      "cpu_ms_per_s_of_imu": 1.777
+    },
+    {
+      "recording": "euroc:V2_03_difficult",
+      "seed": 1,
+      "imu_rows": 22170,
+      "imu_seconds": 116.845,
+      "peak_rss_mb": 2.453,
+      "cpu_ms_per_s_of_imu": 1.823
+    },
+    {
+      "recording": "tumvi:room6",
+      "seed": 1,
+      "imu_rows": 25084,
+      "imu_seconds": 131.808,
+      "peak_rss_mb": 2.469,
+      "cpu_ms_per_s_of_imu": 1.838
+    },
+    {
+      "recording": "euroc:MH_04_difficult",
+      "seed": 1,
+      "imu_rows": 19120,
+      "imu_seconds": 101.595,
+      "peak_rss_mb": 2.453,
+      "cpu_ms_per_s_of_imu": 1.814
+    },
+    {
+      "recording": "euroc:V1_03_difficult",
+      "seed": 1,
+      "imu_rows": 20300,
+      "imu_seconds": 107.495,
+      "peak_rss_mb": 2.453,
+      "cpu_ms_per_s_of_imu": 1.787
+    }
+  ]
+}
