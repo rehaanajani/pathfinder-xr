@@ -129,8 +129,9 @@ def picture(slide, path, x, y, w=None, h=None, name=None, border=True):
     return pic
 
 
-def kicker(slide, x, y, s, color=ACCENT):
-    text(slide, x, y, 6, 0.25, s.upper(), size=8.5, bold=True, color=color)
+def kicker(slide, x, y, s, color=ACCENT, w=None):
+    w = w if w is not None else min(6.0, 9.5 - x)
+    text(slide, x, y, w, 0.25, s.upper(), size=8.5, bold=True, color=color)
 
 
 def headline(slide, s, sub=None, y=1.08):
@@ -388,7 +389,8 @@ def main():
           [("", {})],
           [("# tests (58) and the organisers' script", {"color": MUTED})],
           [("PF_ENTRY=cpp pytest tests/stress", {})],
-          [("python tools/eval_organiser.py --script degrade_imu.py", {})]],
+          [("python tools/eval_organiser.py \\", {})],
+          [("  --script degrade_imu.py --data <recordings>", {})]],
          size=9, color=INK, font=MONO, space=0)
     text(s, 0.5, 4.05, 4.3, 1.1,
          [[("Input  ", {"bold": True, "size": 10, "color": INK}),
@@ -442,10 +444,10 @@ def main():
 
     # ---------- 9. Thank you
     s = sl[8]
-    text(s, 2.0, 3.25, 6.0, 0.9,
+    text(s, 2.97, 3.25, 5.5, 0.9,
          [[("github.com/rehaanajani/pathfinder-xr", {"size": 13, "bold": True, "color": INK})],
           [("Team California Burrito  ·  SRM IST  ·  Samsung PRISM XR Hackathon 2026", {"size": 10, "color": MUTED})]],
-         align=PP_ALIGN.CENTER, space=4)
+         space=4)
 
     out = HERE / "SRMIST_CaliforniaBurrito.pptx"
     prs.save(out)
