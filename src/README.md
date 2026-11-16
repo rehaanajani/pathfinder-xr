@@ -69,7 +69,7 @@ appends 5 s of predicted poses after the last row.
 `main.py` is the commented reference; `main.cpp` is a line-by-line port (exact match without the network, within
 1 µm with it).
 
-## Measured (Apple M5, macOS; EuRoC / TUM-VI degraded with our stand-in for the organisers' script)
+## Measured (Apple M5, macOS; EuRoC / TUM-VI degraded with our stand-in; scores on the organisers' script are in `results/track3/README.md`)
 
 | | C++ | Python |
 |---|---:|---:|

@@ -78,9 +78,12 @@ def main():
 
     data = imu_csv(a.input)
     rows = [l for l in data.decode(errors="replace").splitlines() if l.strip() and l.strip()[0].isdigit()]
-    t_first, t_last = int(rows[0].split(",")[0]), int(rows[-1].split(",")[0])
-    span = (t_last - t_first) * 1e-9
-    poses = sum(1 for l in traj.read_text().splitlines() if l.strip() and not l.startswith("#"))
+    # Duration from the trajectory, which is always in seconds whatever the input's timestamp unit; the poses that
+    # --extend-blind appends after the last input row are not part of the input's duration.
+    ts = [float(l.split()[0]) for l in traj.read_text().splitlines() if l.strip() and not l.startswith("#")]
+    poses = len(ts)
+    ts_in = ts[:len(rows)] if len(ts) >= len(rows) else ts
+    span = (ts_in[-1] - ts_in[0]) if len(ts_in) > 1 else 0.0
 
     meta = {
         "team": "California Burrito",

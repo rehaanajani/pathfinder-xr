@@ -1,6 +1,6 @@
 # Build the C++ Track 3 entry: make -C src   ->  src/pathfinder
 CXX ?= c++
-CXXFLAGS ?= -O2 -std=c++17 -Wall -Wextra
+CXXFLAGS ?= -O3 -std=c++17 -Wall -Wextra
 pathfinder: main.cpp
 	$(CXX) $(CXXFLAGS) -o $@ main.cpp -lz
 clean:

@@ -39,7 +39,8 @@ gap (standing still is scored the same way). Known and left as is: a free-fallin
 bad sample, gyro included; real recordings never fall freely, and changing it would change the scored filter.
 
 Limits we state: the gain over standing still is about 6 % on held-out data; the blind 5 s is close to a tie (its
-error is set before the IMU dies); results use our degradation stand-in, not the organisers' script.
+error is set before the IMU dies); the headline held-out numbers use our degradation stand-in; on the organisers' own script (16 Nov) the margin
+is 7-8 % ATE (`results/track3/README.md`).
 
 ## Reviews done
 
@@ -49,11 +50,11 @@ error is set before the IMU dies); results use our degradation stand-in, not the
 - **Codex reviews** of #27 (numbers reproduced, no leakage, parity), the mount guard (two fixes made), and this
   consolidated branch (the Docker image was missing the fallback network: fixed, now tested in CI).
 
-## Left before 18 Nov, 11:59 PM
+## Left before 22 Nov (official deadline since the 16 Nov email)
 
 1. Done: Nikhil reviewed and merged everything into `main` (#26, #12 with his review fixes #29).
 2. Slides and video (at the end). Slide fixes: architecture "single pass, constant memory" → "streamed, bounded
    memory, one short pre-scan"; results footnote "physics only" → "original filter settings"; RPE → "1 s position
    drift"; new numbers 3.08 m and the mount guard.
 3. The real `estimated_trajectory.txt`: `python tools/make_bundle.py <organisers' input>` as soon as it arrives.
-4. Repo shared or public, Google Form.
+4. Make the repo **public** (required), then submit the Google Form https://forms.gle/86xENrtqhx988hBt8.
