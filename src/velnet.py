@@ -1,68 +1,16 @@
-"""Forward pass of the learned velocity network with plain numpy (no PyTorch / ONNX at run time).
+"""Velocity-network weights file I/O for the training tools.
 
-Weights come from tools/train_velocity.py as one little-endian binary file (BatchNorm already folded in):
-
-    char[4] "PFVN" | i32 version | i32 window | i32 dec | f32 rate_hz | i32 n_in | f32 scale[n_in - 1]
-    i32 n_conv | n_conv x { i32 cout, cin, k, stride, pad | f32 w[cout*cin*k] | f32 b[cout] }
-    i32 n_fc   | n_fc   x { i32 out, in | f32 w[out*in] | f32 b[out] }
-
-Network: conv1d + ReLU layers -> global average pool -> dense + ReLU layers -> 12 linear outputs:
-displacement over the window (3, metres), its log-std (3), velocity at the end of the window (3, m/s), its
-log-std (3). Input: (n_in, window): each of the `window` slots is the mean of `dec` consecutive samples at rate_hz
-(so the window spans window * dec / rate_hz seconds) of 6 gravity-aligned IMU channels (bias-corrected gyro, specific
-force minus gravity), each multiplied by its scale, plus the fraction of healthy samples in the slot; a slot with
-no healthy sample is all zero.
-Version 3 (AirIO-style input, arxiv 2501.15659): 10 input channels per slot in the IMU body frame: bias-corrected
-gyro, specific force with gravity kept, the unit "up" direction in the body frame from the estimator's own
-orientation, each scaled, plus the healthy fraction; the 12 outputs are then in the body frame at the window end.
-The C++ entry reads the same file and does the same arithmetic.
+Inference (load_bin, VelNet) lives in main.py, which also embeds the weights so it runs as a standalone script; this
+module re-exports it and adds save_bin for tools/train_*.py.
 """
 import struct
+import sys
+from pathlib import Path
 
 import numpy as np
 
-
-def conv1d(x, w, b, stride, pad):
-    """x: (Cin, L); w: (Cout, Cin, K) -> (Cout, Lout)."""
-    cout, cin, k = w.shape
-    xp = np.pad(x, ((0, 0), (pad, pad)))
-    lout = (x.shape[1] + 2 * pad - k) // stride + 1
-    idx = np.arange(lout)[:, None] * stride + np.arange(k)[None]
-    cols = xp[:, idx]                                           # (Cin, Lout, K)
-    return np.tensordot(w, cols, axes=([1, 2], [0, 2])) + b[:, None]
-
-
-def load_bin(path):
-    buf = open(path, "rb").read()
-    if buf[:4] != b"PFVN":
-        raise ValueError(f"{path}: not a Path Finder velocity-network file")
-    off = 4
-
-    def i32(n=1):
-        nonlocal off
-        v = struct.unpack_from(f"<{n}i", buf, off)
-        off += 4 * n
-        return v if n > 1 else v[0]
-
-    def f32(n):
-        nonlocal off
-        v = np.frombuffer(buf, "<f4", n, off).copy()
-        off += 4 * n
-        return v
-
-    version, window, dec = i32(3)
-    rate = float(f32(1)[0])
-    n_in = i32()
-    scale = f32(n_in - 1)
-    convs, fcs = [], []
-    for _ in range(i32()):
-        cout, cin, k, stride, pad = i32(5)
-        convs.append((f32(cout * cin * k).reshape(cout, cin, k), f32(cout), stride, pad))
-    for _ in range(i32()):
-        o, i = i32(2)
-        fcs.append((f32(o * i).reshape(o, i), f32(o)))
-    return {"version": version, "window": window, "dec": dec, "rate": rate, "n_in": n_in, "scale": scale,
-            "convs": convs, "fcs": fcs}
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from main import VelNet, load_bin  # noqa: E402,F401
 
 
 def save_bin(path, window, dec, rate, scale, convs, fcs, version=2):
@@ -76,40 +24,3 @@ def save_bin(path, window, dec, rate, scale, convs, fcs, version=2):
         f.write(struct.pack("<i", len(fcs)))
         for w, b in fcs:
             f.write(struct.pack("<2i", *w.shape) + np.asarray(w, "<f4").tobytes() + np.asarray(b, "<f4").tobytes())
-
-
-class VelNet:
-    def __init__(self, path):
-        m = load_bin(path)
-        self.window, self.dec, self.rate, self.scale = m["window"], m["dec"], m["rate"], m["scale"]
-        self.version, self.n_in = m["version"], m["n_in"]
-        self.convs, self.fcs = m["convs"], m["fcs"]
-        self.n_params = sum(w.size + b.size for w, b, *_ in self.convs) + sum(w.size + b.size for w, b in self.fcs)
-        self.x = np.zeros((m["n_in"], self.window), np.float32)
-
-    def forward(self, x):
-        """x: (n_in, window), already scaled. Returns the 12 raw outputs."""
-        for w, b, stride, pad in self.convs:
-            x = np.maximum(conv1d(x, w, b, stride, pad), 0)
-        z = x.mean(1)
-        for j, (w, b) in enumerate(self.fcs):
-            z = w @ z + b
-            if j < len(self.fcs) - 1:
-                z = np.maximum(z, 0)
-        return z
-
-    def predict(self, ring, start):
-        """ring: list of `window` slots (n_in-tuple or None), oldest slot at index `start`.
-        Returns displacement (3), its std (3), end velocity (3), its std (3) as Python floats."""
-        x = self.x
-        x[:] = 0
-        W = self.window
-        for j in range(W):
-            s = ring[(start + j) % W]
-            if s is not None:
-                x[:, j] = s
-        x[:-1] *= self.scale[:, None]
-        o = self.forward(x)
-        sd = np.exp(np.clip(o[3:6], -7, 3))
-        sv = np.exp(np.clip(o[9:12], -7, 3))
-        return o[0:3].tolist(), sd.tolist(), o[6:9].tolist(), sv.tolist()

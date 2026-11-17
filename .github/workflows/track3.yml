@@ -12,12 +12,12 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.11"}
       - run: pip install numpy scipy pytest
-      - name: Build the C++ entry
+      - name: Build the C++ port
         run: make -C src
-      - name: Contract, review-fix and mount-guard tests, C++ (one pose per row, bad rows, 8 MB, 20 ms/s)
+      - name: Same tests on the C++ port (one pose per row, bad rows, 8 MB, 20 ms/s)
         run: PF_ENTRY=cpp python -m pytest -q tests/stress/test_main_contract.py tests/stress/test_review_fixes.py tests/stress/test_mount_guard.py
-      - name: Same tests, Python reference (the 8 MB budget applies to C++ only)
-        run: python -m pytest -q tests/stress/test_main_contract.py tests/stress/test_review_fixes.py tests/stress/test_mount_guard.py
+      - name: Same tests on main.py (weights embedded)
+        run: python -m pytest -q tests/stress/test_main_contract.py tests/stress/test_review_fixes.py tests/stress/test_mount_guard.py tests/stress/test_standalone.py
   docker:
     runs-on: ubuntu-latest
     steps:

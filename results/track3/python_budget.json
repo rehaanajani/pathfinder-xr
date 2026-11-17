@@ -1,0 +1,49 @@
+{
+ "entry": "src/main.py (standalone, network weights embedded)",
+ "python": "3.11.17",
+ "machine": "macOS-27.2.1-arm64-arm-64bit",
+ "processor": "arm",
+ "method": "tracemalloc peak during the run (numpy imported first, as the runtime); CPU = process time, best of 3, one thread",
+ "worst": {
+  "heap_peak_mib": 3.75,
+  "heap_peak_incl_module_mib": 6.19,
+  "cpu_ms_per_s": 7.08
+ },
+ "rows": [
+  {
+   "data": "euroc:MH_04_difficult",
+   "imu_seconds": 101.6,
+   "heap_peak_mib": 3.75,
+   "heap_peak_incl_module_mib": 6.19,
+   "cpu_ms_per_s": 6.64
+  },
+  {
+   "data": "euroc:V1_03_difficult",
+   "imu_seconds": 107.5,
+   "heap_peak_mib": 3.75,
+   "heap_peak_incl_module_mib": 6.19,
+   "cpu_ms_per_s": 6.65
+  },
+  {
+   "data": "euroc:MH_05_difficult",
+   "imu_seconds": 113.6,
+   "heap_peak_mib": 3.75,
+   "heap_peak_incl_module_mib": 6.19,
+   "cpu_ms_per_s": 6.56
+  },
+  {
+   "data": "euroc:V2_03_difficult",
+   "imu_seconds": 116.8,
+   "heap_peak_mib": 3.75,
+   "heap_peak_incl_module_mib": 6.19,
+   "cpu_ms_per_s": 7.08
+  },
+  {
+   "data": "tumvi:room6",
+   "imu_seconds": 131.8,
+   "heap_peak_mib": 3.75,
+   "heap_peak_incl_module_mib": 6.19,
+   "cpu_ms_per_s": 7.06
+  }
+ ]
+}
