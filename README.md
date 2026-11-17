@@ -39,7 +39,6 @@ All numbers below are measured, with the raw files linked. Accuracy is on the **
 | Standing still | 2.62 | 2.45 | 2.28 | 2.42 | 0.77 |
 | **Path Finder** | **2.32** | **2.13** | **2.24** | **2.13** | **0.57** |
 | Improvement | **−12 %** | **−13 %** | **−2 %** | **−12 %** | **−26 %** |
-| Recordings where Path Finder is better | **17 / 17** | **17 / 17** | 12 / 17 | **17 / 17** | **17 / 17** |
 
 - **Better on every one of the 17 recordings** for ATE, checkpoints, dropouts and drift
   ([`results/track3/coupling_sweep.md`](results/track3/coupling_sweep.md)).
@@ -47,6 +46,9 @@ All numbers below are measured, with the raw files linked. Accuracy is on the **
   3.14, drift 0.70 vs 0.79.
 - **XR headsets** (8 Monado recordings, IMU mounted unlike any training data): **0.57 m vs 0.84 m**, 32 % lower,
   thanks to the mount guard.
+
+<sub>Per recording: better on 17 / 17 for ATE, checkpoints, dropouts and drift; the blind 5 s is better on average
+and on 12 / 17.</sub>
 
 **Resources (C++ entry, worst of 5 recordings):**
 
@@ -176,7 +178,7 @@ These live in [`demo_line/`](demo_line/README.md) and [`docs/WIDER_SYSTEM.md`](d
 | `results/` | raw results behind every number |
 | `docs/` | brief, design notes, benchmark reports, the wider camera system |
 | `deck/` | the presentation and the script that builds it from measured numbers |
-| `demo_line/` | live phone demo and multi-sensor work (not scored) |
+| `demo_line/` | live phone demo and multi-sensor work, beyond the scored task |
 
 ## Team
 
