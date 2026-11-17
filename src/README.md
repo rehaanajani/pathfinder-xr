@@ -7,28 +7,29 @@ Reads a degraded IMU stream in EuRoC MAV format (`imu0/data.csv`) and writes the
 
 ## Run
 
-**C++ (the submission; ≤ 8 MB, ≤ 20 ms per second of IMU, one thread):**
+**Python** (Python 3 + numpy; the network weights are embedded, so
+`main.py` can be copied anywhere on its own):
 
 ```bash
-make -C src                                   # needs a C++17 compiler and zlib
-src/pathfinder <input> -o estimated_trajectory.txt
+python3 src/main.py <input> -o estimated_trajectory.txt
 ```
 
-**Docker:**
+**Docker** (the image contains only `main.py`):
 
 ```bash
 docker build -t pathfinder src/
 docker run --rm -v "$PWD/data:/data" pathfinder /data -o /data/estimated_trajectory.txt
 ```
 
-**Python reference (same output; needs numpy for the network):**
+**The C++ port** (same algorithm, output within 1 µm; for on-device use; reads `velnet_weights*.bin` next to it):
 
 ```bash
-python3 src/main.py <input> -o estimated_trajectory.txt
+make -C src                                   # needs a C++17 compiler and zlib
+src/pathfinder <input> -o estimated_trajectory.txt
 ```
 
 `<input>` is a folder containing `imu0/data.csv` (or `mav0/imu0/data.csv`), a `.zip` of such a folder, or the CSV
-file itself.
+file itself. After retraining the network, `python tools/embed_weights.py` refreshes the copy inside `main.py`.
 
 ## Input and output
 

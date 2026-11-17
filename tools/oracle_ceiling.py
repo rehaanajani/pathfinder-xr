@@ -57,7 +57,7 @@ def main():
     ap.add_argument("--noise", type=float, default=0.0)
     a = ap.parse_args(argv)
     Oracle.noise = a.noise
-    velnet.VelNet = Oracle
+    velnet.VelNet = entry.VelNet = Oracle
     orig_init = entry.PathFinder.__init__
 
     def init(self, *args, **kw):
