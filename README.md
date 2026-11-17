@@ -38,7 +38,7 @@ All numbers below are measured, with the raw files linked. Accuracy is on the **
 |---|---:|---:|---:|---:|---:|
 | Standing still | 2.62 | 2.45 | 2.28 | 2.42 | 0.77 |
 | **Path Finder** | **2.32** | **2.13** | **2.24** | **2.13** | **0.57** |
-| Improvement | **−12 %** | **−13 %** | **−2 %** | **−12 %** | **−26 %** |
+| Improvement | **~12 %** | **~13 %** | **~2 %** | **~12 %** | **~26 %** |
 
 - **Better on every one of the 17 recordings** for ATE, checkpoints, dropouts and drift
   ([`results/track3/coupling_sweep.md`](results/track3/coupling_sweep.md)).
