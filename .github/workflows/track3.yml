@@ -1,23 +1,46 @@
 name: track3-entry
 on:
   push:
-    paths: ["src/**", "tests/stress/**", ".github/workflows/track3.yml"]
+    paths: ["src/**", "tests/stress/**", "tools/score_track3.py", "requirements/core-dev-py313.lock", ".github/workflows/track3.yml"]
   pull_request:
-    paths: ["src/**", "tests/stress/**", ".github/workflows/track3.yml"]
+    paths: ["src/**", "tests/stress/**", "tools/score_track3.py", "requirements/core-dev-py313.lock", ".github/workflows/track3.yml"]
+permissions:
+  contents: read
 jobs:
   entry:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      PYTHONHASHSEED: "0"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.11"}
-      - run: pip install numpy scipy pytest
+        with: {python-version: "3.13"}
+      - run: python -m pip install --require-hashes -r requirements/core-dev-py313.lock
       - name: Build the C++ entry
         run: make -C src
-      - name: Contract, review-fix and mount-guard tests, C++ (one pose per row, bad rows, 8 MB, 20 ms/s)
-        run: PF_ENTRY=cpp python -m pytest -q tests/stress/test_main_contract.py tests/stress/test_review_fixes.py tests/stress/test_mount_guard.py
-      - name: Same tests, Python reference (the 8 MB budget applies to C++ only)
-        run: python -m pytest -q tests/stress/test_main_contract.py tests/stress/test_review_fixes.py tests/stress/test_mount_guard.py
+      - name: Build the optional Python native helper from source
+        run: python src/build_hotstep.py
+      - name: Full stress suite, C++ (timing runs separately)
+        run: PF_ENTRY=cpp python -m pytest -q tests/stress -k "not test_runtime_under_20ms_per_second_of_imu" --junitxml=validation/cpp.xml
+      - name: Full stress suite, Python reference
+        if: ${{ !cancelled() }}
+        run: python -m pytest -q tests/stress -k "not test_runtime_under_20ms_per_second_of_imu" --junitxml=validation/python.xml
+      - name: Isolated C++ runtime assertion
+        if: ${{ !cancelled() }}
+        run: PF_ENTRY=cpp python -m pytest -q tests/stress/test_main_contract.py::test_runtime_under_20ms_per_second_of_imu --junitxml=validation/cpp-timing.xml
+      - name: Isolated Python runtime assertion
+        if: ${{ !cancelled() }}
+        run: python -m pytest -q tests/stress/test_main_contract.py::test_runtime_under_20ms_per_second_of_imu --junitxml=validation/python-timing.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: track3-validation
+          path: validation/
+          retention-days: 14
   docker:
     runs-on: ubuntu-latest
     steps:

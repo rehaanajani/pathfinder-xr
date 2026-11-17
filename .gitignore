@@ -16,5 +16,12 @@ deck/*.pdf
 runs/
 src/pathfinder
 src/pathfinder.exe
+src/hotstep.dll
+src/hotstep.so
+src/hotstep.dylib
+src/hotstep.*.json
+src/hotstep.obj
+src/hotstep.lib
+src/hotstep.exp
 !models/MODELS.json
 fresh-setup/

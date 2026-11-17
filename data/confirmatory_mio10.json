@@ -1,0 +1,19 @@
+{
+  "schema": "pathfinder.confirmatory-candidate/1",
+  "id": "monado/MIO10_short_2_panorama",
+  "protocol": "pathfinder.confirmatory-protocol/1",
+  "source_url": "https://huggingface.co/datasets/collabora/monado-slam-datasets/resolve/main/M_monado_datasets/MI_valve_index/MIO_others/MIO10_short_2_panorama.zip",
+  "sha256": "9ca151d8dc5cb84dafecdb8595a22116e0f95162e8a1794eb2ca779bedfe60c4",
+  "sha256_kind": "git-lfs oid from the Hugging Face dataset tree API, recorded before download",
+  "bytes": 214797238,
+  "license": "CC BY 4.0",
+  "status": "acquired_unopened",
+  "inspected_ground_truth": false,
+  "models_run": false,
+  "registered_utc": "2026-11-17",
+  "acquired_utc": "2026-11-17",
+  "local_archive": "local_data/monado/MIO10_short_2_panorama.zip",
+  "verified_bytes": 214797238,
+  "verified_sha256": "9ca151d8dc5cb84dafecdb8595a22116e0f95162e8a1794eb2ca779bedfe60c4",
+  "verification": "sha256 of the downloaded archive matched the Git LFS oid recorded before download. The zip was not extracted and no pose file was read."
+}

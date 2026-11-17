@@ -68,3 +68,28 @@ def test_covariance_stays_symmetric_positive_and_finite_on_long_cloned_runs():
     assert np.isfinite(est).all() and np.isfinite(P).all()
     assert np.allclose(P, P.transpose(0, 2, 1), atol=1e-10)
     assert np.linalg.eigvalsh(P).min() > -1e-12
+
+
+def test_causal_saturation_matches_rebuilt_mask_across_the_window():
+    """The live flag must match both the full-series mask and the old truncated rebuild."""
+    from pathfinder.filter import CausalSaturation, saturation_mask
+    rng = np.random.default_rng(7)
+    for rate in (100.0, 400.0, 1000.0):
+        n = int(3.5 * rate)
+        gyro = rng.normal(0, 0.02, (n, 3))
+        acc = rng.normal(0, 0.05, (n, 3))
+        acc[:, 2] += 9.81
+        # Clip one axis for a few runs, and freeze a whole sample (dropped packet) once.
+        span = slice(int(1.2 * rate), int(1.2 * rate) + 8)
+        gyro[span, 0] = 3.5
+        acc[int(2.2 * rate):int(2.2 * rate) + 5] = acc[int(2.2 * rate)]
+        full = saturation_mask(gyro, acc, rate)
+        tracker = CausalSaturation(rate)
+        cap = tracker.cap
+        live = np.zeros(n, bool)
+        for i in range(n):
+            live[i] = tracker.push(gyro[i], acc[i])
+            block = slice(max(0, i + 1 - cap), i + 1)
+            rebuilt = saturation_mask(gyro[block], acc[block], rate)[-1]
+            assert live[i] == rebuilt
+        assert np.array_equal(live, full)

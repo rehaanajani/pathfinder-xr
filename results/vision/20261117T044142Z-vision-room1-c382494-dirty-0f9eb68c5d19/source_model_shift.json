@@ -1,0 +1,83 @@
+{
+ "model": "models/dispnet_faults/best.pt",
+ "tlio_val_records": [
+  "175729529774207",
+  "177568983090293",
+  "178577832990152",
+  "181717792538459",
+  "203347623516637",
+  "225800518293160"
+ ],
+ "label": "offline analysis; reference orientation used to rotate TUM-VI IMU (diagnostic only)",
+ "tlio_val_in_domain": {
+  "windows": 16226,
+  "rmse_m": 0.1379456002690987,
+  "rmse_per_axis_m": [
+   0.09389882026529349,
+   0.09821035835195223,
+   0.023806001318346266
+  ],
+  "mean_claimed_std_m": 0.11503984034061432,
+  "nees_mean": 3.054548500667427,
+  "nees_median": 1.8537550617893972,
+  "coverage": {
+   "0.5": 0.5930605201528412,
+   "0.9": 0.8919635153457414,
+   "0.99": 0.9645014174781216
+  },
+  "variance_scale_for_mean_nees_3": 1.018182833555809,
+  "variance_scale_for_median": 0.7835061384368678,
+  "error_autocorrelation": {
+   "0.1s": 0.884736521855521,
+   "0.2s": 0.7989132328658062,
+   "0.3s": 0.7051799706274999,
+   "0.4s": 0.6287929296419567,
+   "0.5s": 0.5363113662489227,
+   "0.6s": 0.4554317338644657,
+   "0.7s": 0.37254597854644916,
+   "0.8s": 0.2998049788648855,
+   "0.9s": 0.23938213848289722,
+   "1.0s": 0.1991301517320092
+  },
+  "integrated_autocorrelation_updates": 11.240458005460827,
+  "note": "windows every 0.1 s overlap by 90 %; tau ~ how many consecutive updates carry one window's worth of independent information"
+ },
+ "tumvi_room1_cross_device": {
+  "windows": 1232,
+  "rmse_m": 0.8073294147571403,
+  "rmse_per_axis_m": [
+   0.6346570045571802,
+   0.47037841564667027,
+   0.166539534622689
+  ],
+  "mean_claimed_std_m": 0.24768781661987305,
+  "nees_mean": 45.5767536482466,
+  "nees_median": 26.78241155791452,
+  "coverage": {
+   "0.5": 0.0698051948051948,
+   "0.9": 0.14285714285714285,
+   "0.99": 0.22483766233766234
+  },
+  "variance_scale_for_mean_nees_3": 15.1922512160822,
+  "variance_scale_for_median": 11.319825520806875,
+  "error_autocorrelation": {
+   "0.1s": 0.9850028280242008,
+   "0.2s": 0.9510410900234308,
+   "0.3s": 0.9005277093437732,
+   "0.4s": 0.8362629599601947,
+   "0.5s": 0.7595345648205434,
+   "0.6s": 0.6737078877377286,
+   "0.7s": 0.5816866833133126,
+   "0.8s": 0.4864093182244629,
+   "0.9s": 0.3915461242211681,
+   "1.0s": 0.30019824434463904
+  },
+  "integrated_autocorrelation_updates": 14.731834820026908,
+  "note": "windows every 0.1 s overlap by 90 %; tau ~ how many consecutive updates carry one window's worth of independent information"
+ },
+ "shift_summary": {
+  "rmse_ratio_cross_over_in": 5.8525202194360295,
+  "nees_mean_in": 3.054548500667427,
+  "nees_mean_cross": 45.5767536482466
+ }
+}

@@ -1,0 +1,38 @@
+{
+ "schema": "pathfinder.result-bundle/1",
+ "source_run": "20261117T074116Z-vision-room2-c382494-dirty-aecb758396b1",
+ "source_status": "complete",
+ "source_sha256": {
+  "manifest.json": "de948785b03c5d31a59efac1208e04e665a3e03ea3829036e83b7dcc65734174",
+  "protocol.json": "9330191607235086e2f5eae36de31fea4dc287f9998083217e3a6de0af8c14e6",
+  "rows.jsonl": "33a1d6c9a27d69831e4d8ab723f6c36520614d8d56c7667932f1bd855489739e",
+  "summary.json": "dd7027f5b15fad7d1845bed6b36610e1683d08f1538109645eae8063f2459aba",
+  "status.json": "7bf7c9cae1c53341b1d08cf549c3e7a7d43c44c419e97beac4bf5f2c4fcffdf2"
+ },
+ "protocol": "pathfinder.vision-protocol/3",
+ "code": {
+  "commit": "c382494b414edf1924782d5892b7012274d3b481",
+  "dirty": true,
+  "diff_sha256": "a454deec4d23c0d19b8d9f676d3328bac46e81952216fc09332a70d26b4529e3",
+  "branch": "fix/benchmark-followthrough-20261117"
+ },
+ "generator": "tools/vision_report.py",
+ "generator_sha256": "523cc35b1a7254a9d68b4572c3fbdcb3be42255dcafa12d1f88856336e7ad396",
+ "generator_hash_normalization": "LF",
+ "auxiliary_sources": {},
+ "diagnostic_only": false,
+ "profile_run": null,
+ "files": {
+  "REPORT.md": "49fb99fd4ad7a5844ae3200c780dfab8049307f271bc444c9cd252160b62ad23",
+  "ate_by_scenario.png": "1cbf50526322577c09593c8af9f101c48ea7a25f45414afe75aee1acf3964e8a",
+  "error_blackout_20s_at60.png": "bcf15ddd140a84349083f2b5106cde829fc65fe82721dcc9bb4eeb319ae09207",
+  "error_blackout_5s_at40.png": "52fa5db84fae80af88c9bd9ec6ce33afaf78b8ba4af59df57f7447e1ea4fdf99",
+  "error_clean.png": "ab5628a38ac7d35820d57ae63ae74db59312739382ce44b53e929e3fcf1cb86e",
+  "error_frozen_3s_at60.png": "15c7f632f641320b7d1b806dbbc8495cf71fb57a9bb8f8cf45f408fa0cb7fc16",
+  "source_manifest.json": "de948785b03c5d31a59efac1208e04e665a3e03ea3829036e83b7dcc65734174",
+  "source_protocol.json": "9330191607235086e2f5eae36de31fea4dc287f9998083217e3a6de0af8c14e6",
+  "tables.json": "d86bf6533c51e9a940e7e57403b47fc1a0790017b6c01eb363b786ffd87464f0",
+  "trajectory_clean.png": "a6dfcbbc79ca755135af1404a014a3c9a054bbea1a0ca1db3c919faff414ef6d"
+ },
+ "rows_jsonl_note": "rows.jsonl (full per-run metrics + 10 Hz series) stays in the source run directory; tables.json carries every reported number"
+}

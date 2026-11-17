@@ -25,6 +25,8 @@ import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
+import cv2
+
 import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 from scipy.stats import chi2
@@ -77,17 +79,31 @@ def scale_score(row):
     return abs(np.log(med / chi2.ppf(.5, 6))) + abs(np.log(tail / chi2.ppf(.95, 6)))
 
 
+def select_keyframe(per_kf):
+    """Keyframe interval from vision-only calibration error.
+
+    Fused ATE is recorded and is not the selection key: it depends on the
+    covariance scale and would mix the two declared choices.
+    """
+    def key(row):
+        ate = row.get("vo_only_ate_rmse_m")
+        rot = row.get("vo_only_rot_rmse_deg")
+        return (ate if ate is not None else np.inf, rot if rot is not None else np.inf)
+    return min(per_kf, key=key)
+
+
 def _one_kf(args):
     """Front end at one keyframe interval, then every covariance scale (worker process)."""
-    seq, kf_every, segment, noise, offset = args
-    s = D.load_streams(seq)
-    ref = D.load_reference(seq)
+    seq, kf_every, segment, noise, offset, data_root = args
+    root = Path(data_root) if data_root else D.ROOT
+    s = D.load_streams(seq, root)
+    ref = D.load_reference(seq, root)
     rig = RigCalibration.from_kalibr(s.calib_path)
     lo, hi = s.imu_t[0] + segment[0], s.imu_t[0] + segment[1]
     m = (s.imu_t >= lo) & (s.imu_t <= hi)
     n_frames = int(np.searchsorted(s.frame_t + rig.time_shift + offset, hi, side="right"))
     fe = run_frontend(s.frame_t, s.frame_paths, rig, s.imu_t[0], cfg=VOConfig(kf_every=kf_every),
-                      index_sha=D.index_sha256(seq), frame_range=(0, n_frames), time_shift=rig.time_shift + offset)
+                      index_sha=D.index_sha256(seq, root), frame_range=(0, n_frames), time_shift=rig.time_shift + offset)
     ev = [e for e in fe["events"] if lo <= e["t"] <= hi]
     rows = []
     for scale in GRID:
@@ -113,6 +129,7 @@ def _one_kf(args):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--seq", default="room1")
+    ap.add_argument("--data-root", default=None, help="directory that contains dataset-<seq>_512_16")
     ap.add_argument("--segment", nargs=2, type=float, default=(0.0, 60.0), help="seconds since first IMU sample")
     ap.add_argument("--write", default=None, help="write the selected calibration JSON here (refuses overwrite)")
     ap.add_argument("--out", default=None)
@@ -125,8 +142,9 @@ def main(argv=None):
         if sync.get("status") == "unsupported" or value is None or not np.isfinite(value):
             raise ValueError("sync measurement has no supported finite offset")
         offset = float(value) if abs(value) > 1e-3 else 0.
-    s = D.load_streams(a.seq)
-    ref = D.load_reference(a.seq)
+    root = Path(a.data_root) if a.data_root else D.ROOT
+    s = D.load_streams(a.seq, root)
+    ref = D.load_reference(a.seq, root)
     rig = RigCalibration.from_kalibr(s.calib_path)
     noise = imu_noise_from_config(s.dir / "dso" / "imu_config.yaml")
     kw = {"root": Path(a.out)} if a.out else {}
@@ -136,12 +154,11 @@ def main(argv=None):
     with run_bundle(f"calibrate-vo-{a.seq}", vars(a), inputs, protocol="calibration", **kw) as run:
         src_hash = _src_hash()                 # computed once, from the code this run executes
         with ProcessPoolExecutor(max_workers=min(len(KF_GRID), os.cpu_count() or 1)) as pool:
-            per_kf = list(pool.map(_one_kf, [(a.seq, kf, tuple(a.segment), noise, offset) for kf in KF_GRID]))
+            per_kf = list(pool.map(_one_kf, [(a.seq, kf, tuple(a.segment), noise, offset, str(root)) for kf in KF_GRID]))
         for r in per_kf:
             for c in r["candidates"]:
                 print(r["kf_every"], c)
-        chosen = min(per_kf, key=lambda r: (r["vo_only_ate_rmse_m"] if r["vo_only_ate_rmse_m"] is not None else np.inf,
-                                           r["vo_only_rot_rmse_deg"] if r["vo_only_rot_rmse_deg"] is not None else np.inf))
+        chosen = select_keyframe(per_kf)
         best = {"scale": chosen["selected_scale"]}
         result = {"schema": SCHEMA, "sequence": a.seq, "segment_s": list(a.segment),
                   "split_role": "calibration (development recording, first segment)",
@@ -153,9 +170,13 @@ def main(argv=None):
                   "imu_noise": noise, "imu_noise_source": "dataset dso/imu_config.yaml (inflated by the dataset authors)",
                   "frontend_src_sha256": src_hash,
                   "calibration_sha256": rig.meta["sha256"], "imu_config_sha256": sha256_file(s.dir / "dso/imu_config.yaml"),
+                  "opencv": cv2.__version__, "numpy": np.__version__, "python": sys.version.split()[0],
+                  "vo_covariance_validated": False,
                   "run": str(run.path.name),
                   "limits": "Single development recording; covariance validity is NOT asserted "
-                            "(FilterConfig.vo_covariance_validated stays False)."}
+                            "(FilterConfig.vo_covariance_validated stays False). "
+                            "OpenCV version is part of the fingerprint because KLT and feature detection are not stable across it. "
+                            "Historical v1/v2 files predate this fingerprint and do not describe the current front end."}
         run.write_json("vo_calibration.json", result)
         if a.write:
             p = Path(a.write)

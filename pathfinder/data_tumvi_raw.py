@@ -71,7 +71,7 @@ def load_streams(name: str, root: Path = ROOT) -> Streams:
     if [[v.strip() for v in r] for r in rows] != [[v.strip() for v in r] for r in right_rows]:
         raise ValueError("stereo indices must have matching timestamps and filenames")
     _check_times(ts, "camera")
-    pairs, keep = [], []
+    pairs, keep, skipped_links, missing = [], [], [], []
     for i, (_, fname) in enumerate(rows):
         fname = fname.strip()
         if not fname or fname in (".", "..") or any(c in fname for c in ("/", "\\", ":")):
@@ -83,14 +83,23 @@ def load_streams(name: str, root: Path = ROOT) -> Streams:
             for p in (path.parent, path.parent.parent, m):
                 if p.is_symlink() or _is_junction(p):
                     raise ValueError("camera paths must not traverse links")
-        # Only regular extracted files: linked frames (e.g. archive symlinks) are skipped, never followed.
-        if all(f.is_file() and not f.is_symlink() and not _is_junction(f) for f in (a, b)):
-            pairs.append((a, b))
-            keep.append(i)
+        # Linked frames (archive symlinks) are skipped and never followed. A name in the
+        # index with no file is a broken extract, not a sensor dropout, so it is an error.
+        if any(f.is_symlink() or _is_junction(f) for f in (a, b)):
+            skipped_links.append(fname)
+            continue
+        if not all(f.is_file() for f in (a, b)):
+            missing.append(fname)
+            continue
+        pairs.append((a, b))
+        keep.append(i)
     calib = d / "dso" / "camchain.yaml"
-    if len(keep) < len(rows):
+    if skipped_links:
         import warnings
-        warnings.warn(f"{name}: {len(rows) - len(keep)} of {len(rows)} stereo pairs missing or not regular files")
+        warnings.warn(f"{name}: skipped {len(skipped_links)} symlinked stereo pairs")
+    if missing:
+        raise FileNotFoundError(f"{name}: {len(missing)} indexed stereo pairs are not regular files "
+                                f"(first: {missing[0]})")
     # float64 seconds since the epoch resolve ~0.2 us, far below the 5 ms IMU period.
     return Streams(name, imu[:, 0] * 1e-9, imu[:, 1:4], imu[:, 4:7], ts[keep] * 1e-9, pairs,
                    calib if calib.is_file() else None, d)

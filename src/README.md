@@ -62,6 +62,26 @@ appends 5 s of predicted poses after the last row.
 `main.py` is the commented reference; `main.cpp` is a line-by-line port (exact match without the network, within
 1 µm with it).
 
+The Python entry can run its strapdown step through an optional native C helper;
+the learned update stays in Python. Build from the repository root with
+`python src/build_hotstep.py` (MSVC C++ tools on Windows, a C compiler on Linux/macOS).
+The build emits a platform library plus source/binary hashes and an ABI identifier.
+Compiled binaries are not committed. CI builds them from source. Missing libraries
+use the Python fallback; incompatible or stale libraries warn and use that fallback.
+`PF_NO_HOT=1` explicitly selects the pure-Python implementation.
+
+The native path processes bounded batches of 512 samples after initialization and
+releases its state when the input finishes. The conv stack reuses its workspaces.
+Report whether the helper was loaded when quoting Python runtime: accelerated
+Python and pure Python are distinct benchmark configurations. Neither is the
+standalone C++ submission. Cross-platform parity tests include missing, zero,
+NaN and frozen data across batch boundaries, plus explicit blind extension.
+
+A dropout still leaves a heading variance that is never cleared: the horizontal network update stays shrunk for
+the rest of the file. Clearing that variance after one healthy window was measured on both exposed rooms and
+made the blind 5 s and, on room 2, the mission error worse, so it is not what the entry does
+(`results/runs/20261117-yaw-gauge/REPORT.md`).
+
 ## Measured (Apple M5, macOS; EuRoC / TUM-VI degraded with our stand-in for the organisers' script)
 
 | | C++ | Python |

@@ -86,11 +86,45 @@ class VelNet:
         self.convs, self.fcs = m["convs"], m["fcs"]
         self.n_params = sum(w.size + b.size for w, b, *_ in self.convs) + sum(w.size + b.size for w, b in self.fcs)
         self.x = np.zeros((m["n_in"], self.window), np.float32)
+        # Same products as conv1d, packed once into a GEMM. Workspaces are reused so a forward does not allocate
+        # a padded copy per layer. Checked bit-identical to conv1d on this network (float32).
+        self._cbuf = []
+        for w, b, stride, pad in self.convs:
+            cout, cin, k = w.shape
+            self._cbuf.append({
+                "w": np.ascontiguousarray(w.reshape(cout, cin * k)),
+                "b": np.ascontiguousarray(b.reshape(-1, 1)),
+                "stride": int(stride), "pad": int(pad), "k": int(k), "cin": int(cin), "cout": int(cout),
+                "ws": {},
+            })
+
+    def _conv_stack(self, x):
+        """conv1d + ReLU for every layer. Same values as conv1d; buffers live for the life of the network."""
+        for spec in self._cbuf:
+            stride, pad, k, cin = spec["stride"], spec["pad"], spec["k"], spec["cin"]
+            length = int(x.shape[1])
+            ws = spec["ws"].get(length)
+            if ws is None:
+                lout = (length + 2 * pad - k) // stride + 1
+                xp = np.zeros((cin, length + 2 * pad), np.float32)
+                col = np.empty((cin * k, lout), np.float32)
+                y = np.empty((spec["cout"], lout), np.float32)
+                ws = (xp, col, y, lout)
+                spec["ws"][length] = ws
+            xp, col, y, lout = ws
+            xp[:, pad:pad + length] = x
+            colv = col.reshape(cin, k, lout)
+            for ki in range(k):
+                colv[:, ki, :] = xp[:, ki:ki + lout * stride:stride]
+            np.matmul(spec["w"], col, out=y)
+            y += spec["b"]
+            np.maximum(y, 0, out=y)
+            x = y
+        return x
 
     def forward(self, x):
         """x: (n_in, window), already scaled. Returns the 12 raw outputs."""
-        for w, b, stride, pad in self.convs:
-            x = np.maximum(conv1d(x, w, b, stride, pad), 0)
+        x = self._conv_stack(x)
         z = x.mean(1)
         for j, (w, b) in enumerate(self.fcs):
             z = w @ z + b
@@ -99,15 +133,24 @@ class VelNet:
         return z
 
     def predict(self, ring, start):
-        """ring: list of `window` slots (n_in-tuple or None), oldest slot at index `start`.
+        """ring: list of `window` slots (n_in-tuple or None), oldest slot at index `start`,
+        or a float32 array (n_in, window) already in that same unscaled slot order.
         Returns displacement (3), its std (3), end velocity (3), its std (3) as Python floats."""
         x = self.x
-        x[:] = 0
         W = self.window
-        for j in range(W):
-            s = ring[(start + j) % W]
-            if s is not None:
-                x[:, j] = s
+        if isinstance(ring, np.ndarray):
+            if start:
+                n = W - start
+                x[:, :n] = ring[:, start:]
+                x[:, n:] = ring[:, :start]
+            else:
+                x[:, :] = ring
+        else:
+            x[:] = 0
+            for j in range(W):
+                s = ring[(start + j) % W]
+                if s is not None:
+                    x[:, j] = s
         x[:-1] *= self.scale[:, None]
         o = self.forward(x)
         sd = np.exp(np.clip(o[3:6], -7, 3))

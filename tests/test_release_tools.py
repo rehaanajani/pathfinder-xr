@@ -90,6 +90,35 @@ def test_repo_check_passes():
     assert r.returncode == 0, r.stdout[-2000:]
 
 
+def test_compile_check_does_not_write_bytecode_and_survives_overlap(tmp_path):
+    import threading
+
+    import check_repo
+
+    src = tmp_path / "mod.py"
+    src.write_text("VALUE = 1\n\ndef f(x):\n    return x + 1\n", encoding="utf-8")
+    errors = []
+
+    def go():
+        try:
+            check_repo.compile_source(src)
+        except Exception as exc:  # pragma: no cover - assertion below reports it
+            errors.append(exc)
+
+    threads = [threading.Thread(target=go) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert errors == []
+    assert list(tmp_path.rglob("*.pyc")) == []
+    assert not (tmp_path / "__pycache__").exists()
+    broken = tmp_path / "broken.py"
+    broken.write_text("def (\n", encoding="utf-8")
+    with pytest.raises(SyntaxError):
+        check_repo.compile_source(broken)
+
+
 def test_same_second_runs_are_distinct_and_text_is_lf(tmp_path, monkeypatch):
     from pathfinder import provenance
     monkeypatch.setattr(provenance.time, "strftime", lambda *args: "20260101T000000Z")

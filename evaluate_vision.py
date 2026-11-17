@@ -22,6 +22,8 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict
 from pathlib import Path
 
+import cv2
+
 for _v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
     os.environ.setdefault(_v, "1")
 
@@ -33,7 +35,7 @@ from pathfinder.image_faults import randomized_schedule  # noqa: E402
 from pathfinder.provenance import run_bundle, sha256_file  # noqa: E402
 from pathfinder.stereo_vo import VOConfig  # noqa: E402
 from pathfinder.vision_eval import (IMU_FAULT_KINDS, Frozen, evaluate_scenario,  # noqa: E402
-                                    imu_noise_from_config)
+                                    imu_noise_from_config, system_configs)
 from pathfinder.vision_frontend import _src_hash  # noqa: E402
 
 PROTOCOL = "pathfinder.vision-protocol/3"
@@ -88,10 +90,10 @@ def scenarios(duration: float) -> list:
 
 
 def _worker(args):
-    scn, systems, fz_dict, seq, vo_cfg, model_path = args
+    scn, systems, fz_dict, seq, vo_cfg, model_path, data_root = args
     fz = Frozen(**fz_dict)
-    s = D.load_streams(seq)
-    ref = D.load_reference(seq)
+    s = D.load_streams(seq, Path(data_root) if data_root else D.ROOT)
+    ref = D.load_reference(seq, Path(data_root) if data_root else D.ROOT)
     rig = RigCalibration.from_kalibr(s.calib_path)
     pred = None
     if model_path and any(x in MODEL_SYSTEMS for x in systems):
@@ -102,7 +104,8 @@ def _worker(args):
     from pathfinder.vision_frontend import run_frontend
     frontend_start = time.perf_counter()
     fe = run_frontend(s.frame_t, s.frame_paths, rig, s.imu_t[0], schedule=scn.get("image_faults", []),
-                      seed=scn.get("seed", 0), cfg=VOConfig(**vo_cfg), index_sha=D.index_sha256(seq),
+                      seed=scn.get("seed", 0), cfg=VOConfig(**vo_cfg),
+                      index_sha=D.index_sha256(seq, Path(data_root) if data_root else D.ROOT),
                       time_shift=rig.time_shift + fz.camera_time_offset_s)
     fe["retrieval_wall_s"] = time.perf_counter() - frontend_start
     return evaluate_scenario(scn, systems, fz, s, ref, rig, pred, frontend=fe)
@@ -111,6 +114,7 @@ def _worker(args):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--seq", default="room1")
+    ap.add_argument("--data-root", default=None, help="directory that contains dataset-<seq>_512_16")
     ap.add_argument("--calibration", required=True, help="JSON from tools/calibrate_vo.py")
     ap.add_argument("--sync", default=None, help="sync.json from tools/check_sync.py (records the measured offset)")
     ap.add_argument("--model", default="models/dispnet_faults/best.pt")
@@ -127,7 +131,12 @@ def main(argv=None):
         raise SystemExit("calibration schema mismatch")
     if cal["frontend_src_sha256"] != _src_hash():
         raise SystemExit("front-end source changed since calibration: recalibrate (new protocol version)")
-    s = D.load_streams(a.seq)
+    if cal.get("opencv") is not None and cal["opencv"] != cv2.__version__:
+        raise SystemExit(f"OpenCV {cv2.__version__} != calibration fingerprint {cal['opencv']}")
+    if cal.get("vo_covariance_validated") is True:
+        raise SystemExit("calibration must not assert vo_covariance_validated")
+    root = Path(a.data_root) if a.data_root else D.ROOT
+    s = D.load_streams(a.seq, root)
     duration = float(s.imu_t[-1] - s.imu_t[0])
     noise = imu_noise_from_config(s.dir / "dso" / "imu_config.yaml")
     rig_check = RigCalibration.from_kalibr(s.calib_path)
@@ -158,6 +167,9 @@ def main(argv=None):
             raise SystemExit(f"model checkpoint hash {got} != expected {a.model_sha256}")
     fz = Frozen(protocol=PROTOCOL, imu_noise=noise, vo_cov_scale=float(cal["selected_vo_cov_scale"]),
                 camera_time_offset_s=offset, model=model, model_sha256=a.model_sha256 if model else None)
+    for name, (cfg, _cam, _mdl) in system_configs(fz).items():
+        if cfg.vo_covariance_validated:
+            raise SystemExit(f"{name} asserts vo_covariance_validated without independent evidence")
     vo_cfg = asdict(VOConfig(kf_every=int(cal["selected_kf_every"])))
     all_scn = scenarios(duration)
     if a.scenarios == "slice":
@@ -186,10 +198,16 @@ def main(argv=None):
                                          "scenarios": chosen, "systems": systems, "sequence": a.seq,
                                          "split_role": "development recording (previously exposed); see docs/PROTOCOL.md",
                                          "duration_s": duration, "sync_measurement": sync and sync.get("camera_imu"),
-                                         "calibration_run": cal.get("run")})
+                                         "calibration_run": cal.get("run"),
+                                         "frontend_src_sha256": cal["frontend_src_sha256"],
+                                         "calibration_opencv": cal.get("opencv"),
+                                         "runtime_opencv": cv2.__version__,
+                                         "vo_covariance_validated": False,
+                                         "data_root": str(root),
+                                         "external_vio": "not an input; a separate baseline must not be fused (IMU would be counted twice)"})
         rows_path = run.file("rows.jsonl")
         t0 = time.time()
-        jobs = [(scn, systems, asdict(fz), a.seq, vo_cfg, model) for scn in chosen]
+        jobs = [(scn, systems, asdict(fz), a.seq, vo_cfg, model, str(root)) for scn in chosen]
         n_rows = 0
         with open(rows_path, "w") as fh, ProcessPoolExecutor(max_workers=a.workers) as pool:
             futs = {pool.submit(_worker, j): j[0]["name"] for j in jobs}

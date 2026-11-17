@@ -1,0 +1,57 @@
+{
+ "schema": "pathfinder.result-bundle/1",
+ "source_run": "20261117T044142Z-vision-room1-c382494-dirty-0f9eb68c5d19",
+ "source_status": "complete",
+ "source_sha256": {
+  "manifest.json": "bdd1b6154c22b0375a6941d2fd8e489073f5f4d9b6235615edea393b3319c8ed",
+  "protocol.json": "e1b0f3fb632a907b0b63c5700df3b254f800c8da8918ec5b7a99851233a94fb1",
+  "rows.jsonl": "8a93b519ef0f52d03385a8985249aebb227153baf27c6c572d047d7e0cf63471",
+  "summary.json": "bcc34e130549ee21b88a3150630c9ed8532f691b1b8842eca503f725774a2880",
+  "status.json": "bdc8cf2acd2291123007b3de157a24ae9505ac89f371450157da953e10bda1c0"
+ },
+ "protocol": "pathfinder.vision-protocol/3",
+ "code": {
+  "commit": "c382494b414edf1924782d5892b7012274d3b481",
+  "dirty": true,
+  "diff_sha256": "47f801367436585b059fdcdacfbe16cedddaeb143f1b32f093cdc912fe22b210",
+  "branch": "fix/benchmark-followthrough-20261117"
+ },
+ "generator": "tools/vision_report.py",
+ "generator_sha256": "523cc35b1a7254a9d68b4572c3fbdcb3be42255dcafa12d1f88856336e7ad396",
+ "generator_hash_normalization": "LF",
+ "auxiliary_sources": {
+  "profile": {
+   "run": "20261115T181641Z-profile-room1-51192ba",
+   "file": "profile.json",
+   "sha256": "519460916f7b0d75147c63a3db8289c8ed25b7846c838e45dcb87d0f0897b0a9"
+  },
+  "model_shift": {
+   "run": "20261115T171018Z-model-shift-797eb67",
+   "file": "model_shift.json",
+   "sha256": "f0240474584f85101d08e8dedbb747d1950e30098db43eae98c8a77242c88f8b"
+  },
+  "sync": {
+   "run": "20261115T170934Z-check-sync-room1-797eb67",
+   "file": "sync.json",
+   "sha256": "11ac55af5a4a86105ccf51a916c989828e6a8af9771359b58590e53a1efdf90b"
+  }
+ },
+ "diagnostic_only": false,
+ "profile_run": "20261115T181641Z-profile-room1-51192ba",
+ "files": {
+  "REPORT.md": "654a34fbe025df655255c8d71380ae874bbb9c85281b608de4788bbe66940fe5",
+  "ate_by_scenario.png": "356c8c56fd375809446b7dd522973242f6f80d3fbf54f0f898e9ef77043ed073",
+  "error_blackout_20s_at60.png": "d52988012ff604291ed491ac78dda1a324cad9dbd80fdd84d852fc5d767386cc",
+  "error_blackout_5s_at40.png": "007f87703e159c90b44b58c4efd544c3cbe89499debc2d64d3c6e606537f739c",
+  "error_clean.png": "e5d25d22755b90987f6bfd6bc6a32ef1cb9c0f892540075f22fdf17956f05cf7",
+  "error_frozen_3s_at60.png": "ce5fefd78054ca521bcfcae8400acac312a3f7d8dcc84042b0e052b74dab7652",
+  "source_manifest.json": "bdd1b6154c22b0375a6941d2fd8e489073f5f4d9b6235615edea393b3319c8ed",
+  "source_model_shift.json": "bf44f185f0edf583bcfae0ecd53cd41868b2b02a515f616bd31d3f5483420a59",
+  "source_profile.json": "c5256d855d89cb438b01b0127e327e68e3d68dbab6cede7d0baf0725ff50a3c3",
+  "source_protocol.json": "e1b0f3fb632a907b0b63c5700df3b254f800c8da8918ec5b7a99851233a94fb1",
+  "source_sync.json": "42db6959a211d9b42a0330a7d5cc2e8690605cb2592a8f3510a8098bb2c1a909",
+  "tables.json": "a39a763a5d105b1d3ea3fb3f93523243b20c75377df14cd5f3d7b3676ff87e66",
+  "trajectory_clean.png": "51f739f85aae991909aee9a27fd5d70e4cda484b12416ec134a404c8d70ed011"
+ },
+ "rows_jsonl_note": "rows.jsonl (full per-run metrics + 10 Hz series) stays in the source run directory; tables.json carries every reported number"
+}

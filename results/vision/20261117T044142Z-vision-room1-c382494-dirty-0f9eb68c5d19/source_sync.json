@@ -1,0 +1,93 @@
+{
+ "sequence": "room1",
+ "split_role": "development (conventions/offset measurement only)",
+ "conventions": {
+  "imu_header": [
+   "timestamp [ns]",
+   "w_RS_S_x [rad s^-1]",
+   "w_RS_S_y [rad s^-1]",
+   "w_RS_S_z [rad s^-1]",
+   "a_RS_S_x [m s^-2]",
+   "a_RS_S_y [m s^-2]",
+   "a_RS_S_z [m s^-2]"
+  ],
+  "mocap_header": [
+   "timestamp [ns]",
+   "p_RS_R_x [m]",
+   "p_RS_R_y [m]",
+   "p_RS_R_z [m]",
+   "q_RS_w []",
+   "q_RS_x []",
+   "q_RS_y []",
+   "q_RS_z []"
+  ],
+  "cam_header": [
+   "timestamp [ns]",
+   "filename"
+  ],
+  "imu": {
+   "n": 28122,
+   "t0": 1520530308.1819017,
+   "t1": 1520530449.2323296,
+   "median_dt": 0.0050160884857177734,
+   "max_gap": 0.005036115646362305,
+   "non_increasing": 0
+  },
+  "frames": {
+   "n": 2821,
+   "t0": 1520530308.1994476,
+   "t1": 1520530449.2039113,
+   "median_dt": 0.05000185966491699,
+   "max_gap": 0.051458120346069336,
+   "non_increasing": 0
+  },
+  "mocap": {
+   "n": 16541,
+   "t0": 1520530308.1896794,
+   "t1": 1520530449.2146783,
+   "median_dt": 0.008333206176757812,
+   "max_gap": 1.058332920074463,
+   "non_increasing": 0
+  },
+  "calibration": "C:\\Users\\Nikhil\\AppData\\Local\\Temp\\pfxr-audit\\src\\local_data\\tumvi\\dataset-room1_512_16\\dso\\camchain.yaml"
+ },
+ "mocap_imu": {
+  "offset_s": 0.00010559111555369403,
+  "convention": "reference time = imu time + offset_s",
+  "window_s": 0.05,
+  "rms_increment_residual_deg": 0.2915015698386166,
+  "rms_increment_at_zero_deg": 0.2915015698386166,
+  "mocap_to_imu_rate_rotation_deg": 0.04924069270646312,
+  "gyro_bias_estimate_rad_s": [
+   4.3401638540708115e-05,
+   0.00021061073592222026,
+   0.00036524124476145794
+  ],
+  "n_increments": 8186,
+  "scan_ms": [
+   -50.0,
+   50.0
+  ]
+ },
+ "gravity": {
+  "mean_specific_force_world": [
+   0.06996590965800495,
+   0.015669425499568054,
+   9.769126587142111
+  ],
+  "norm": 9.769389696138475,
+  "angle_from_plus_z_deg": 0.42050652299289326,
+  "n": 27437,
+  "note": "mean world specific force over the recording = gravity reaction if mean acceleration ~ 0"
+ },
+ "camera_imu": {
+  "offset_s": 0.0001657144950502357,
+  "convention": "imu time of image = front-end time + offset_s",
+  "file_time_shift_s": 0.0,
+  "file_time_shift_source": "absent_assumed_zero",
+  "rms_increment_residual_deg": 0.04983693929671564,
+  "rms_increment_at_zero_deg": 0.04990919268152183,
+  "n_increments": 2786
+ },
+ "frontend_key": "5707d82e76b9a875905360392c40427e6baa2d457b8d9fd3d08ac578a0c4eb33"
+}

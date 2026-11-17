@@ -23,7 +23,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .filter import ESKF, T_EPS, FilterConfig, FilterLog, ImuCleaner, saturation_mask
+from .filter import ESKF, T_EPS, CausalSaturation, FilterConfig, FilterLog, ImuCleaner
 
 
 @dataclass
@@ -44,8 +44,8 @@ class StreamingTracker:
         n = max(self.W, int(2.0 * rate)) + 2
         self.hist = deque(maxlen=n)                 # (p, Pp, R, gyro, acc) per sample
         self.sat_hist = deque(maxlen=n)             # saturated-recently flag per sample
-        # 2 s window for the running max, plus the 2 earlier samples the 3-in-a-row rule looks at (#16)
-        self.raw = deque(maxlen=int(2.0 * rate) + 3)
+        # Same horizon saturation_mask uses: win_s plus the two earlier hits of the 3-in-a-row rule.
+        self.sat = CausalSaturation(rate) if cfg.saturation_guard else None
         self.clean = ImuCleaner()
         self.imu_bad_hold = int(round(0.5 * rate))   # samples a bad IMU reading keeps `valid` off
         self.last_bad_k = -10 ** 9
@@ -75,12 +75,8 @@ class StreamingTracker:
         gyro, acc, imu_ok, imu_held = self.clean(gyro, acc)     # same rule as filter.run (#13)
         if not imu_ok:
             self.last_bad_k = k
-        # Saturation: decided from the last 2 s of raw samples (same rule as the offline filter).
-        self.raw.append(np.r_[gyro, acc])
-        sat_now = False
-        if cfg.saturation_guard and len(self.raw) >= 3:
-            r = np.array(self.raw)
-            sat_now = bool(saturation_mask(r[:, :3], r[:, 3:], self.rate)[-1])
+        # Saturation: same rule as the offline filter, one sample at a time.
+        sat_now = bool(self.sat.push(gyro, acc)) if self.sat is not None else False
         if sat_now:
             self.last_sat_k = k
         sat_recent = k - self.last_sat_k <= int(cfg.sat_hold_s / self.dt)

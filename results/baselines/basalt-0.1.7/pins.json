@@ -1,0 +1,58 @@
+{
+ "system": "basalt",
+ "version": "0.1.7",
+ "release_commit": "6d8637b9d68ea18a1a63c1baa72818779e156932",
+ "release_commit_source": "GitLab API projects/VladyslavUsenko%2Fbasalt/releases tag 0.1.7",
+ "binary": "/home/nikhil/vio-prefix/basalt-0.1.7/release/bin/basalt_vio",
+ "tarball_sha256": "8ab56b2ab27315a9c64cb8ae9c99d0d4d894e2cc87bc9841d8defe30b86e6d24",
+ "source_checkout_not_the_binary": "0f3b2b52c807f70ff4e2973ce253c73329eea7bc",
+ "ld_library_path": "/home/nikhil/vio-prefix/basalt-0.1.7/release/lib:/home/nikhil/vio-prefix/env/lib",
+ "flags": [
+  "--show-gui=0",
+  "--dataset-type",
+  "euroc",
+  "--save-trajectory",
+  "euroc",
+  "--use-imu=1",
+  "--num-threads",
+  "4"
+ ],
+ "not_passed": [
+  "--save-groundtruth",
+  "--marg-data"
+ ],
+ "faults_replayed": false,
+ "fused_into_pathfinder": false,
+ "vo_covariance_validated": false,
+ "score": "pathfinder.scoring start_se3 ate_all; their log SVD is recorded only as a cross-check",
+ "sequences": {
+  "room1": {
+   "dataset": "/home/nikhil/tumvi-ext4/dataset-room1_512_16",
+   "trajectory_lines": 2822,
+   "trajectory_sha256": "40243c01714a0c1a78cee496690cdd8516aa1f0bcc5a88f94b01fa3b8cca4d27",
+   "config_sha256": "3b4d22e20da0f19ada6af656ca29a931f010bd7eb2daf36fbe4b4e9a6b8c2b3d",
+   "calib_sha256": "6286c43a43b2cce8f4c3974765106a8da13c357b888d4a5c44f085616e96a04c",
+   "score_run": "20261117T044741Z-external-vio-basalt-room1-c382494-dirty-2f48b7b4b63c",
+   "start_se3_ate_rmse_m": 0.16147211014552076,
+   "start_se3_rot_rmse_deg": 1.5635578464873556,
+   "full_4dof_ate_rmse_m": 0.10678496190475974,
+   "reference_supported": 2765,
+   "unsupported_excluded": 56,
+   "valid_fraction": 0.0
+  },
+  "room2": {
+   "dataset": "/home/nikhil/tumvi-ext4/dataset-room2_512_16",
+   "trajectory_lines": 2883,
+   "trajectory_sha256": "33a948711db6ab2f07cb425b7f4fe839f34f8655ea4a8707fc622055d168895c",
+   "config_sha256": "3b4d22e20da0f19ada6af656ca29a931f010bd7eb2daf36fbe4b4e9a6b8c2b3d",
+   "calib_sha256": "6286c43a43b2cce8f4c3974765106a8da13c357b888d4a5c44f085616e96a04c",
+   "score_run": "20261117T044752Z-external-vio-basalt-room2-c382494-dirty-81c31164c5f3",
+   "start_se3_ate_rmse_m": 0.13163201328718702,
+   "start_se3_rot_rmse_deg": 5.497998793987105,
+   "full_4dof_ate_rmse_m": 0.07621742074089433,
+   "reference_supported": 2588,
+   "unsupported_excluded": 294,
+   "valid_fraction": 0.0
+  }
+ }
+}

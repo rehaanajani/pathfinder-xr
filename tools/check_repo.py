@@ -2,7 +2,7 @@
 
     python tools/check_repo.py
 
-1. every tracked Python file compiles;
+1. every tracked Python file compiles (in memory; nothing is written under ``__pycache__``);
 2. versioned JSON artifacts carry a known ``schema`` and required fields (models manifest, VO
    calibration, promoted result bundles);
 3. no tracked file contains credential-like strings (GitHub/AWS/private-key patterns);
@@ -11,7 +11,6 @@ Exits non-zero with a list of problems.
 """
 
 import json
-import py_compile
 import re
 import subprocess
 import sys
@@ -26,7 +25,20 @@ SCHEMAS = {
                                     "frontend_src_sha256", "imu_noise", "split_role"),
     "pathfinder.result-bundle/1": ("source_run", "protocol", "files"),
     "pathfinder.exposure/1": ("recordings",),
+    "pathfinder.track3-score/1": ("mode", "rows"),
+    "pathfinder.track3-score/2": ("mode", "rows", "support_coverage", "max_gap_s"),
+    "pathfinder.timing-run/1": ("test", "isolated_process", "returncode"),
+    "pathfinder.confirmatory-candidate/1": ("id", "source_url", "sha256", "status"),
 }
+
+
+def compile_source(path: Path) -> None:
+    """Compile one module in memory.
+
+    ``py_compile.compile`` writes a ``__pycache__`` file. Two checks running at once then
+    race on that bytecode. ``compile`` only parses and does not write.
+    """
+    compile(path.read_bytes(), str(path), "exec", dont_inherit=True)
 
 
 def tracked():
@@ -42,9 +54,9 @@ def main():
             continue
         if p.suffix == ".py":
             try:
-                py_compile.compile(str(p), doraise=True, cfile=None)
-            except py_compile.PyCompileError as exc:
-                problems.append(f"compile: {p.relative_to(ROOT)}: {exc.msg.splitlines()[-1]}")
+                compile_source(p)
+            except (SyntaxError, ValueError) as exc:
+                problems.append(f"compile: {p.relative_to(ROOT)}: {exc}")
         if p.stat().st_size > 10 * 2 ** 20:
             problems.append(f"size: {p.relative_to(ROOT)} is {p.stat().st_size / 2 ** 20:.1f} MB")
         if p.suffix in (".png", ".jpg", ".mp4", ".pdf", ".pptx", ".onnx", ".pt", ".zip"):

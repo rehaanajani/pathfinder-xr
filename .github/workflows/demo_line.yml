@@ -17,3 +17,24 @@ jobs:
       - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
       - run: pip install numpy scipy pytest opencv-python-headless pyyaml pandas matplotlib
       - run: OMP_NUM_THREADS=1 python -m pytest -q tests
+  timing:
+    # Owns the 1x real-time check. Separate job so the unit-test process does not
+    # share a clock with it. A red full `tests` job from host load is not this result.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: demo_line
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install numpy scipy pytest
+      - run: python tools/run_isolated_timing.py --junit timing-junit.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: demo-isolated-timing
+          path: |
+            demo_line/timing-junit.xml
+            results/runs/*-demo-timing-*/timing.json
+          retention-days: 14

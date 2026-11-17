@@ -1,0 +1,124 @@
+{
+ "schema": "pathfinder.run/1",
+ "name": "vision-room1",
+ "created_utc": "20261117T044142Z",
+ "command": [
+  "evaluate_vision.py",
+  "--seq",
+  "room1",
+  "--data-root",
+  "/home/nikhil/tumvi-ext4",
+  "--calibration",
+  "calibration/vo_room1_v3.json",
+  "--sync",
+  "results/runs/20261115T170934Z-check-sync-room1-797eb67/sync.json",
+  "--workers",
+  "6"
+ ],
+ "code": {
+  "commit": "c382494b414edf1924782d5892b7012274d3b481",
+  "dirty": true,
+  "diff_sha256": "47f801367436585b059fdcdacfbe16cedddaeb143f1b32f093cdc912fe22b210",
+  "branch": "fix/benchmark-followthrough-20261117"
+ },
+ "environment": {
+  "python": "3.14.4",
+  "implementation": "CPython",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "machine": "x86_64",
+  "processor": "",
+  "cpu_count": 16,
+  "omp_num_threads": "1",
+  "packages": {
+   "numpy": "2.5.5",
+   "scipy": "1.18.1",
+   "cv2": "5.0.0",
+   "torch": "2.15.0+cpu",
+   "yaml": "6.0.3",
+   "onnxruntime": "1.32.0",
+   "pandas": "3.1.1",
+   "matplotlib": "3.11.2"
+  }
+ },
+ "config": {
+  "seq": "room1",
+  "data_root": "/home/nikhil/tumvi-ext4",
+  "calibration": "calibration/vo_room1_v3.json",
+  "sync": "results/runs/20261115T170934Z-check-sync-room1-797eb67/sync.json",
+  "model": "models/dispnet_faults/best.pt",
+  "model_sha256": "611e97fdad4ac7735a3086179e059edb772f6d93d13a40c3b88b8d4bfec3eba3",
+  "no_model": false,
+  "allow_calibration_transfer": false,
+  "scenarios": "all",
+  "workers": 6,
+  "out": null,
+  "systems": [
+   "vo_only",
+   "imu_only",
+   "conventional",
+   "pathfinder",
+   "pathfinder_no_gate",
+   "pathfinder_uncal_cov",
+   "pathfinder_no_adaptive_q",
+   "pathfinder_no_health",
+   "pathfinder_model",
+   "pathfinder_model_no_selfcheck",
+   "pathfinder_model_biascorr",
+   "conventional_gated",
+   "pathfinder_no_reanchor"
+  ]
+ },
+ "seeds": [
+  100,
+  101,
+  102,
+  103,
+  104,
+  105,
+  106,
+  107,
+  108,
+  109,
+  110,
+  111
+ ],
+ "protocol": "pathfinder.vision-protocol/3",
+ "inputs": {
+  "imu": {
+   "path": "/home/nikhil/tumvi-ext4/dataset-room1_512_16/mav0/imu0/data.csv",
+   "sha256": "8cd471ca2c1425260534228fbe0f3e27bd6711199dfce7c971447cdf184569e2"
+  },
+  "cam0_index": {
+   "path": "/home/nikhil/tumvi-ext4/dataset-room1_512_16/mav0/cam0/data.csv",
+   "sha256": "95420d52db3c4f392d7df8a4b562abb353b7b8db0d4f73fb76a3031330bd5ddb"
+  },
+  "cam1_index": {
+   "path": "/home/nikhil/tumvi-ext4/dataset-room1_512_16/mav0/cam1/data.csv",
+   "sha256": "95420d52db3c4f392d7df8a4b562abb353b7b8db0d4f73fb76a3031330bd5ddb"
+  },
+  "camchain": {
+   "path": "/home/nikhil/tumvi-ext4/dataset-room1_512_16/dso/camchain.yaml",
+   "sha256": "3a0c0285f4d0a3a1678053b2e5912e3e250e78ac09bd009f6d7d8bba669d5703"
+  },
+  "imu_config": {
+   "path": "/home/nikhil/tumvi-ext4/dataset-room1_512_16/dso/imu_config.yaml",
+   "sha256": "e309d3f4b5e6e812580fcb9c9f402ab79f4a09931e41f433e7038301118683a1"
+  },
+  "reference_scoring_only": {
+   "path": "/home/nikhil/tumvi-ext4/dataset-room1_512_16/mav0/mocap0/data.csv",
+   "sha256": "24c577e2dcddcd54a4b5d9d988277d00b3b1b64785033bce93775da75eb95fa5"
+  },
+  "vo_calibration": {
+   "path": "calibration/vo_room1_v3.json",
+   "sha256": "c645ddfa248e86b24489f842fe4cebd011bb97e644fd21c7d649b716a49af90f"
+  },
+  "model": {
+   "path": "models/dispnet_faults/best.pt",
+   "sha256": "611e97fdad4ac7735a3086179e059edb772f6d93d13a40c3b88b8d4bfec3eba3"
+  },
+  "sync": {
+   "path": "results/runs/20261115T170934Z-check-sync-room1-797eb67/sync.json",
+   "sha256": "11ac55af5a4a86105ccf51a916c989828e6a8af9771359b58590e53a1efdf90b"
+  }
+ }
+}

@@ -1,0 +1,116 @@
+{
+ "schema": "pathfinder.run/1",
+ "name": "vision-room2",
+ "created_utc": "20261117T074116Z",
+ "command": [
+  "-c"
+ ],
+ "code": {
+  "commit": "c382494b414edf1924782d5892b7012274d3b481",
+  "dirty": true,
+  "diff_sha256": "a454deec4d23c0d19b8d9f676d3328bac46e81952216fc09332a70d26b4529e3",
+  "branch": "fix/benchmark-followthrough-20261117"
+ },
+ "environment": {
+  "python": "3.14.4",
+  "implementation": "CPython",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "machine": "x86_64",
+  "processor": "",
+  "cpu_count": 16,
+  "omp_num_threads": "1",
+  "packages": {
+   "numpy": "2.5.5",
+   "scipy": "1.18.1",
+   "cv2": "5.0.0",
+   "torch": "2.15.0+cpu",
+   "yaml": "6.0.3",
+   "onnxruntime": "1.32.0",
+   "pandas": "3.1.1",
+   "matplotlib": "3.11.2"
+  }
+ },
+ "config": {
+  "seq": "room2",
+  "data_root": "/home/nikhil/tumvi-ext4",
+  "calibration": "calibration/vo_room1_v3.json",
+  "sync": null,
+  "model": "models/dispnet_faults/best.pt",
+  "model_sha256": "611e97fdad4ac7735a3086179e059edb772f6d93d13a40c3b88b8d4bfec3eba3",
+  "no_model": false,
+  "allow_calibration_transfer": true,
+  "scenarios": "all",
+  "workers": 7,
+  "out": null,
+  "systems": [
+   "vo_only",
+   "imu_only",
+   "conventional",
+   "pathfinder",
+   "pathfinder_no_gate",
+   "pathfinder_uncal_cov",
+   "pathfinder_no_adaptive_q",
+   "pathfinder_no_health",
+   "pathfinder_model",
+   "pathfinder_model_no_selfcheck",
+   "pathfinder_model_biascorr",
+   "conventional_gated",
+   "pathfinder_no_reanchor"
+  ],
+  "batch_runs": [
+   "20261117T070011Z-vision-room2-c382494-dirty-80551856de5e",
+   "20261117T071016Z-vision-room2-c382494-dirty-8239910dad71",
+   "20261117T072024Z-vision-room2-c382494-dirty-01354545db2f",
+   "20261117T073047Z-vision-room2-c382494-dirty-fd295e247684"
+  ]
+ },
+ "seeds": [
+  100,
+  101,
+  102,
+  103,
+  104,
+  105,
+  106,
+  107,
+  108,
+  109,
+  110,
+  111
+ ],
+ "protocol": "pathfinder.vision-protocol/3",
+ "inputs": {
+  "imu": {
+   "path": "/home/nikhil/tumvi-ext4/dataset-room2_512_16/mav0/imu0/data.csv",
+   "sha256": "e11f764c9c7f04b4a13f3f76a7f2964b133b31832697f59e06995d43c8c03f79"
+  },
+  "cam0_index": {
+   "path": "/home/nikhil/tumvi-ext4/dataset-room2_512_16/mav0/cam0/data.csv",
+   "sha256": "779fb893b2f275507fca1fe22948bf030e23276f5fc12eee31862a656311a23d"
+  },
+  "cam1_index": {
+   "path": "/home/nikhil/tumvi-ext4/dataset-room2_512_16/mav0/cam1/data.csv",
+   "sha256": "779fb893b2f275507fca1fe22948bf030e23276f5fc12eee31862a656311a23d"
+  },
+  "camchain": {
+   "path": "/home/nikhil/tumvi-ext4/dataset-room2_512_16/dso/camchain.yaml",
+   "sha256": "3a0c0285f4d0a3a1678053b2e5912e3e250e78ac09bd009f6d7d8bba669d5703"
+  },
+  "imu_config": {
+   "path": "/home/nikhil/tumvi-ext4/dataset-room2_512_16/dso/imu_config.yaml",
+   "sha256": "e309d3f4b5e6e812580fcb9c9f402ab79f4a09931e41f433e7038301118683a1"
+  },
+  "reference_scoring_only": {
+   "path": "/home/nikhil/tumvi-ext4/dataset-room2_512_16/mav0/mocap0/data.csv",
+   "sha256": "da8e819b98d75398c86cc723f9236b9ae4e621f754f52073e0af78395bc43d5e"
+  },
+  "vo_calibration": {
+   "path": "calibration/vo_room1_v3.json",
+   "sha256": "c645ddfa248e86b24489f842fe4cebd011bb97e644fd21c7d649b716a49af90f"
+  },
+  "model": {
+   "path": "models/dispnet_faults/best.pt",
+   "sha256": "611e97fdad4ac7735a3086179e059edb772f6d93d13a40c3b88b8d4bfec3eba3"
+  }
+ }
+}

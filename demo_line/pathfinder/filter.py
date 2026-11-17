@@ -19,6 +19,7 @@ Learned displacement d = p(t) - p(t - w), two forms:
     heading drift instead of only position.
 """
 
+from collections import deque
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -55,6 +56,69 @@ def saturation_mask(gyro, acc, rate=200.0, flat_tol=1e-6, top=0.95, win_s=2.0):
     run3 = np.zeros(n, bool)
     run3[2:] = hit[2:] & hit[1:-1] & hit[:-2]
     return run3
+
+
+class CausalSaturation:
+    """One-sample equivalent of ``saturation_mask(...)[-1]``.
+
+    The streaming tracker used to stack the last ``int(win_s * rate) + 3`` samples and
+    call ``saturation_mask`` on that whole block at every IMU sample. The flag only
+    depends on a trailing ``win_s`` maximum plus the two previous hits, so this keeps
+    the same horizon and the same comparisons without rebuilding the block.
+    """
+
+    def __init__(self, rate, win_s=2.0, flat_tol=1e-6, top=0.95):
+        self.w = max(1, int(win_s * float(rate)))
+        self.cap = int(win_s * float(rate)) + 3
+        if self.cap < self.w:
+            self.cap = self.w
+        if self.cap < 3:
+            self.cap = 3
+        self.flat_tol = float(flat_tol)
+        self.top = float(top)
+        self.buf = np.zeros((self.cap, 6))
+        self.n = 0
+        self.pos = 0
+        self._hit_prev = False
+        self._hit_prev2 = False
+        # Decreasing deques of (sample index, |axis|): the front is the trailing-window max.
+        self._mx = [deque() for _ in range(6)]
+        self._rm = np.zeros(6)
+
+    def push(self, gyro, acc):
+        cur = self.buf[self.pos]
+        cur[:3] = gyro
+        cur[3:] = acc
+        self.pos = (self.pos + 1) % self.cap
+        self.n += 1
+        rm = self._roll_max(cur)
+        if self.n < 2:
+            hit = False
+        else:
+            prev = self.buf[(self.pos - 2) % self.cap]
+            flat = np.abs(cur - prev) <= self.flat_tol * np.maximum(1.0, np.abs(cur))
+            av = np.abs(cur)
+            near = av >= self.top * np.maximum(rm, 1e-9)
+            hit = bool((flat & near & (av > 1e-6)).any() and not flat.all())
+        flagged = bool(hit and self._hit_prev and self._hit_prev2) if self.n >= 3 else False
+        self._hit_prev2 = self._hit_prev
+        self._hit_prev = hit
+        return flagged
+
+    def _roll_max(self, cur):
+        """Trailing maximum of |sample| over ``w`` samples, equal to ``maximum_filter1d``."""
+        limit = self.n - self.w
+        rm = self._rm
+        for axis in range(6):
+            value = float(abs(cur[axis]))
+            window = self._mx[axis]
+            while window and window[0][0] <= limit:
+                window.popleft()
+            while window and window[-1][1] <= value:
+                window.pop()
+            window.append((self.n, value))
+            rm[axis] = window[0][1]
+        return rm
 
 
 IMU_GYRO_MAX = 100.0      # rad/s; beyond any consumer IMU's range: the reading is garbage

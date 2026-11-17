@@ -126,6 +126,18 @@
     "track3-entry / learned-velocity-debadrita / eval-mayank: training, validation, held-out test and evo evaluation (IMU only)"
    ],
    "role": "exposed"
+  },
+  {
+   "id": "monado/MIO10_short_2_panorama",
+   "dataset": "Monado SLAM dataset (Valve Index)",
+   "device": "Valve Index (2x960x960 @ 54 Hz, IMU 1000 Hz), lighthouse reference",
+   "source_url": "https://huggingface.co/datasets/collabora/monado-slam-datasets/resolve/main/M_monado_datasets/MI_valve_index/MIO_others/MIO10_short_2_panorama.zip",
+   "archive_sha256": "9ca151d8dc5cb84dafecdb8595a22116e0f95162e8a1794eb2ca779bedfe60c4",
+   "archive_bytes": 214797238,
+   "license": "CC BY 4.0",
+   "exposure": [],
+   "role": "nominated confirmatory candidate (pathfinder.confirmatory-protocol/1). Not opened and not scored. Same dataset family as exposed MIO08/MIO09/MIO11, different sequence. Not a substitute for calling room2 held-out.",
+   "local": "see data/confirmatory_mio10.json"
   }
  ],
  "room1_internal_split": {
@@ -136,5 +148,5 @@
   "development_evaluation": "full recording [0, 141] s; metrics also reported for the 60-141 s segment",
   "note": "The 60-141 s segment is a within-recording hold-out: same scene, device, session and person. It is not an independent test subject."
  },
- "untouched_status": "No TUM-VI room recording or EuRoC sequence remains untouched across the team's branches (checked 2026-11-15). A confirmatory real-vision test needs a dataset no branch has used (candidate: a new team recording or an external stereo-inertial dataset with mocap), registered before it is downloaded."
+ "untouched_status": "No TUM-VI room or EuRoC sequence is untouched (branches re-checked 2026-11-17). monado/MIO10_short_2_panorama is the nominated unused compatible sequence: no branch names it. Registered in docs/CONFIRMATORY.md and data/confirmatory_mio10.json before use. Ground truth must not be opened and no model may be run on it until the parent freezes the implementation. It is the same headset family as exposed Index sequences, not a new site. Room2 remains exposed development data."
 }

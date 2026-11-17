@@ -1,0 +1,90 @@
+{
+ "hardware": {
+  "cpu": "11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz",
+  "logical_cpus": 16,
+  "platform": "Windows-11-10.0.26300-SP0",
+  "python": "3.13.5",
+  "threads": "single thread (BLAS/OMP/torch = 1)",
+  "ram_gb": 31.7
+ },
+ "label": "laptop CPU replay from disk; not headset/NPU evidence",
+ "config": {
+  "seq": "room1",
+  "seconds": 60.0,
+  "kf_every": 4,
+  "vo_cov_scale": 4.0,
+  "model": "models/dispnet_faults/best.pt",
+  "out": null
+ },
+ "seconds_replayed": 59.99572777748108,
+ "frames": 1200,
+ "imu_samples": 11962,
+ "startup_ms": 0.5668000085279346,
+ "frame_decode_ms": {
+  "n": 1200,
+  "p50": 17.401600001903716,
+  "p95": 23.703395012125835,
+  "p99": 26.69050698663341,
+  "max": 32.06529999442864,
+  "mean": 17.612753499937146
+ },
+ "frame_vo_ms": {
+  "n": 1200,
+  "p50": 6.37605000520125,
+  "p95": 59.73880000747153,
+  "p99": 78.07050400326261,
+  "max": 93.7992000108352,
+  "mean": 16.962533749829163,
+  "missed_deadline": 102,
+  "budget_ms": 50.0
+ },
+ "frame_total_ms": {
+  "n": 1200,
+  "p50": 24.87105000182055,
+  "p95": 78.80064999044407,
+  "p99": 93.96094700001413,
+  "max": 110.77020000084303,
+  "mean": 34.57528724976631,
+  "missed_deadline": 276,
+  "budget_ms": 50.0
+ },
+ "imu_estimator_ms_steady": {
+  "n": 11961,
+  "p50": 0.5156999977771193,
+  "p95": 3.5383000067668036,
+  "p99": 5.888899994897654,
+  "max": 9.473499987507239,
+  "mean": 0.7770566090672275,
+  "missed_deadline": 247,
+  "budget_ms": 5.0
+ },
+ "imu_estimator_init_replay_ms": 578.8769000064349,
+ "imu_samples_with_model_inference_ms": {
+  "n": 570,
+  "p50": 4.588349998812191,
+  "p95": 6.655529993440722,
+  "p99": 8.406090991193176,
+  "max": 578.8769000064349,
+  "mean": 5.811974386329223,
+  "missed_deadline": 243,
+  "budget_ms": 5.0
+ },
+ "model_calls": 570,
+ "wall_s": 51.439555099990685,
+ "real_time_factor": 0.8573869674650086,
+ "rss_mb_start": 100.4609375,
+ "rss_mb_peak_sampled": 276.95703125,
+ "first_frame_vo_ms": 34.19180000491906,
+ "first_10_frames_vo_ms": [
+  34.19180000491906,
+  6.6079000098397955,
+  6.328199990093708,
+  5.475799989653751,
+  44.06830000516493,
+  6.017799998517148,
+  4.841999994823709,
+  6.371299998136237,
+  41.74089999287389,
+  5.452199999126606
+ ]
+}

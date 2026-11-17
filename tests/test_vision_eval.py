@@ -205,6 +205,19 @@ def test_loader_never_follows_symlinked_images(tmp_path):
     assert [p[0].name for p in s.frame_paths] == ["a.png"]
 
 
+def test_loader_rejects_an_indexed_frame_that_is_absent(tmp_path):
+    from pathfinder import data_tumvi_raw as D
+    d = tmp_path / "dataset-x_512_16" / "mav0"
+    (d / "imu0").mkdir(parents=True)
+    (d / "imu0" / "data.csv").write_text("#t,wx,wy,wz,ax,ay,az\n1000,0,0,0,0,0,9.8\n2000,0,0,0,0,0,9.8\n")
+    for c in ("cam0", "cam1"):
+        (d / c / "data").mkdir(parents=True)
+        (d / c / "data.csv").write_text("#t,f\n1000,a.png\n2000,b.png\n")
+        (d / c / "data" / "a.png").write_bytes(b"x")
+    with pytest.raises(FileNotFoundError, match="not regular files"):
+        D.load_streams("x", root=tmp_path)
+
+
 def _tiny_sequence(base):
     d = base / "dataset-x_512_16" / "mav0"
     (d / "imu0").mkdir(parents=True)
