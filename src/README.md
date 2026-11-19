@@ -70,15 +70,12 @@ appends 5 s of predicted poses after the last row.
 `main.py` is the commented reference; `main.cpp` is a line-by-line port (exact match without the network, within
 1 µm with it).
 
-## Measured (Apple M5, macOS; EuRoC / TUM-VI degraded with our stand-in; scores on the organisers' script are in `results/track3/README.md`)
+## Measured
 
-| | C++ | Python |
-|---|---:|---:|
-| Peak RAM | 2.2-2.3 MB | 41 MB |
-| Time per second of IMU | 2.0 ms | 5.7 ms |
-
-C++ re-measured on 16 Nov with the AirIO network on degraded MH_05 and TUM-VI room6. On a Windows laptop the C++
-entry takes 6.0 ms per second of IMU with a 5.2 MB peak working set, most of it the Windows static runtime
-(`docs/AIRIO.md`); Docker on Linux 3.2 MB (`docs/TRACK3_EVAL.md`).
+`main.py`, worst of 5 recordings with the organisers' damage, MacBook Air M5, Python 3.11
+([`results/track3/python_budget.json`](../results/track3/python_budget.json), `tools/measure_python_budget.py`):
+peak heap of the algorithm **1.32 MiB** (3.75 MiB counting `main.py` itself with its embedded network), CPU
+**7.0 ms** per second of IMU. The C++ port: 2.5 MB and 1.8 ms on the same Mac, 4.0 MB and 5.0 ms on a Galaxy M36
+phone CPU ([`docs/reports/`](../docs/reports/README.md)).
 
 Options: `python3 src/main.py --help` lists them; the C++ entry accepts the same ones.

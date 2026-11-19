@@ -1,0 +1,280 @@
+{
+ "description": "The same 25 recordings as organiser_per_recording.json, scored with src/main.py itself (tools/eval_organiser.py --entry python). Largest difference from the C++-scored file in any metric: 3e-7 m.",
+ "rows": [
+  {
+   "data": "euroc:MH_01_easy",
+   "ate_rmse_m": 4.2147999188696845,
+   "checkpoints_m": 3.9711695230951087,
+   "blind_mean_m": 5.1059456070830604,
+   "blind_end_m": 5.269937514848019,
+   "dropout_m": 3.6779647188390716,
+   "position_drift_1s_m": 0.4668876366195302,
+   "rows": 35629,
+   "rows_match_input": true
+  },
+  {
+   "data": "euroc:MH_02_easy",
+   "ate_rmse_m": 4.513823677828417,
+   "checkpoints_m": 3.882235192515639,
+   "blind_mean_m": 5.558462295569093,
+   "blind_end_m": 5.610653692342012,
+   "dropout_m": 3.823057169407276,
+   "position_drift_1s_m": 0.4805635340024056,
+   "rows": 29480,
+   "rows_match_input": true
+  },
+  {
+   "data": "euroc:MH_03_medium",
+   "ate_rmse_m": 3.085504018211409,
+   "checkpoints_m": 2.5719455463867726,
+   "blind_mean_m": 3.1156468174625984,
+   "blind_end_m": 3.17532803226945,
+   "dropout_m": 2.7691848275151436,
+   "position_drift_1s_m": 0.8143397052593954,
+   "rows": 26189,
+   "rows_match_input": true
+  },
+  {
+   "data": "euroc:MH_04_difficult",
+   "ate_rmse_m": 6.352431575339919,
+   "checkpoints_m": 6.1629823366258965,
+   "blind_mean_m": 3.8949350371308484,
+   "blind_end_m": 3.9356971519481987,
+   "dropout_m": 6.053326326845278,
+   "position_drift_1s_m": 0.9926965371848459,
+   "rows": 19753,
+   "rows_match_input": true
+  },
+  {
+   "data": "euroc:MH_05_difficult",
+   "ate_rmse_m": 6.453541577978236,
+   "checkpoints_m": 5.957949084277362,
+   "blind_mean_m": 4.134408671415281,
+   "blind_end_m": 4.2967411624588125,
+   "dropout_m": 6.155073403033032,
+   "position_drift_1s_m": 0.9173451021117848,
+   "rows": 22137,
+   "rows_match_input": true
+  },
+  {
+   "data": "euroc:V1_01_easy",
+   "ate_rmse_m": 1.7810082999529462,
+   "checkpoints_m": 1.6938714790702913,
+   "blind_mean_m": 1.8054320761785652,
+   "blind_end_m": 1.805890299924912,
+   "dropout_m": 1.616926937464516,
+   "position_drift_1s_m": 0.3889016472074422,
+   "rows": 28367,
+   "rows_match_input": true
+  },
+  {
+   "data": "euroc:V1_02_medium",
+   "ate_rmse_m": 1.2825037067184168,
+   "checkpoints_m": 1.3204673794224722,
+   "blind_mean_m": 0.9350294749210256,
+   "blind_end_m": 1.172021726590064,
+   "dropout_m": 1.1638787569862186,
+   "position_drift_1s_m": 0.5506569284048581,
+   "rows": 16624,
+   "rows_match_input": true
+  },
+  {
+   "data": "euroc:V1_03_difficult",
+   "ate_rmse_m": 1.316873534091053,
+   "checkpoints_m": 1.2066571543157918,
+   "blind_mean_m": 1.2212643779555532,
+   "blind_end_m": 1.2535629039943221,
+   "dropout_m": 1.1961628926661145,
+   "position_drift_1s_m": 0.5613011052519358,
+   "rows": 20844,
+   "rows_match_input": true
+  },
+  {
+   "data": "euroc:V2_01_easy",
+   "ate_rmse_m": 2.106695982647384,
+   "checkpoints_m": 1.9351164793176039,
+   "blind_mean_m": 3.219813047664821,
+   "blind_end_m": 3.220437958507365,
+   "dropout_m": 2.0557385356493234,
+   "position_drift_1s_m": 0.2990893583953963,
+   "rows": 22162,
+   "rows_match_input": true
+  },
+  {
+   "data": "euroc:V2_02_medium",
+   "ate_rmse_m": 1.7807871377691236,
+   "checkpoints_m": 1.415103333817954,
+   "blind_mean_m": 2.7274537623452466,
+   "blind_end_m": 2.7392134434722606,
+   "dropout_m": 1.6464630582108908,
+   "position_drift_1s_m": 0.49218865993441796,
+   "rows": 22880,
+   "rows_match_input": true
+  },
+  {
+   "data": "euroc:V2_03_difficult",
+   "ate_rmse_m": 1.979235678310472,
+   "checkpoints_m": 1.7338850514822535,
+   "blind_mean_m": 2.6890404259940808,
+   "blind_end_m": 2.790712800500749,
+   "dropout_m": 1.8379060779549,
+   "position_drift_1s_m": 0.7182296144495408,
+   "rows": 22623,
+   "rows_match_input": true
+  },
+  {
+   "data": "tumvi:room1",
+   "ate_rmse_m": 0.5719159452212114,
+   "checkpoints_m": 0.5156833807143368,
+   "blind_mean_m": 0.5177846429569867,
+   "blind_end_m": 0.3238714001749279,
+   "dropout_m": 0.5311436913362585,
+   "position_drift_1s_m": 0.5125513616095855,
+   "rows": 27330,
+   "rows_match_input": true
+  },
+  {
+   "data": "tumvi:room2",
+   "ate_rmse_m": 0.6566213377083678,
+   "checkpoints_m": 0.6094890546146173,
+   "blind_mean_m": 0.7016731080113289,
+   "blind_end_m": 0.43075974972311304,
+   "dropout_m": 0.6221315153217092,
+   "position_drift_1s_m": 0.5052742727433083,
+   "rows": 27879,
+   "rows_match_input": true
+  },
+  {
+   "data": "tumvi:room3",
+   "ate_rmse_m": 0.7245768238917839,
+   "checkpoints_m": 0.6139761261860862,
+   "blind_mean_m": 0.6366555690704117,
+   "blind_end_m": 0.6406678586851957,
+   "dropout_m": 0.7027429771342026,
+   "position_drift_1s_m": 0.5020388808184638,
+   "rows": 27350,
+   "rows_match_input": true
+  },
+  {
+   "data": "tumvi:room4",
+   "ate_rmse_m": 0.7539226539764612,
+   "checkpoints_m": 0.7306754508420491,
+   "blind_mean_m": 0.7170411857271741,
+   "blind_end_m": 0.5723918320450924,
+   "dropout_m": 0.7463233219251678,
+   "position_drift_1s_m": 0.3334789168442998,
+   "rows": 21607,
+   "rows_match_input": true
+  },
+  {
+   "data": "tumvi:room5",
+   "ate_rmse_m": 0.9073467605891846,
+   "checkpoints_m": 0.8582250538253853,
+   "blind_mean_m": 0.6224144165103169,
+   "blind_end_m": 0.5752256925175665,
+   "dropout_m": 0.8482469322737752,
+   "position_drift_1s_m": 0.7212868187038731,
+   "rows": 27600,
+   "rows_match_input": true
+  },
+  {
+   "data": "tumvi:room6",
+   "ate_rmse_m": 0.8702650249777271,
+   "checkpoints_m": 1.0157158558569441,
+   "blind_mean_m": 0.4019768834483036,
+   "blind_end_m": 0.38109166639132097,
+   "dropout_m": 0.7858860199115416,
+   "position_drift_1s_m": 0.47598965075721844,
+   "rows": 25577,
+   "rows_match_input": true
+  },
+  {
+   "data": "monado:MIO08_mapping_hard",
+   "ate_rmse_m": 0.699706092685922,
+   "checkpoints_m": 0.5772355413011402,
+   "blind_mean_m": 0.7675058741822642,
+   "blind_end_m": 0.9053830090364081,
+   "dropout_m": 0.6684577195182236,
+   "position_drift_1s_m": 0.4942445542648313,
+   "rows": 27171,
+   "rows_match_input": true
+  },
+  {
+   "data": "monado:MIO09_short_1_updown",
+   "ate_rmse_m": 0.13802024061406679,
+   "checkpoints_m": NaN,
+   "blind_mean_m": NaN,
+   "blind_end_m": NaN,
+   "dropout_m": NaN,
+   "position_drift_1s_m": NaN,
+   "rows": 3379,
+   "rows_match_input": true
+  },
+  {
+   "data": "monado:MIO11_short_3_backandforth",
+   "ate_rmse_m": 0.4864672238789034,
+   "checkpoints_m": 0.403632271189181,
+   "blind_mean_m": 0.755769758827202,
+   "blind_end_m": 0.9151831951364972,
+   "dropout_m": 0.5697321429922956,
+   "position_drift_1s_m": 0.5230672126909289,
+   "rows": 10651,
+   "rows_match_input": true
+  },
+  {
+   "data": "monado:MOO05_inspect_easy",
+   "ate_rmse_m": 1.191771865776569,
+   "checkpoints_m": 0.9501648320160594,
+   "blind_mean_m": 1.016531856562455,
+   "blind_end_m": 1.0407911674127666,
+   "dropout_m": 1.057600052446454,
+   "position_drift_1s_m": 0.3753631934451228,
+   "rows": 97713,
+   "rows_match_input": true
+  },
+  {
+   "data": "monado:MOO07_mapping_easy",
+   "ate_rmse_m": 0.7237621735576903,
+   "checkpoints_m": 0.6071180345459235,
+   "blind_mean_m": 1.1928634235834936,
+   "blind_end_m": 1.1399653072167002,
+   "dropout_m": 0.6898829166432014,
+   "position_drift_1s_m": 0.38459029776414544,
+   "rows": 40182,
+   "rows_match_input": true
+  },
+  {
+   "data": "monado:MOO08_mapping_hard",
+   "ate_rmse_m": 0.5708591728749015,
+   "checkpoints_m": 0.4850586746760756,
+   "blind_mean_m": 0.8638385568854021,
+   "blind_end_m": 1.4534248068204112,
+   "dropout_m": 0.5922101064871048,
+   "position_drift_1s_m": 0.6023878250280665,
+   "rows": 19155,
+   "rows_match_input": true
+  },
+  {
+   "data": "monado:MOO09_short_1_updown",
+   "ate_rmse_m": 0.23120529407665502,
+   "checkpoints_m": NaN,
+   "blind_mean_m": NaN,
+   "blind_end_m": NaN,
+   "dropout_m": NaN,
+   "position_drift_1s_m": NaN,
+   "rows": 4782,
+   "rows_match_input": true
+  },
+  {
+   "data": "monado:MOO11_short_3_backandforth",
+   "ate_rmse_m": 0.5075077341537072,
+   "checkpoints_m": 0.42023689041312445,
+   "blind_mean_m": 0.6789006452589436,
+   "blind_end_m": 0.6488173907101934,
+   "dropout_m": 0.5207635793414288,
+   "position_drift_1s_m": 0.4549227553981722,
+   "rows": 13109,
+   "rows_match_input": true
+  }
+ ]
+}

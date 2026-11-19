@@ -61,17 +61,21 @@ def main():
                                check=True, capture_output=True, text=True)
             r = json.loads(p.stdout.strip().splitlines()[-1])
             secs = (t[-1] - t[0]) * 1e-9
-            row = {"data": spec, "imu_seconds": round(secs, 1),
-                   "heap_peak_mib": round(r["run_peak_bytes"] / 2 ** 20, 2),
-                   "heap_peak_incl_module_mib": round((r["run_peak_bytes"] + r["module_bytes"]) / 2 ** 20, 2),
-                   "cpu_ms_per_s": round(r["cpu_s"] / secs * 1000, 2)}
+            # Tracing starts before main.py is imported, so the run's peak already contains the module (with its
+            # embedded network). The algorithm's own peak is that minus what the module holds.
+            row = {"data": spec, "imu_seconds": round(float(secs), 1),
+                   "heap_peak_algorithm_mib": round((r["run_peak_bytes"] - r["module_bytes"]) / 2 ** 20, 2),
+                   "heap_peak_incl_module_mib": round(r["run_peak_bytes"] / 2 ** 20, 2),
+                   "cpu_ms_per_s": round(float(r["cpu_s"] / secs * 1000), 2)}
             rows.append(row)
             print(row, flush=True)
-    worst = {k: max(r[k] for r in rows) for k in ("heap_peak_mib", "heap_peak_incl_module_mib", "cpu_ms_per_s")}
+    worst = {k: max(r[k] for r in rows) for k in ("heap_peak_algorithm_mib", "heap_peak_incl_module_mib", "cpu_ms_per_s")}
     out = {"entry": "src/main.py (standalone, network weights embedded)", "python": platform.python_version(),
            "machine": platform.platform(), "processor": platform.processor() or platform.machine(),
-           "method": "tracemalloc peak during the run (numpy imported first, as the runtime); CPU = process time, "
-                     "best of 3, one thread", "worst": worst, "rows": rows}
+           "method": "tracemalloc started after importing numpy and before importing main.py; "
+                     "heap_peak_incl_module = peak while running (main.py and its embedded network included); "
+                     "heap_peak_algorithm = that minus the memory main.py holds once imported; "
+                     "CPU = process time, best of 3, one thread", "worst": worst, "rows": rows}
     Path(a.out).write_text(json.dumps(out, indent=1))
     print("worst", worst, "->", a.out)
 

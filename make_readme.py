@@ -133,6 +133,7 @@ def _relink(md):
     return re.sub(r"(\]|!\[[^\]]*\])\(([^)\s]+)\)", f, md)
 
 
-out = _relink(out)
+out = ("> The camera + multi-IMU system built before the official Track 3 brief. Not the scored entry; see the "
+       "[main README](../README.md).\n\n" + _relink(out))
 Path("docs/WIDER_SYSTEM.md").write_text(out)
 print("wrote docs/WIDER_SYSTEM.md")

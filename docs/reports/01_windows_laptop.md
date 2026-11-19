@@ -1,5 +1,8 @@
 # Report 1: Windows laptop (Intel i7-11800H, WSL) — merged `main` at c382494, 16 Nov 2026
 
+> Superseded: both failures listed below were fixed in later commits (see *What changed after this report*). Kept as
+> the record of the first independent run.
+
 The first independent benchmark of the merged repository, run on a Windows laptop (Linux under WSL) from the frozen
 bundle `20261116-main-c382494-benchmark`, with no model tuning. Original:
 
