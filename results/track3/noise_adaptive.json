@@ -1,0 +1,992 @@
+[
+{
+"data": "euroc:MH_01_easy",
+"set": "s42_accel_first",
+"setting": "entry",
+"options": [],
+"rows_ok": true,
+"ate_rmse_m": 4.197547018421412,
+"checkpoints_m": 3.917952723231245,
+"blind_mean_m": 5.0035495111135,
+"dropout_m": 3.6598085537672365,
+"position_drift_1s_m": 0.46292935811322833,
+"phase": "sweep"
+},
+{
+"data": "euroc:MH_02_easy",
+"set": "s42_accel_first",
+"setting": "entry",
+"options": [],
+"rows_ok": true,
+"ate_rmse_m": 4.463595951295622,
+"checkpoints_m": 3.8801796641914144,
+"blind_mean_m": 5.341365028673541,
+"dropout_m": 3.777329043314238,
+"position_drift_1s_m": 0.4569444360991073,
+"phase": "sweep"
+},
+{
+"data": "euroc:MH_03_medium",
+"set": "s42_accel_first",
+"setting": "entry",
+"options": [],
+"rows_ok": true,
+"ate_rmse_m": 2.9552204645816933,
+"checkpoints_m": 2.368582577529104,
+"blind_mean_m": 3.0171755250557384,
+"dropout_m": 2.6200317584065305,
+"position_drift_1s_m": 0.702355380094784,
+"phase": "sweep"
+},
+{
+"data": "euroc:V1_01_easy",
+"set": "s42_accel_first",
+"setting": "entry",
+"options": [],
+"rows_ok": true,
+"ate_rmse_m": 1.7701473655986544,
+"checkpoints_m": 1.674193482568958,
+"blind_mean_m": 1.877429755154275,
+"dropout_m": 1.598267086220112,
+"position_drift_1s_m": 0.373731464913967,
+"phase": "sweep"
+},
+{
+"data": "euroc:V1_02_medium",
+"set": "s42_accel_first",
+"setting": "entry",
+"options": [],
+"rows_ok": true,
+"ate_rmse_m": 1.242623903104632,
+"checkpoints_m": 1.2885521231205372,
+"blind_mean_m": 0.7477974337642175,
+"dropout_m": 1.0996114214650845,
+"position_drift_1s_m": 0.4775072087725191,
+"phase": "sweep"
+},
+{
+"data": "euroc:V2_01_easy",
+"set": "s42_accel_first",
+"setting": "entry",
+"options": [],
+"rows_ok": true,
+"ate_rmse_m": 2.097504433541322,
+"checkpoints_m": 1.9108344436134714,
+"blind_mean_m": 3.2376513855367643,
+"dropout_m": 2.041124330967578,
+"position_drift_1s_m": 0.29827257584853406,
+"phase": "sweep"
+},
+{
+"data": "euroc:V2_02_medium",
+"set": "s42_accel_first",
+"setting": "entry",
+"options": [],
+"rows_ok": true,
+"ate_rmse_m": 1.755346205971558,
+"checkpoints_m": 1.4186433915501167,
+"blind_mean_m": 2.681929129225224,
+"dropout_m": 1.6191809116589273,
+"position_drift_1s_m": 0.473261541688022,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room1",
+"set": "s42_accel_first",
+"setting": "entry",
+"options": [],
+"rows_ok": true,
+"ate_rmse_m": 0.5152170722029819,
+"checkpoints_m": 0.47298430495643984,
+"blind_mean_m": 0.520354264634555,
+"dropout_m": 0.4785004624456196,
+"position_drift_1s_m": 0.41318838618298975,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room2",
+"set": "s42_accel_first",
+"setting": "entry",
+"options": [],
+"rows_ok": true,
+"ate_rmse_m": 0.5058691737650395,
+"checkpoints_m": 0.45781329840273627,
+"blind_mean_m": 0.6293119818664701,
+"dropout_m": 0.46245772505944216,
+"position_drift_1s_m": 0.36955154954215097,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room3",
+"set": "s42_accel_first",
+"setting": "entry",
+"options": [],
+"rows_ok": true,
+"ate_rmse_m": 0.6025793606936383,
+"checkpoints_m": 0.5102818743196306,
+"blind_mean_m": 0.6900983639325725,
+"dropout_m": 0.5798535733705225,
+"position_drift_1s_m": 0.3890070938996726,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room4",
+"set": "s42_accel_first",
+"setting": "entry",
+"options": [],
+"rows_ok": true,
+"ate_rmse_m": 0.7324386378187852,
+"checkpoints_m": 0.7151281250718864,
+"blind_mean_m": 0.6916996865120226,
+"dropout_m": 0.7232979259624794,
+"position_drift_1s_m": 0.3096583490772718,
+"phase": "sweep"
+},
+{
+"data": "euroc:MH_01_easy",
+"set": "s42_accel_first",
+"setting": "standing still",
+"options": "still",
+"rows_ok": true,
+"ate_rmse_m": 4.322812946828307,
+"checkpoints_m": 4.113079317144171,
+"blind_mean_m": 5.175967214128111,
+"dropout_m": 3.7802753285653634,
+"position_drift_1s_m": 0.49643005700394627,
+"phase": "sweep"
+},
+{
+"data": "euroc:MH_02_easy",
+"set": "s42_accel_first",
+"setting": "standing still",
+"options": "still",
+"rows_ok": true,
+"ate_rmse_m": 4.665280681094309,
+"checkpoints_m": 4.04233180857671,
+"blind_mean_m": 5.691305197983164,
+"dropout_m": 3.95852066143213,
+"position_drift_1s_m": 0.5339621011233469,
+"phase": "sweep"
+},
+{
+"data": "euroc:MH_03_medium",
+"set": "s42_accel_first",
+"setting": "standing still",
+"options": "still",
+"rows_ok": true,
+"ate_rmse_m": 3.5917452680515076,
+"checkpoints_m": 3.47274769691186,
+"blind_mean_m": 3.181380215209756,
+"dropout_m": 3.251843140326312,
+"position_drift_1s_m": 1.1882096579306465,
+"phase": "sweep"
+},
+{
+"data": "euroc:V1_01_easy",
+"set": "s42_accel_first",
+"setting": "standing still",
+"options": "still",
+"rows_ok": true,
+"ate_rmse_m": 1.8521897154124722,
+"checkpoints_m": 1.8574753117555418,
+"blind_mean_m": 1.7671710435563983,
+"dropout_m": 1.686421104621503,
+"position_drift_1s_m": 0.43729253647782584,
+"phase": "sweep"
+},
+{
+"data": "euroc:V1_02_medium",
+"set": "s42_accel_first",
+"setting": "standing still",
+"options": "still",
+"rows_ok": true,
+"ate_rmse_m": 1.7776566632430983,
+"checkpoints_m": 1.67343161865555,
+"blind_mean_m": 1.082145549858907,
+"dropout_m": 1.6310889234976975,
+"position_drift_1s_m": 0.9568665227766295,
+"phase": "sweep"
+},
+{
+"data": "euroc:V2_01_easy",
+"set": "s42_accel_first",
+"setting": "standing still",
+"options": "still",
+"rows_ok": true,
+"ate_rmse_m": 2.294632918063525,
+"checkpoints_m": 2.191687329698971,
+"blind_mean_m": 3.2156682148446283,
+"dropout_m": 2.2154331620394534,
+"position_drift_1s_m": 0.34485803375403895,
+"phase": "sweep"
+},
+{
+"data": "euroc:V2_02_medium",
+"set": "s42_accel_first",
+"setting": "standing still",
+"options": "still",
+"rows_ok": true,
+"ate_rmse_m": 2.115233245696655,
+"checkpoints_m": 1.7194000933576674,
+"blind_mean_m": 2.792739054531264,
+"dropout_m": 1.9033305766804716,
+"position_drift_1s_m": 0.75217745425046,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room1",
+"set": "s42_accel_first",
+"setting": "standing still",
+"options": "still",
+"rows_ok": true,
+"ate_rmse_m": 1.0122605423261652,
+"checkpoints_m": 0.8976205207634674,
+"blind_mean_m": 0.5406309447095181,
+"dropout_m": 0.9711010152311199,
+"position_drift_1s_m": 0.9194844175928748,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room2",
+"set": "s42_accel_first",
+"setting": "standing still",
+"options": "still",
+"rows_ok": true,
+"ate_rmse_m": 1.2431068835777541,
+"checkpoints_m": 1.2934571463829814,
+"blind_mean_m": 0.667916195339216,
+"dropout_m": 1.2764981990692268,
+"position_drift_1s_m": 0.9559400371164996,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room3",
+"set": "s42_accel_first",
+"setting": "standing still",
+"options": "still",
+"rows_ok": true,
+"ate_rmse_m": 1.2822408870413786,
+"checkpoints_m": 1.1798795302943756,
+"blind_mean_m": 0.6826038952488909,
+"dropout_m": 1.287701124006355,
+"position_drift_1s_m": 0.9864885353736131,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room4",
+"set": "s42_accel_first",
+"setting": "standing still",
+"options": "still",
+"rows_ok": true,
+"ate_rmse_m": 1.0928585279650682,
+"checkpoints_m": 1.0874090359666273,
+"blind_mean_m": 0.7600839418240315,
+"dropout_m": 1.0812905100014398,
+"position_drift_1s_m": 0.5710731292382509,
+"phase": "sweep"
+},
+{
+"data": "euroc:MH_01_easy",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 0.5",
+"options": [
+"--zupt-adapt",
+"0.5"
+],
+"rows_ok": true,
+"ate_rmse_m": 4.197117341277069,
+"checkpoints_m": 3.91783125264394,
+"blind_mean_m": 5.0043128053977926,
+"dropout_m": 3.659256860806429,
+"position_drift_1s_m": 0.4622962813924891,
+"phase": "sweep"
+},
+{
+"data": "euroc:MH_02_easy",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 0.5",
+"options": [
+"--zupt-adapt",
+"0.5"
+],
+"rows_ok": true,
+"ate_rmse_m": 4.465171687810351,
+"checkpoints_m": 3.882362370346425,
+"blind_mean_m": 5.345549987302533,
+"dropout_m": 3.779273294882596,
+"position_drift_1s_m": 0.4572326145102082,
+"phase": "sweep"
+},
+{
+"data": "euroc:MH_03_medium",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 0.5",
+"options": [
+"--zupt-adapt",
+"0.5"
+],
+"rows_ok": true,
+"ate_rmse_m": 2.95354372145837,
+"checkpoints_m": 2.3629748986586905,
+"blind_mean_m": 3.0150978905446073,
+"dropout_m": 2.618815931638346,
+"position_drift_1s_m": 0.7017347434553987,
+"phase": "sweep"
+},
+{
+"data": "euroc:V1_01_easy",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 0.5",
+"options": [
+"--zupt-adapt",
+"0.5"
+],
+"rows_ok": true,
+"ate_rmse_m": 1.7701473655986544,
+"checkpoints_m": 1.674193482568958,
+"blind_mean_m": 1.877429755154275,
+"dropout_m": 1.598267086220112,
+"position_drift_1s_m": 0.373731464913967,
+"phase": "sweep"
+},
+{
+"data": "euroc:V1_02_medium",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 0.5",
+"options": [
+"--zupt-adapt",
+"0.5"
+],
+"rows_ok": true,
+"ate_rmse_m": 1.242623903104632,
+"checkpoints_m": 1.2885521231205372,
+"blind_mean_m": 0.7477974337642175,
+"dropout_m": 1.0996114214650845,
+"position_drift_1s_m": 0.4775072087725191,
+"phase": "sweep"
+},
+{
+"data": "euroc:V2_01_easy",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 0.5",
+"options": [
+"--zupt-adapt",
+"0.5"
+],
+"rows_ok": true,
+"ate_rmse_m": 2.097504433541322,
+"checkpoints_m": 1.9108344436134714,
+"blind_mean_m": 3.2376513855367643,
+"dropout_m": 2.041124330967578,
+"position_drift_1s_m": 0.29827257584853406,
+"phase": "sweep"
+},
+{
+"data": "euroc:V2_02_medium",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 0.5",
+"options": [
+"--zupt-adapt",
+"0.5"
+],
+"rows_ok": true,
+"ate_rmse_m": 1.755346205971558,
+"checkpoints_m": 1.4186433915501167,
+"blind_mean_m": 2.681929129225224,
+"dropout_m": 1.6191809116589273,
+"position_drift_1s_m": 0.473261541688022,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room1",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 0.5",
+"options": [
+"--zupt-adapt",
+"0.5"
+],
+"rows_ok": true,
+"ate_rmse_m": 0.5152170722029819,
+"checkpoints_m": 0.47298430495643984,
+"blind_mean_m": 0.520354264634555,
+"dropout_m": 0.4785004624456196,
+"position_drift_1s_m": 0.41318838618298975,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room2",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 0.5",
+"options": [
+"--zupt-adapt",
+"0.5"
+],
+"rows_ok": true,
+"ate_rmse_m": 0.5058691737650395,
+"checkpoints_m": 0.45781329840273627,
+"blind_mean_m": 0.6293119818664701,
+"dropout_m": 0.46245772505944216,
+"position_drift_1s_m": 0.36955154954215097,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room3",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 0.5",
+"options": [
+"--zupt-adapt",
+"0.5"
+],
+"rows_ok": true,
+"ate_rmse_m": 0.6025793606936383,
+"checkpoints_m": 0.5102818743196306,
+"blind_mean_m": 0.6900983639325725,
+"dropout_m": 0.5798535733705225,
+"position_drift_1s_m": 0.3890070938996726,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room4",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 0.5",
+"options": [
+"--zupt-adapt",
+"0.5"
+],
+"rows_ok": true,
+"ate_rmse_m": 0.7324386378187852,
+"checkpoints_m": 0.7151281250718864,
+"blind_mean_m": 0.6916996865120226,
+"dropout_m": 0.7232979259624794,
+"position_drift_1s_m": 0.3096583490772718,
+"phase": "sweep"
+},
+{
+"data": "euroc:MH_01_easy",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 1",
+"options": [
+"--zupt-adapt",
+"1"
+],
+"rows_ok": true,
+"ate_rmse_m": 4.223535581633867,
+"checkpoints_m": 4.068316738795937,
+"blind_mean_m": 5.027339755737565,
+"dropout_m": 3.67048023988964,
+"position_drift_1s_m": 0.5618986964676772,
+"phase": "sweep"
+},
+{
+"data": "euroc:MH_02_easy",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 1",
+"options": [
+"--zupt-adapt",
+"1"
+],
+"rows_ok": true,
+"ate_rmse_m": 4.550929766382828,
+"checkpoints_m": 3.973412661570908,
+"blind_mean_m": 5.442639131421354,
+"dropout_m": 3.8977516642015066,
+"position_drift_1s_m": 0.4908268565624225,
+"phase": "sweep"
+},
+{
+"data": "euroc:MH_03_medium",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 1",
+"options": [
+"--zupt-adapt",
+"1"
+],
+"rows_ok": true,
+"ate_rmse_m": 2.962709768920714,
+"checkpoints_m": 2.3892262083273406,
+"blind_mean_m": 3.0351415666092914,
+"dropout_m": 2.6267127767366216,
+"position_drift_1s_m": 0.7080277986964959,
+"phase": "sweep"
+},
+{
+"data": "euroc:V1_01_easy",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 1",
+"options": [
+"--zupt-adapt",
+"1"
+],
+"rows_ok": true,
+"ate_rmse_m": 1.7372284145108428,
+"checkpoints_m": 1.6567460950484427,
+"blind_mean_m": 1.7107004257120124,
+"dropout_m": 1.5804934026383326,
+"position_drift_1s_m": 0.41168028125850686,
+"phase": "sweep"
+},
+{
+"data": "euroc:V1_02_medium",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 1",
+"options": [
+"--zupt-adapt",
+"1"
+],
+"rows_ok": true,
+"ate_rmse_m": 1.4546883989111559,
+"checkpoints_m": 1.4280886479668955,
+"blind_mean_m": 0.9809628551157182,
+"dropout_m": 1.317762228625318,
+"position_drift_1s_m": 0.8146018280681299,
+"phase": "sweep"
+},
+{
+"data": "euroc:V2_01_easy",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 1",
+"options": [
+"--zupt-adapt",
+"1"
+],
+"rows_ok": true,
+"ate_rmse_m": 2.065661114284231,
+"checkpoints_m": 1.888916233584651,
+"blind_mean_m": 3.205447114091817,
+"dropout_m": 2.0078217127588527,
+"position_drift_1s_m": 0.30077585481463404,
+"phase": "sweep"
+},
+{
+"data": "euroc:V2_02_medium",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 1",
+"options": [
+"--zupt-adapt",
+"1"
+],
+"rows_ok": true,
+"ate_rmse_m": 1.7164053939235733,
+"checkpoints_m": 1.3889428573830829,
+"blind_mean_m": 2.8260864548075397,
+"dropout_m": 1.5695871431597277,
+"position_drift_1s_m": 0.4926373821016894,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room1",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 1",
+"options": [
+"--zupt-adapt",
+"1"
+],
+"rows_ok": true,
+"ate_rmse_m": 0.5669670394905455,
+"checkpoints_m": 0.46870394166161455,
+"blind_mean_m": 0.5554568269610193,
+"dropout_m": 0.5120615026751884,
+"position_drift_1s_m": 0.46313006480296554,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room2",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 1",
+"options": [
+"--zupt-adapt",
+"1"
+],
+"rows_ok": true,
+"ate_rmse_m": 0.5058691737650395,
+"checkpoints_m": 0.45781329840273627,
+"blind_mean_m": 0.6293119818664701,
+"dropout_m": 0.46245772505944216,
+"position_drift_1s_m": 0.36955154954215097,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room3",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 1",
+"options": [
+"--zupt-adapt",
+"1"
+],
+"rows_ok": true,
+"ate_rmse_m": 0.601794991694948,
+"checkpoints_m": 0.5102459833181866,
+"blind_mean_m": 0.6727802785033592,
+"dropout_m": 0.5796535717955656,
+"position_drift_1s_m": 0.3891113050878464,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room4",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 1",
+"options": [
+"--zupt-adapt",
+"1"
+],
+"rows_ok": true,
+"ate_rmse_m": 0.7324386378187852,
+"checkpoints_m": 0.7151281250718864,
+"blind_mean_m": 0.6916996865120226,
+"dropout_m": 0.7232979259624794,
+"position_drift_1s_m": 0.3096583490772718,
+"phase": "sweep"
+},
+{
+"data": "euroc:MH_01_easy",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 2",
+"options": [
+"--zupt-adapt",
+"2"
+],
+"rows_ok": true,
+"ate_rmse_m": 4.23520806393945,
+"checkpoints_m": 4.085085657050006,
+"blind_mean_m": 5.0305679033083965,
+"dropout_m": 3.732637224880908,
+"position_drift_1s_m": 0.4806022275941754,
+"phase": "sweep"
+},
+{
+"data": "euroc:MH_02_easy",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 2",
+"options": [
+"--zupt-adapt",
+"2"
+],
+"rows_ok": true,
+"ate_rmse_m": 4.5598553069784105,
+"checkpoints_m": 4.007973866431655,
+"blind_mean_m": 5.45720937300883,
+"dropout_m": 3.8643957600099506,
+"position_drift_1s_m": 0.5304489948025882,
+"phase": "sweep"
+},
+{
+"data": "euroc:MH_03_medium",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 2",
+"options": [
+"--zupt-adapt",
+"2"
+],
+"rows_ok": true,
+"ate_rmse_m": 3.4280436908684506,
+"checkpoints_m": 2.9914615874303196,
+"blind_mean_m": 3.095166431923958,
+"dropout_m": 3.0619856159495784,
+"position_drift_1s_m": 1.093356326264285,
+"phase": "sweep"
+},
+{
+"data": "euroc:V1_01_easy",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 2",
+"options": [
+"--zupt-adapt",
+"2"
+],
+"rows_ok": true,
+"ate_rmse_m": 1.76826227181404,
+"checkpoints_m": 1.7340628143762387,
+"blind_mean_m": 1.6403842215712252,
+"dropout_m": 1.6030636517475463,
+"position_drift_1s_m": 0.42536385310900576,
+"phase": "sweep"
+},
+{
+"data": "euroc:V1_02_medium",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 2",
+"options": [
+"--zupt-adapt",
+"2"
+],
+"rows_ok": true,
+"ate_rmse_m": 1.866489556934534,
+"checkpoints_m": 1.8884901419171451,
+"blind_mean_m": 1.0484550205160086,
+"dropout_m": 1.7068206327257875,
+"position_drift_1s_m": 1.034388059222243,
+"phase": "sweep"
+},
+{
+"data": "euroc:V2_01_easy",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 2",
+"options": [
+"--zupt-adapt",
+"2"
+],
+"rows_ok": true,
+"ate_rmse_m": 2.192059008067588,
+"checkpoints_m": 2.015707140358059,
+"blind_mean_m": 3.3290838992229284,
+"dropout_m": 2.125414960337104,
+"position_drift_1s_m": 0.34847083347868096,
+"phase": "sweep"
+},
+{
+"data": "euroc:V2_02_medium",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 2",
+"options": [
+"--zupt-adapt",
+"2"
+],
+"rows_ok": true,
+"ate_rmse_m": 1.9932254218910948,
+"checkpoints_m": 1.3155677310340934,
+"blind_mean_m": 3.197176497410632,
+"dropout_m": 1.7406541749205717,
+"position_drift_1s_m": 0.8308650043478106,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room1",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 2",
+"options": [
+"--zupt-adapt",
+"2"
+],
+"rows_ok": true,
+"ate_rmse_m": 0.5797506174741124,
+"checkpoints_m": 0.45030098364331206,
+"blind_mean_m": 0.599877021757683,
+"dropout_m": 0.5243009622610356,
+"position_drift_1s_m": 0.47510832515791007,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room2",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 2",
+"options": [
+"--zupt-adapt",
+"2"
+],
+"rows_ok": true,
+"ate_rmse_m": 0.6777245039800205,
+"checkpoints_m": 0.5000149274806261,
+"blind_mean_m": 0.8673933061507009,
+"dropout_m": 0.5670771356881728,
+"position_drift_1s_m": 0.5122696241822324,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room3",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 2",
+"options": [
+"--zupt-adapt",
+"2"
+],
+"rows_ok": true,
+"ate_rmse_m": 0.7398034907479096,
+"checkpoints_m": 0.561187089198335,
+"blind_mean_m": 0.9173956014712202,
+"dropout_m": 0.6904895679935659,
+"position_drift_1s_m": 0.49737171729542723,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room4",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 2",
+"options": [
+"--zupt-adapt",
+"2"
+],
+"rows_ok": true,
+"ate_rmse_m": 0.8263659652030532,
+"checkpoints_m": 0.7521889059112206,
+"blind_mean_m": 0.9425931508225927,
+"dropout_m": 0.8069801800670314,
+"position_drift_1s_m": 0.34467932222743075,
+"phase": "sweep"
+},
+{
+"data": "euroc:MH_01_easy",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 3",
+"options": [
+"--zupt-adapt",
+"3"
+],
+"rows_ok": true,
+"ate_rmse_m": 4.261228692041301,
+"checkpoints_m": 4.0465401054634045,
+"blind_mean_m": 5.069589483008761,
+"dropout_m": 3.735174796508856,
+"position_drift_1s_m": 0.4871101072076212,
+"phase": "sweep"
+},
+{
+"data": "euroc:MH_02_easy",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 3",
+"options": [
+"--zupt-adapt",
+"3"
+],
+"rows_ok": true,
+"ate_rmse_m": 4.590230645157177,
+"checkpoints_m": 4.034549084671863,
+"blind_mean_m": 5.516956407960414,
+"dropout_m": 3.8864922513181934,
+"position_drift_1s_m": 0.520968675428398,
+"phase": "sweep"
+},
+{
+"data": "euroc:MH_03_medium",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 3",
+"options": [
+"--zupt-adapt",
+"3"
+],
+"rows_ok": true,
+"ate_rmse_m": 3.4243095461314716,
+"checkpoints_m": 3.1562128662728908,
+"blind_mean_m": 3.018874635457103,
+"dropout_m": 3.0598686624864015,
+"position_drift_1s_m": 1.1000219776310511,
+"phase": "sweep"
+},
+{
+"data": "euroc:V1_01_easy",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 3",
+"options": [
+"--zupt-adapt",
+"3"
+],
+"rows_ok": true,
+"ate_rmse_m": 1.7845071953232374,
+"checkpoints_m": 1.761599003560614,
+"blind_mean_m": 1.7003680342026273,
+"dropout_m": 1.6212906248536092,
+"position_drift_1s_m": 0.4272050703616842,
+"phase": "sweep"
+},
+{
+"data": "euroc:V1_02_medium",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 3",
+"options": [
+"--zupt-adapt",
+"3"
+],
+"rows_ok": true,
+"ate_rmse_m": 1.770546966332038,
+"checkpoints_m": 1.636282476517394,
+"blind_mean_m": 0.9002553496329114,
+"dropout_m": 1.5995150625882582,
+"position_drift_1s_m": 0.964549776761669,
+"phase": "sweep"
+},
+{
+"data": "euroc:V2_01_easy",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 3",
+"options": [
+"--zupt-adapt",
+"3"
+],
+"rows_ok": true,
+"ate_rmse_m": 2.224537725831057,
+"checkpoints_m": 2.079342648584081,
+"blind_mean_m": 3.1986278325072237,
+"dropout_m": 2.144560139949135,
+"position_drift_1s_m": 0.3461707281976979,
+"phase": "sweep"
+},
+{
+"data": "euroc:V2_02_medium",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 3",
+"options": [
+"--zupt-adapt",
+"3"
+],
+"rows_ok": true,
+"ate_rmse_m": 2.0766343048821563,
+"checkpoints_m": 1.7952879249239238,
+"blind_mean_m": 2.6721741183849668,
+"dropout_m": 1.8953412815566306,
+"position_drift_1s_m": 0.7988961951741735,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room1",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 3",
+"options": [
+"--zupt-adapt",
+"3"
+],
+"rows_ok": true,
+"ate_rmse_m": 0.8220966916594261,
+"checkpoints_m": 0.684404249898164,
+"blind_mean_m": 0.951049722508141,
+"dropout_m": 0.715677057451327,
+"position_drift_1s_m": 0.6927734016070745,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room2",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 3",
+"options": [
+"--zupt-adapt",
+"3"
+],
+"rows_ok": true,
+"ate_rmse_m": 0.9213665572127498,
+"checkpoints_m": 0.7580494350589458,
+"blind_mean_m": 1.3901693754122817,
+"dropout_m": 0.7567976264910924,
+"position_drift_1s_m": 0.635422459699026,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room3",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 3",
+"options": [
+"--zupt-adapt",
+"3"
+],
+"rows_ok": true,
+"ate_rmse_m": 0.9920481149493002,
+"checkpoints_m": 0.845377065380809,
+"blind_mean_m": 0.5218650312172015,
+"dropout_m": 0.8105240992973786,
+"position_drift_1s_m": 0.6205455203504602,
+"phase": "sweep"
+},
+{
+"data": "tumvi:room4",
+"set": "s42_accel_first",
+"setting": "zupt-adapt 3",
+"options": [
+"--zupt-adapt",
+"3"
+],
+"rows_ok": true,
+"ate_rmse_m": 1.0683683292617425,
+"checkpoints_m": 0.8650721748604127,
+"blind_mean_m": 0.6536696448979132,
+"dropout_m": 0.9771200292599234,
+"position_drift_1s_m": 0.47544446358770165,
+"phase": "sweep"
+}
+]
