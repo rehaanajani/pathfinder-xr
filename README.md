@@ -63,31 +63,32 @@ measures is in [`results/track3/README.md`](results/track3/README.md#current-res
 | | ATE | Checkpoints | Blind 5 s | Dropouts | Drift over 1 s |
 |---|---:|---:|---:|---:|---:|
 | Standing still | 2.62 | 2.45 | 2.28 | 2.42 | 0.77 |
-| **Path Finder** | **2.03** | **1.90** | **1.85** | **1.86** | **0.52** |
-| Improvement | **~23 %** | **~23 %** | **~19 %** | **~23 %** | **~33 %** |
+| **Path Finder** | **1.96** | **1.84** | **1.75** | **1.80** | **0.47** |
+| Improvement | **~25 %** | **~25 %** | **~23 %** | **~26 %** | **~40 %** |
 
 - **Better on every one of the 17 recordings** for ATE, checkpoints, dropouts and drift
   ([`per_recording.md`](results/track3/per_recording.md), raw:
   [`organiser_per_recording.json`](results/track3/organiser_per_recording.json)).
-- **Never trained on** (MH_05, V2_03, room6): ATE **2.65 m vs 3.31 m**, checkpoints 2.50 vs 3.03, blind 2.00 vs 2.41,
-  dropouts 2.49 vs 3.14, drift 0.65 vs 0.79.
+- **Network-training holdouts** (MH_05, V2_03, room6: the network never saw them, but they helped choose filter
+  settings, so they are not untouched tests): ATE **2.63 m vs 3.31 m**, checkpoints 2.48 vs 3.03, blind 1.87 vs 2.41,
+  dropouts 2.46 vs 3.14, drift 0.64 vs 0.79.
 - **Fresh corruption seeds** (the organisers' script with its seed changed to 1, 7 and 2026, unseen by every setting):
-  ATE 2.00-2.04 m vs 2.62 m standing still, again better on all 17 recordings for ATE, checkpoints, dropouts and drift
-  ([`rotor_drag.md`](results/track3/rotor_drag.md)).
+  ATE 1.95 m vs 2.62 m standing still, again better on all 17 recordings for ATE, checkpoints, dropouts and drift
+  ([`gap_bridge_rotor.md`](results/track3/gap_bridge_rotor.md)).
 - **XR headsets** (8 Monado recordings, IMU mounted unlike any training data): **0.57 m vs 0.83 m**, better on 8 / 8,
-  thanks to the mount guard.
+  thanks to the mount guard (measured before dropout bridging; not re-run since).
 
 <sub>Per recording: better on 17 / 17 for ATE, checkpoints, dropouts and drift; the blind 5 s is better on average
-and on 15 / 17.</sub>
+and on 13 / 17.</sub>
 
-**Resources** (worst of 5 recordings with the organisers' damage, MacBook Air M5,
+**Resources** (worst of 5 recordings with the organisers' damage, MacBook, Apple M4,
 Python 3.11; [`python_budget.json`](results/track3/python_budget.json), `tools/measure_python_budget.py`):
 
 | | Measured | Budget |
 |---|---:|---:|
-| Peak heap of the algorithm (tracemalloc: data structures, buffers, estimation; the interpreter and numpy excluded) | **1.54 MiB** | 8 MB |
-| Everything after numpy, including compiling `main.py` with its embedded network | **5.81 MiB** | 8 MB |
-| CPU per second of IMU, one thread | **4.0 ms** | 20 ms |
+| Peak heap of the algorithm (tracemalloc: data structures, buffers, estimation; the interpreter and numpy excluded) | **1.47 MiB** | 8 MB |
+| Everything after numpy, including compiling `main.py` with its embedded network | **5.87 MiB** | 8 MB |
+| CPU per second of IMU, one thread | **4.9 ms** | 20 ms |
 
 **Same algorithm in C++** (`src/main.cpp`, output within 1 µm of `main.py`) for on-device use:
 
@@ -183,6 +184,31 @@ make -C src && PF_ENTRY=cpp python -m pytest -q tests/stress     # the C++ port
   the pipeline to retrain and re-score in minutes is already in `tools/`.
 - **Clean evaluation.** 11 of the 17 recordings trained the network; the 3 it never saw are reported separately, and
   they were also among the recordings used to choose the filter settings.
+
+## Ideas we learned from
+
+We ran every public Track 3 entry on our own damaged files and scored it the same way as ours
+([`results/track3/competitors.md`](results/track3/competitors.md)), then wrote our own version of the ideas that might
+close the gaps. The ones kept, and where they came from:
+
+- **Bridging dropouts with interpolated readings** (kept): SRMIST_vortexxx
+  ([`RaktimChandra/pathfinder`](https://github.com/RaktimChandra/pathfinder)) integrates the gyro trapezoidally across
+  missing rows, and ZeroDrift ([`Gem2005/VITChennai_ZeroDrift`](https://github.com/Gem2005/VITChennai_ZeroDrift))
+  sub-steps them with interpolated rate and force. We instead fill a gap of up to 0.5 s with readings interpolated
+  between the trusted rows on each side and run them through our normal update, so gravity correction, the network
+  window and rotor drag all see them ([`gap_bridge_rotor.md`](results/track3/gap_bridge_rotor.md)).
+- **Rotor drag as a velocity measurement** on the drone mount: also used by SRMIST_vortexxx, ZeroDrift and TrustNav
+  ([`Am-berneal/TrustNav-GPS-Denied-Navigation`](https://github.com/Am-berneal/TrustNav-GPS-Denied-Navigation)), after
+  Leishman et al. (2014); ours is gated by the mount guard ([`rotor_drag.md`](results/track3/rotor_drag.md)).
+
+Tried and measured, but not kept (each page has the numbers): an offline zero-phase pull and an RTS smoother with a
+workspace state (from SRMIST_vortexxx and ZeroDrift; better on average, worse than standing still on held-out
+room5/room6), spike repair with one-row look-ahead (from VIO-Edge,
+[`rohithkrishnaak/Path-Finder---Trajectory-Estimation-Under-Sensor-Degradation`](https://github.com/rohithkrishnaak/Path-Finder---Trajectory-Estimation-Under-Sensor-Degradation);
+no effect), noise-adaptive rest detection (from SRMIST_vortexxx and TrustNav; rotor vibration then looks like rest),
+a two-pass start (from ZeroDrift; one recording at one seed fell behind standing still) and an averaged blackout
+velocity (from VIO-Edge; no gain). Their results pages are in pull requests #39, #41, #42, #43, #47 and #48. No code
+from these repositories is in ours.
 
 ## Beyond the scored task
 
