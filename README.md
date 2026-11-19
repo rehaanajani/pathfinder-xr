@@ -1,6 +1,6 @@
 # Path Finder
 
-**6-DoF trajectory from a degraded IMU alone, in 3.75 MiB of memory and 7.1 ms per second of data.**
+**6-DoF trajectory from a degraded IMU alone, in 3.75 MiB of memory and 7.0 ms per second of data.**
 
 Samsung PRISM XR Hackathon 2026 · Track 3: *Path Finder, Trajectory Estimation Under Sensor Degradation*
 Team **California Burrito** · SRM Institute of Science and Technology, Kattankulathur
@@ -55,14 +55,15 @@ integration is **72 km** off after 113 s.
 ## Results
 
 All numbers are measured, with the raw files linked. Accuracy uses the **organisers' own degradation script**
-(`degrade_imu.py`, their seed, their documented accel-first columns), SE(3)-aligned like evo.
+(`degrade_imu.py`, their seed, their documented accel-first columns), SE(3)-aligned like evo; what each metric
+measures is in [`results/track3/README.md`](results/track3/README.md#current-results-organisers-degradation-script).
 
 **All 17 public recordings (11 EuRoC + 6 TUM-VI), metres, lower is better:**
 
 | | ATE | Checkpoints | Blind 5 s | Dropouts | Drift over 1 s |
 |---|---:|---:|---:|---:|---:|
 | Standing still | 2.62 | 2.45 | 2.28 | 2.42 | 0.77 |
-| **Path Finder** | **2.32** | **2.13** | **2.24** | **2.13** | **0.57** |
+| **Path Finder** | **2.31** | **2.13** | **2.24** | **2.13** | **0.57** |
 | Improvement | **~12 %** | **~13 %** | **~2 %** | **~12 %** | **~26 %** |
 
 - **Better on every one of the 17 recordings** for ATE, checkpoints, dropouts and drift
@@ -70,7 +71,7 @@ All numbers are measured, with the raw files linked. Accuracy uses the **organis
   [`organiser_per_recording.json`](results/track3/organiser_per_recording.json)).
 - **Never trained on** (MH_05, V2_03, room6): ATE **3.10 m vs 3.31 m**, checkpoints 2.90 vs 3.03, dropouts 2.93 vs
   3.14, drift 0.70 vs 0.79.
-- **XR headsets** (8 Monado recordings, IMU mounted unlike any training data): **0.57 m vs 0.84 m**, better on 8 / 8,
+- **XR headsets** (8 Monado recordings, IMU mounted unlike any training data): **0.57 m vs 0.83 m**, better on 8 / 8,
   thanks to the mount guard.
 
 <sub>Per recording: better on 17 / 17 for ATE, checkpoints, dropouts and drift; the blind 5 s is better on average
@@ -81,9 +82,9 @@ Python 3.11; [`python_budget.json`](results/track3/python_budget.json), `tools/m
 
 | | Measured | Budget |
 |---|---:|---:|
-| Peak heap of the algorithm (tracemalloc: data structures, buffers, estimation; the interpreter and numpy excluded) | **3.75 MiB** | 8 MB |
-| Same, also counting `main.py` itself with its embedded network | 6.19 MiB | 8 MB |
-| CPU per second of IMU, one thread | **7.1 ms** | 20 ms |
+| Peak heap of the algorithm (tracemalloc: data structures, buffers, estimation; the interpreter and numpy excluded) | **1.32 MiB** | 8 MB |
+| Same, also counting `main.py` itself with its embedded network | **3.75 MiB** | 8 MB |
+| CPU per second of IMU, one thread | **7.0 ms** | 20 ms |
 
 **Same algorithm in C++** (`src/main.cpp`, output within 1 µm of `main.py`) for on-device use:
 
@@ -127,7 +128,7 @@ Design notes: [`docs/AIRIO.md`](docs/AIRIO.md) (network), [`docs/LEARNED_VELOCIT
 
 | Claim | Evidence |
 |---|---|
-| Accuracy on the organisers' script | [`per_recording.md`](results/track3/per_recording.md), [`organiser_per_recording.json`](results/track3/organiser_per_recording.json); reproduce with `tools/eval_organiser.py --script <degrade_imu.py> --data euroc:MH_05_difficult ...` |
+| Accuracy on the organisers' script | [`per_recording.md`](results/track3/per_recording.md), [`organiser_per_recording.json`](results/track3/organiser_per_recording.json), and the same scores from `main.py` itself in [`organiser_per_recording_main_py.json`](results/track3/organiser_per_recording_main_py.json); reproduce with `tools/eval_organiser.py --script <degrade_imu.py> --data euroc:MH_05_difficult ...` |
 | Memory and CPU of `main.py` | [`python_budget.json`](results/track3/python_budget.json); `tools/measure_python_budget.py` |
 | `main.py` runs on its own | `tests/stress/test_standalone.py`: copied alone into an empty folder, identical output; embedded weights byte-identical to `src/velnet_weights*.bin` |
 | One pose per row through every fault | CI on every push (badge above): stress tests, Docker image run |
@@ -152,7 +153,8 @@ make -C src && PF_ENTRY=cpp python -m pytest -q tests/stress     # the C++ port
 
 ## Safeguards
 
-- **Never crashes on bad input**: every row gets a finite pose and a unit quaternion, whatever it contains.
+- **Handles bad input**: every input row gets a finite pose and a unit quaternion, tested on NaN, zero, frozen,
+  missing, duplicate and out-of-order rows, cut and tiny files, and a zip with 100,000 members.
 - **Exactly one pose per input row**: nothing appended, nothing filled in between.
 - **Streams the input** row by row: memory does not grow with the length of the recording.
 - **Says what it assumed**: column order, units and network choice are printed on stderr; flags override them.
@@ -162,11 +164,12 @@ make -C src && PF_ENTRY=cpp python -m pytest -q tests/stress     # the C++ port
 ## Design choices
 
 - **Bounded drift by design.** An IMU alone cannot observe absolute heading or position, so Path Finder pulls its
-  estimate gently back toward the start and weights the network by its own confidence. That keeps it ahead of
+  estimate gently back toward the start and weights the network by its own confidence. That keeps its ATE below
   standing still on every recording, from small rooms to 20 m drone flights.
-- **Room to grow.** With a perfect velocity network the same filter reaches 1.95 m on our validation set
-  ([`retrain_organiser.md`](results/track3/retrain_organiser.md)); more training data is the next lever, and the
-  pipeline to retrain and re-score in minutes is already in `tools/`.
+- **Room to grow.** Given ground-truth velocity in place of the network, the same filter reaches 2.56 m on our
+  validation recordings, and 1.95 m with a gentler pull to the start (our own damage model;
+  [`retrain_organiser.md`](results/track3/retrain_organiser.md)). A better velocity network is the next lever, and
+  the pipeline to retrain and re-score in minutes is already in `tools/`.
 - **Clean evaluation.** 11 of the 17 recordings trained the network; the 3 it never saw are reported separately, and
   they were also among the recordings used to choose the filter settings.
 

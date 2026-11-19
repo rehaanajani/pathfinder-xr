@@ -1,6 +1,6 @@
 # Report 2: MacBook Air (Apple M5, macOS) — commit b725bec, 17 Nov 2026
 
-Frozen benchmark of the final entry, produced by `tools/benchmark_report.sh` (raw files:
+Frozen benchmark of the C++ port (`src/main.cpp`, output within 1 µm of `main.py`), produced by `tools/benchmark_report.sh` (raw files:
 [`results/reports/20261117-macbook-air-m5-b725bec/`](../../results/reports/20261117-macbook-air-m5-b725bec/)).
 C++ entry, default settings (AirIO network + mount guard + input layout detection), Apple clang 21, `-O3`, one thread.
 

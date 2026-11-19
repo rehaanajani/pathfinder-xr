@@ -1,6 +1,6 @@
 # Report 3: Samsung Galaxy M36 (Exynos 1380, Android 17) — commit b725bec, 17 Nov 2026
 
-Two things measured on a real phone: the scored entry running **on the phone's own CPU**, and the live camera + IMU
+Two things measured on a real phone: the C++ port of the entry running **on the phone's own CPU**, and the live camera + IMU
 demo with the camera covered.
 
 ## 1. The scored entry on the phone

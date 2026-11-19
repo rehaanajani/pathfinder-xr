@@ -1,5 +1,8 @@
 # Where everything is (16 Nov 2026)
 
+> A snapshot from 16 Nov, kept for the record. The current entry, results and numbers are in the
+> [main README](../README.md) and [`results/track3/`](../results/track3/README.md).
+
 ## What we are trying to achieve
 
 Samsung scores one thing: a program that reads a degraded IMU file (`imu0/data.csv`, EuRoC format), writes

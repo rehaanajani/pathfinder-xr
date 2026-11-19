@@ -45,8 +45,10 @@ def main():
     ap.add_argument("--data", nargs="+", required=True)
     ap.add_argument("--layout", choices=["accel_first", "euroc"], default="accel_first")
     ap.add_argument("--tag", default="organiser")
+    ap.add_argument("--entry", choices=["cpp", "python"], default="cpp",
+                    help="score the C++ port (src/pathfinder, fast) or src/main.py (same output within 1 um)")
     a = ap.parse_args(argv)
-    binary = ROOT / "src" / "pathfinder"
+    cmd = [str(ROOT / "src" / "pathfinder")] if a.entry == "cpp" else [sys.executable, str(ROOT / "src" / "main.py")]
     subprocess.run(["make", "-C", str(ROOT / "src"), "-s"], check=True)
     rows = []
     with tempfile.TemporaryDirectory() as tmp:
@@ -68,7 +70,7 @@ def main():
                     for i in range(len(t_deg) - 1) if (t_deg[i + 1] - t_deg[i]) * 1e-9 > 1.5 * nom]
             truth = {"t0_ns": int(t_orig[0]), "t_fail_s": dur - 5.0, "dropouts_s": gaps}
             est = d / "est.txt"
-            r = subprocess.run([str(binary), str(d), "-o", str(est), *extra], capture_output=True, text=True)
+            r = subprocess.run([*cmd, str(d), "-o", str(est), *extra], capture_output=True, text=True)
             if r.returncode != 0:
                 raise SystemExit(f"entry failed on {spec}: {r.stderr}")
             res = score(str(est), str(gt), truth, str(d / "imu0" / "data.csv"))
