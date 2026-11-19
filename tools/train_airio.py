@@ -119,7 +119,8 @@ def prep_one(job):
     has = X[:, 9] > 0
     cosang = np.clip((X[:, 6:9] * up_true).sum(1) / np.maximum(np.linalg.norm(X[:, 6:9], axis=1), 1e-9), -1, 1)
     tilt = np.degrees(np.arccos(cosang))[has]
-    holes = tg[1:][np.diff(tg) > 0.05]
+    gap = np.flatnonzero(np.diff(tg) > 0.05)
+    holes = list(zip(tg[gap], tg[gap + 1]))      # ground-truth gaps (start, end): targets would be interpolated
     cs = np.concatenate([[0], np.cumsum(has.astype(np.float64))])
     info = {"slots": n, "tilt_med_deg": float(np.median(tilt)), "tilt_p90_deg": float(np.percentile(tilt, 90))}
     for W in SPANS:
@@ -130,8 +131,8 @@ def prep_one(job):
         M = has & (nvalid >= MIN_VALID * W)
         M[:W] = False
         M &= (t - span >= tg[0]) & (t <= tg[-1])
-        for ge in holes:
-            M &= ~((t > ge - 0.05) & (t < ge + span + 0.05))
+        for gs, ge in holes:                         # drop every window whose span touches a gap
+            M &= ~((t + 0.05 > gs) & (t - span - 0.05 < ge))
         M[W:] &= np.abs((t[W:] - t[:-W]) / span - 1) < 0.02
         out[f"M{W}"] = M
         info[f"windows{W}"] = int(M.sum())
@@ -144,7 +145,7 @@ def prep(a):
     from multiprocessing import Pool
     CACHE.mkdir(parents=True, exist_ok=True)
     jobs = []
-    for split, specs in (("train", TRAIN), ("val", VAL), ("test", TEST)):
+    for split, specs in (("train", TRAIN + a.extra), ("val", VAL), ("test", TEST)):
         for spec in specs:
             if not source(spec)[1].exists():
                 print("missing data, skipped:", spec, flush=True)
@@ -349,6 +350,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("prep"); p.add_argument("--jobs", type=int, default=4)
+    p.add_argument("--extra", nargs="*", default=[], help="more training recordings, e.g. tumvi:corridor1 (partial ground truth)")
     t = sub.add_parser("train")
     t.add_argument("--train", nargs="+", default=TRAIN); t.add_argument("--val", nargs="+", default=VAL)
     t.add_argument("--window", type=int, default=200, choices=SPANS)

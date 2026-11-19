@@ -1,0 +1,85 @@
+{
+ "note": "leave-one-room-out, body-frame input trained with TUM-VI corridors 1-5 added (motion-capture windows only); best epoch chosen on a pool of the left-out room, room5, MH_04, V1_03",
+ "runs": {
+  "bodycor_room1_s0": {
+   "tumvi:room1": {
+    "vel_rmse_mps": 0.7895382776569277,
+    "vel_zero_mps": 1.1004396965185552
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.7513119434835657,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "bodycor_room1_s1": {
+   "tumvi:room1": {
+    "vel_rmse_mps": 0.7811185971410785,
+    "vel_zero_mps": 1.1004396965185552
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.7451554939140901,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "bodycor_room2_s0": {
+   "tumvi:room2": {
+    "vel_rmse_mps": 0.759312919861164,
+    "vel_zero_mps": 1.0191274023011672
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.7082385311647058,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "bodycor_room2_s1": {
+   "tumvi:room2": {
+    "vel_rmse_mps": 0.7657432630661544,
+    "vel_zero_mps": 1.0191274023011672
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.741856242012636,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "bodycor_room3_s0": {
+   "tumvi:room3": {
+    "vel_rmse_mps": 0.7976274650328524,
+    "vel_zero_mps": 1.020096523514908
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.7193414624154488,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "bodycor_room3_s1": {
+   "tumvi:room3": {
+    "vel_rmse_mps": 0.8471756661558159,
+    "vel_zero_mps": 1.020096523514908
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.7427480092383273,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "bodycor_room4_s0": {
+   "tumvi:room4": {
+    "vel_rmse_mps": 0.7298222129164534,
+    "vel_zero_mps": 0.6542507013848708
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.7069405684850545,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "bodycor_room4_s1": {
+   "tumvi:room4": {
+    "vel_rmse_mps": 0.6194244653822004,
+    "vel_zero_mps": 0.6542507013848708
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.7353224565506541,
+    "vel_zero_mps": 1.041071355553315
+   }
+  }
+ }
+}
