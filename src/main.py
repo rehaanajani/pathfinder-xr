@@ -335,6 +335,7 @@ class PathFinder:
         self.still_g, self.still_a = [], []       # short sliding window for the zero-velocity detector
         self.still_w, self.still_s, self.still_ss = [], [0.0] * 6, [0.0] * 6
         self.bad_time = 0.0                       # seconds since the last trusted sample
+        self.last_good = None                     # (t, g, a) of the last trusted row, for bridging dropouts
         self.good_time = 1e9                      # seconds of healthy data since the last dropout
         self.bias_known = False                   # gyro bias already taken from a still stretch (prescan)
         self.f_lp = None                          # low-passed specific force (body frame)
@@ -476,6 +477,20 @@ class PathFinder:
     def step(self, t, g, a, ok):
         """Advance to time t; if anything turns non-finite, keep the last finite state (never emit NaN)."""
         saved = (self.q, list(self.p), list(self.v), list(self.bg), tuple(self.w_last), list(self.acc_res))
+        lg = self.last_good
+        if ok and lg is not None and self.t_prev == lg[0] and self.dt_nom and self.a.bridge_max > 0:
+            # Rows went missing between two trusted readings: fill the gap with readings interpolated linearly
+            # between them (trapezoidal-style integration of turn rate and acceleration), so a turn made during
+            # the dropout is not lost.
+            dt = (t - lg[0]) * 1e-9
+            n = int(math.floor(dt / self.dt_nom + 0.5))
+            if n >= 2 and dt <= self.a.bridge_max:
+                for j in range(1, n):
+                    u = j / n
+                    self._step(lg[0] + int(math.floor(u * (t - lg[0]) + 0.5)),
+                               tuple(lg[1][i] + u * (g[i] - lg[1][i]) for i in range(3)),
+                               tuple(lg[2][i] + u * (a[i] - lg[2][i]) for i in range(3)), True)
+        self.last_good = (t, tuple(g), tuple(a)) if ok else None
         self._step(t, g, a, ok)
         if not all(math.isfinite(c) for c in (*self.q, *self.p, *self.v, *self.bg, *self.w_last, *self.acc_res)):
             self.q, self.p, self.v, self.bg, self.w_last, self.acc_res = saved
@@ -839,6 +854,8 @@ def args(argv=None):
                     help="s; pull back to the start once the IMU has been unusable for > 1 s (0 = same as --pos-tau)")
     ap.add_argument("--blind-vel-tau", type=float, default=1.5)
     ap.add_argument("--blind-turn-tau", type=float, default=0.5)
+    ap.add_argument("--bridge-max", type=float, default=0.5,
+                    help="s; fill gaps up to this long between two trusted rows with interpolated readings (0 = off)")
     ap.add_argument("--model", default="auto",
                     help="weights of the learned velocity network; 'auto' (default) = the copy of velnet_weights.bin embedded in this file "
                          "'none' = physics only")

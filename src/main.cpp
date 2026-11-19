@@ -77,7 +77,7 @@ struct Opt {
     double zupt_gyro = 0.04, zupt_acc = 0.15, zupt_tau = 0.05, zupt_gyro_std = NaN, zupt_acc_std = 0.15;
     double prescan = NaN, bias_rate = NaN, leak = 1.0, kp = NaN, ki = NaN, kp_boost = NaN, ki_calm = NaN;
     double tilt_lp = NaN, kp_boost_tau = 0.7, tilt_acc_tol = 1.5, acc_res_tau = 10.0, v_max = 3.0, pos_tau = NaN;
-    double blind_vel_tau = 1.5, blind_turn_tau = 0.5, pos_tau_blind = NaN, pos_tau_nonet = NaN;
+    double blind_vel_tau = 1.5, blind_turn_tau = 0.5, pos_tau_blind = NaN, pos_tau_nonet = NaN, bridge_max = 0.5;
     int model_every = 20; double model_min_valid = 0.25, model_ref = NaN, model_vref = 1.0;
     double model_pos_gain = NaN, model_vel_gain = 1.0; int model_window = 200, model_dec = 1;
     std::string model_input = "world";
@@ -110,6 +110,7 @@ static void parse_args(int argc, char** argv, Opt& a) {
         {"v-max", &a.v_max, nullptr, nullptr}, {"pos-tau", &a.pos_tau, nullptr, nullptr}, {"pos-tau-blind", &a.pos_tau_blind, nullptr, nullptr},
         {"pos-tau-nonet", &a.pos_tau_nonet, nullptr, nullptr},
         {"blind-vel-tau", &a.blind_vel_tau, nullptr, nullptr}, {"blind-turn-tau", &a.blind_turn_tau, nullptr, nullptr},
+        {"bridge-max", &a.bridge_max, nullptr, nullptr},
         {"model-every", nullptr, &a.model_every, nullptr}, {"model-min-valid", &a.model_min_valid, nullptr, nullptr},
         {"model-ref", &a.model_ref, nullptr, nullptr}, {"model-vref", &a.model_vref, nullptr, nullptr},
         {"model-pos-gain", &a.model_pos_gain, nullptr, nullptr}, {"model-vel-gain", &a.model_vel_gain, nullptr, nullptr},
@@ -612,6 +613,7 @@ struct PathFinder {
     double still_s[6] = {0, 0, 0, 0, 0, 0}, still_ss[6] = {0, 0, 0, 0, 0, 0};
     V3 still_gyro{{0, 0, 0}};
     double bad_time = 0.0, good_time = 1e9;
+    bool have_last_good = false; long long lg_t = 0; V3 lg_g{{0, 0, 0}}, lg_a{{0, 0, 0}};   // last trusted row
     bool bias_known = false;
     bool have_f_lp = false; V3 f_lp{{0, 0, 0}};
     double yaw_var = 0.0;
@@ -744,6 +746,22 @@ struct PathFinder {
     // Advance to time t; if anything turns non-finite, keep the last finite state (never emit NaN).
     void step(long long t, const V3& g, const V3& a, bool ok) {
         Q q0 = q; V3 p0 = p, v0 = v, bg0 = bg, w0 = w_last, r0 = acc_res;
+        if (ok && have_last_good && have_t_prev && t_prev == lg_t && have_dt_nom && dt_nom > 0 && A.bridge_max > 0) {
+            // Rows went missing between two trusted readings: fill the gap with readings interpolated linearly
+            // between them (as main.py), so a turn made during the dropout is not lost.
+            double dt = (double)(t - lg_t) * 1e-9;
+            int n = (int)std::floor(dt / dt_nom + 0.5);
+            if (n >= 2 && dt <= A.bridge_max) {
+                for (int j = 1; j < n; j++) {
+                    double u = (double)j / n;
+                    V3 gj, aj;
+                    for (int i = 0; i < 3; i++) { gj[i] = lg_g[i] + u * (g[i] - lg_g[i]); aj[i] = lg_a[i] + u * (a[i] - lg_a[i]); }
+                    step_(lg_t + (long long)std::floor(u * (double)(t - lg_t) + 0.5), gj, aj, true);
+                }
+            }
+        }
+        have_last_good = ok;
+        if (ok) { lg_t = t; lg_g = g; lg_a = a; }
         step_(t, g, a, ok);
         bool fin = std::isfinite(q.w) && std::isfinite(q.x) && std::isfinite(q.y) && std::isfinite(q.z);
         for (int i = 0; i < 3; i++)
