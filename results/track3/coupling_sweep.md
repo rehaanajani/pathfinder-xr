@@ -1,5 +1,8 @@
 # Coupling sweep, 17 Nov 2026
 
+> Before rotor-drag aiding. Since 19 Nov the drone flights use drag and a 12 s pull ([`rotor_drag.md`](rotor_drag.md));
+> the handheld and headset recordings keep the setting chosen here.
+
 How the default position coupling was chosen. Organisers' degradation script (seed 42, accel-first input), C++
 entry, all 11 EuRoC + 6 TUM-VI recordings; mean ATE in metres (lower is better). The 8 Monado headset recordings
 use the gravity-aligned network and its own coupling (mount guard): 0.57 m for every setting, against 0.84 m

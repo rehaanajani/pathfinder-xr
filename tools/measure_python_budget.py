@@ -22,12 +22,18 @@ from eval_organiser import make_input  # noqa: E402
 from eval_track3 import source  # noqa: E402
 
 PROBE = r"""
-import sys, time, tracemalloc, json
+import sys, time, tracemalloc, json, types
 import numpy                                    # the runtime's own import: not part of the algorithm
 sys.path.insert(0, sys.argv[1])
+path = sys.argv[1] + "/main.py"
 tracemalloc.start()
-import main as entry                            # loading main.py (its embedded weights included) is counted
-loaded = tracemalloc.get_traced_memory()[0]
+# Compile main.py from source, as `python main.py` does (scripts are never loaded from cached bytecode); standard-library
+# modules it imports load as installed. Everything from here on is counted, embedded weights included.
+entry = types.ModuleType("main")
+entry.__file__ = path
+sys.modules["main"] = entry
+exec(compile(open(path).read(), path, "exec"), entry.__dict__)
+loaded, import_peak = tracemalloc.get_traced_memory()
 a = entry.args([sys.argv[2], "-o", sys.argv[3]])
 tracemalloc.reset_peak()
 entry.run(sys.argv[2], sys.argv[3], a)
@@ -38,7 +44,8 @@ for _ in range(3):
     c0 = time.process_time()
     entry.run(sys.argv[2], sys.argv[3], a)
     cpu.append(time.process_time() - c0)
-print(json.dumps({"module_bytes": loaded, "run_peak_bytes": run_peak, "cpu_s": min(cpu)}))
+print(json.dumps({"module_bytes": loaded, "import_peak_bytes": import_peak, "run_peak_bytes": run_peak,
+                  "cpu_s": min(cpu)}))
 """
 
 
@@ -65,7 +72,8 @@ def main():
             # embedded network). The algorithm's own peak is that minus what the module holds.
             row = {"data": spec, "imu_seconds": round(float(secs), 1),
                    "heap_peak_algorithm_mib": round((r["run_peak_bytes"] - r["module_bytes"]) / 2 ** 20, 2),
-                   "heap_peak_incl_module_mib": round(r["run_peak_bytes"] / 2 ** 20, 2),
+                   "heap_peak_incl_module_mib": round(max(r["run_peak_bytes"], r["import_peak_bytes"]) / 2 ** 20, 2),
+                   "import_peak_mib": round(r["import_peak_bytes"] / 2 ** 20, 2),
                    "cpu_ms_per_s": round(float(r["cpu_s"] / secs * 1000), 2)}
             rows.append(row)
             print(row, flush=True)
@@ -73,7 +81,8 @@ def main():
     out = {"entry": "src/main.py (standalone, network weights embedded)", "python": platform.python_version(),
            "machine": platform.platform(), "processor": platform.processor() or platform.machine(),
            "method": "tracemalloc started after importing numpy and before importing main.py; "
-                     "heap_peak_incl_module = peak while running (main.py and its embedded network included); "
+                     "heap_peak_incl_module = the larger of the peak while loading main.py (compiled from source, as `python "
+                     "main.py` does) and the peak while running (main.py and its embedded network included); "
                      "heap_peak_algorithm = that minus the memory main.py holds once imported; "
                      "CPU = process time, best of 3, one thread", "worst": worst, "rows": rows}
     Path(a.out).write_text(json.dumps(out, indent=1))

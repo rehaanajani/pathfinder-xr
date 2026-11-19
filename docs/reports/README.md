@@ -1,12 +1,12 @@
 # Benchmark reports
 
-The current headline numbers are in the [main README](../../README.md): `src/main.py` uses 1.32 MiB of heap for the
-algorithm (3.75 MiB counting `main.py` and its embedded network) and 7.0 ms per second of IMU
+The current headline numbers are in the [main README](../../README.md): `src/main.py` uses 1.54 MiB of heap for the
+algorithm (5.81 MiB counting everything after numpy, including compiling `main.py`) and 4.0 ms per second of IMU
 ([`python_budget.json`](../../results/track3/python_budget.json)), and beats standing still on all 17 recordings for
 ATE, checkpoints, dropouts and drift ([`per_recording.md`](../../results/track3/per_recording.md)).
 
-These three reports measure the **C++ port** of the same algorithm (`src/main.cpp`, output within 1 µm of
-`main.py`) on three machines, plus the live phone demo:
+These three reports measure the **C++ port** of the algorithm (`src/main.cpp`, output within 1 µm of `main.py`) on
+three machines, plus the live phone demo. They predate rotor-drag aiding (19 Nov):
 
 | # | Machine | Code | What |
 |---|---|---|---|

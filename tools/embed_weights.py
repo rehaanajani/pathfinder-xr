@@ -18,9 +18,8 @@ def block():
     out = [START, "EMBEDDED_WEIGHTS = {"]
     for key, name in (("body", "velnet_weights.bin"), ("world", "velnet_weights_world.bin")):
         enc = base64.b64encode(zlib.compress((SRC / name).read_bytes(), 9)).decode("ascii")
-        out.append(f'    "{key}": (  # {name}')
-        out += [f'        "{enc[i:i + 110]}"' for i in range(0, len(enc), 110)]
-        out.append("    ),")
+        # One literal per weight set: compiling thousands of joined pieces costs several MB of peak memory.
+        out.append(f'    "{key}": "{enc}",  # {name}')
     out += ["}", END]
     return "\n".join(out)
 
