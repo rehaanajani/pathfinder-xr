@@ -1,35 +1,5 @@
 [
  {
-  "entry": "ours",
-  "data": "euroc:MH_04_difficult",
-  "heap_peak_bytes": 1111613,
-  "cpu_traced_s": 5.008468000000001
- },
- {
-  "entry": "ours",
-  "data": "euroc:V1_03_difficult",
-  "heap_peak_bytes": 1111628,
-  "cpu_traced_s": 5.205394
- },
- {
-  "entry": "ours",
-  "data": "euroc:MH_05_difficult",
-  "heap_peak_bytes": 1111914,
-  "cpu_traced_s": 5.528968
- },
- {
-  "entry": "ours",
-  "data": "euroc:V2_03_difficult",
-  "heap_peak_bytes": 1111781,
-  "cpu_traced_s": 5.965843
- },
- {
-  "entry": "ours",
-  "data": "tumvi:room6",
-  "heap_peak_bytes": 1111328,
-  "cpu_traced_s": 6.748417
- },
- {
   "entry": "vortexxx",
   "data": "euroc:MH_04_difficult",
   "heap_peak_bytes": 2485138,
@@ -90,66 +60,6 @@
   "cpu_traced_s": 0.461203
  },
  {
-  "entry": "vioedge",
-  "data": "euroc:MH_04_difficult",
-  "heap_peak_bytes": 2226856,
-  "cpu_traced_s": 6.0292449999999995
- },
- {
-  "entry": "vioedge",
-  "data": "euroc:V1_03_difficult",
-  "heap_peak_bytes": 2272870,
-  "cpu_traced_s": 6.191959
- },
- {
-  "entry": "vioedge",
-  "data": "euroc:MH_05_difficult",
-  "heap_peak_bytes": 2322943,
-  "cpu_traced_s": 6.993486
- },
- {
-  "entry": "vioedge",
-  "data": "euroc:V2_03_difficult",
-  "heap_peak_bytes": 2334858,
-  "cpu_traced_s": 6.209302999999999
- },
- {
-  "entry": "vioedge",
-  "data": "tumvi:room6",
-  "heap_peak_bytes": 2446025,
-  "cpu_traced_s": 8.659047999999999
- },
- {
-  "entry": "vortex",
-  "data": "euroc:MH_04_difficult",
-  "heap_peak_bytes": 697484,
-  "cpu_traced_s": 40.534442
- },
- {
-  "entry": "vortex",
-  "data": "euroc:V1_03_difficult",
-  "heap_peak_bytes": 644818,
-  "cpu_traced_s": 48.325393999999996
- },
- {
-  "entry": "vortex",
-  "data": "euroc:MH_05_difficult",
-  "heap_peak_bytes": 675056,
-  "cpu_traced_s": 51.123641
- },
- {
-  "entry": "vortex",
-  "data": "euroc:V2_03_difficult",
-  "heap_peak_bytes": 686256,
-  "cpu_traced_s": 53.510006000000004
- },
- {
-  "entry": "vortex",
-  "data": "tumvi:room6",
-  "heap_peak_bytes": 760444,
-  "cpu_traced_s": 60.594100000000005
- },
- {
   "entry": "trustnav_rows",
   "data": "euroc:MH_04_difficult",
   "heap_peak_bytes": 817121,
@@ -208,5 +118,110 @@
   "data": "tumvi:room6",
   "heap_peak_bytes": 83985,
   "cpu_traced_s": 1.72451
+ },
+ {
+  "entry": "ours",
+  "data": "euroc:MH_04_difficult",
+  "protocol": "warm",
+  "heap_peak_bytes": 1114839,
+  "cpu_traced_s": 8.774351000000001
+ },
+ {
+  "entry": "ours",
+  "data": "euroc:V1_03_difficult",
+  "protocol": "warm",
+  "heap_peak_bytes": 1115225,
+  "cpu_traced_s": 8.240465
+ },
+ {
+  "entry": "ours",
+  "data": "euroc:MH_05_difficult",
+  "protocol": "warm",
+  "heap_peak_bytes": 1115297,
+  "cpu_traced_s": 7.813483999999999
+ },
+ {
+  "entry": "ours",
+  "data": "euroc:V2_03_difficult",
+  "protocol": "warm",
+  "heap_peak_bytes": 1114770,
+  "cpu_traced_s": 7.989362
+ },
+ {
+  "entry": "ours",
+  "data": "tumvi:room6",
+  "protocol": "warm",
+  "heap_peak_bytes": 1113559,
+  "cpu_traced_s": 7.718940999999999
+ },
+ {
+  "entry": "vioedge",
+  "data": "euroc:MH_04_difficult",
+  "protocol": "warm",
+  "heap_peak_bytes": 3901535,
+  "cpu_traced_s": 7.519997
+ },
+ {
+  "entry": "vioedge",
+  "data": "euroc:V1_03_difficult",
+  "protocol": "warm",
+  "heap_peak_bytes": 4009954,
+  "cpu_traced_s": 8.205411
+ },
+ {
+  "entry": "vioedge",
+  "data": "euroc:MH_05_difficult",
+  "protocol": "warm",
+  "heap_peak_bytes": 4209155,
+  "cpu_traced_s": 9.196662
+ },
+ {
+  "entry": "vioedge",
+  "data": "euroc:V2_03_difficult",
+  "protocol": "warm",
+  "heap_peak_bytes": 4026921,
+  "cpu_traced_s": 8.724333000000001
+ },
+ {
+  "entry": "vioedge",
+  "data": "tumvi:room6",
+  "protocol": "warm",
+  "heap_peak_bytes": 4559157,
+  "cpu_traced_s": 11.879276
+ },
+ {
+  "entry": "vortex",
+  "data": "euroc:MH_04_difficult",
+  "protocol": "warm",
+  "heap_peak_bytes": 697442,
+  "cpu_traced_s": 45.939456
+ },
+ {
+  "entry": "vortex",
+  "data": "euroc:V1_03_difficult",
+  "protocol": "warm",
+  "heap_peak_bytes": 644776,
+  "cpu_traced_s": 53.071572
+ },
+ {
+  "entry": "vortex",
+  "data": "euroc:MH_05_difficult",
+  "protocol": "warm",
+  "heap_peak_bytes": 675014,
+  "cpu_traced_s": 58.273069
+ },
+ {
+  "entry": "vortex",
+  "data": "euroc:V2_03_difficult",
+  "protocol": "warm",
+  "heap_peak_bytes": 686230,
+  "cpu_traced_s": 63.672581
+ },
+ {
+  "entry": "vortex",
+  "data": "tumvi:room6",
+  "protocol": "warm",
+  "heap_peak_bytes": 760418,
+  "cpu_traced_s": 69.54132100000001
  }
 ]
