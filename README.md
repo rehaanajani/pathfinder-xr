@@ -1,6 +1,6 @@
 # Path Finder
 
-**6-DoF trajectory from a degraded IMU alone, in 3.75 MiB of memory and 7.0 ms per second of data.**
+**6-DoF trajectory from a degraded IMU alone, in under 6 MiB of memory and 4 ms per second of data.**
 
 Samsung PRISM XR Hackathon 2026 · Track 3: *Path Finder, Trajectory Estimation Under Sensor Degradation*
 Team **California Burrito** · SRM Institute of Science and Technology, Kattankulathur
@@ -63,28 +63,31 @@ measures is in [`results/track3/README.md`](results/track3/README.md#current-res
 | | ATE | Checkpoints | Blind 5 s | Dropouts | Drift over 1 s |
 |---|---:|---:|---:|---:|---:|
 | Standing still | 2.62 | 2.45 | 2.28 | 2.42 | 0.77 |
-| **Path Finder** | **2.31** | **2.13** | **2.24** | **2.13** | **0.57** |
-| Improvement | **~12 %** | **~13 %** | **~2 %** | **~12 %** | **~26 %** |
+| **Path Finder** | **2.03** | **1.90** | **1.85** | **1.86** | **0.52** |
+| Improvement | **~23 %** | **~23 %** | **~19 %** | **~23 %** | **~33 %** |
 
 - **Better on every one of the 17 recordings** for ATE, checkpoints, dropouts and drift
   ([`per_recording.md`](results/track3/per_recording.md), raw:
   [`organiser_per_recording.json`](results/track3/organiser_per_recording.json)).
-- **Never trained on** (MH_05, V2_03, room6): ATE **3.10 m vs 3.31 m**, checkpoints 2.90 vs 3.03, dropouts 2.93 vs
-  3.14, drift 0.70 vs 0.79.
+- **Never trained on** (MH_05, V2_03, room6): ATE **2.65 m vs 3.31 m**, checkpoints 2.50 vs 3.03, blind 2.00 vs 2.41,
+  dropouts 2.49 vs 3.14, drift 0.65 vs 0.79.
+- **Fresh corruption seeds** (the organisers' script with its seed changed to 1, 7 and 2026, unseen by every setting):
+  ATE 2.00-2.04 m vs 2.62 m standing still, again better on all 17 recordings for ATE, checkpoints, dropouts and drift
+  ([`rotor_drag.md`](results/track3/rotor_drag.md)).
 - **XR headsets** (8 Monado recordings, IMU mounted unlike any training data): **0.57 m vs 0.83 m**, better on 8 / 8,
   thanks to the mount guard.
 
 <sub>Per recording: better on 17 / 17 for ATE, checkpoints, dropouts and drift; the blind 5 s is better on average
-and on 12 / 17.</sub>
+and on 15 / 17.</sub>
 
 **Resources** (worst of 5 recordings with the organisers' damage, MacBook Air M5,
 Python 3.11; [`python_budget.json`](results/track3/python_budget.json), `tools/measure_python_budget.py`):
 
 | | Measured | Budget |
 |---|---:|---:|
-| Peak heap of the algorithm (tracemalloc: data structures, buffers, estimation; the interpreter and numpy excluded) | **1.32 MiB** | 8 MB |
-| Same, also counting `main.py` itself with its embedded network | **3.75 MiB** | 8 MB |
-| CPU per second of IMU, one thread | **7.0 ms** | 20 ms |
+| Peak heap of the algorithm (tracemalloc: data structures, buffers, estimation; the interpreter and numpy excluded) | **1.54 MiB** | 8 MB |
+| Everything after numpy, including compiling `main.py` with its embedded network | **5.81 MiB** | 8 MB |
+| CPU per second of IMU, one thread | **4.0 ms** | 20 ms |
 
 **Same algorithm in C++** (`src/main.cpp`, output within 1 µm of `main.py`) for on-device use:
 
@@ -104,6 +107,8 @@ flowchart LR
     D --> E[TUM output<br/>1 pose per row]
     C --> N[Learned velocity<br/>42,716-param CNN<br/>velocity + confidence]
     N --> D
+    C --> K[Rotor drag<br/>sideways force gives<br/>sideways velocity<br/>drones only]
+    K --> D
     B -. bad rows, IMU death .-> R[Dead reckoning<br/>decay from last<br/>trusted state]
     R --> E
 ```
@@ -118,7 +123,11 @@ flowchart LR
    uncertainty; the filter weights it by that uncertainty. Its weights are embedded in `main.py`. If the IMU is
    mounted unlike the training data, a mount guard switches to a gravity-aligned network
    ([`docs/MOUNT_GUARD.md`](docs/MOUNT_GUARD.md)).
-5. **Coast when blind.** Through dropouts and the 5 s after the IMU dies, turn rate and speed decay from the last
+5. **Rotor drag (drones).** A multirotor's sideways acceleration is proportional to its sideways speed, so the
+   accelerometer measures the drone's velocity in its own frame, with no heading needed. It switches on only when
+   start-up gravity matches the drone's thrust axis, and then the pull to the start can be gentler (12 s instead of
+   3 s). Handheld and headset recordings are unaffected ([`rotor_drag.md`](results/track3/rotor_drag.md)).
+6. **Coast when blind.** Through dropouts and the 5 s after the IMU dies, turn rate and speed decay from the last
    trusted state.
 
 Design notes: [`docs/AIRIO.md`](docs/AIRIO.md) (network), [`docs/LEARNED_VELOCITY.md`](docs/LEARNED_VELOCITY.md),
@@ -128,11 +137,12 @@ Design notes: [`docs/AIRIO.md`](docs/AIRIO.md) (network), [`docs/LEARNED_VELOCIT
 
 | Claim | Evidence |
 |---|---|
-| Accuracy on the organisers' script | [`per_recording.md`](results/track3/per_recording.md), [`organiser_per_recording.json`](results/track3/organiser_per_recording.json), and the same scores from `main.py` itself in [`organiser_per_recording_main_py.json`](results/track3/organiser_per_recording_main_py.json); reproduce with `tools/eval_organiser.py --script <degrade_imu.py> --data euroc:MH_05_difficult ...` |
+| Accuracy on the organisers' script | [`per_recording.md`](results/track3/per_recording.md), [`organiser_per_recording.json`](results/track3/organiser_per_recording.json) (`main.py`), the same scores from the C++ port in [`organiser_per_recording_cpp.json`](results/track3/organiser_per_recording_cpp.json); reproduce with `tools/eval_organiser.py --script <degrade_imu.py> --data euroc:MH_05_difficult ...` |
 | Memory and CPU of `main.py` | [`python_budget.json`](results/track3/python_budget.json); `tools/measure_python_budget.py` |
 | `main.py` runs on its own | `tests/stress/test_standalone.py`: copied alone into an empty folder, identical output; embedded weights byte-identical to `src/velnet_weights*.bin` |
 | One pose per row through every fault | CI on every push (badge above): stress tests, Docker image run |
 | Rotated IMU handled | [`mount_guard_check.json`](results/track3/mount_guard_check.json); CI flips the IMU inside Docker |
+| Rotor drag and the drone pull | [`rotor_drag.md`](results/track3/rotor_drag.md): fit against motion capture, about 20 settings × 25 recordings, and an offline smoother that did not help |
 | Every alternative was measured | [`retrain_organiser.md`](results/track3/retrain_organiser.md) (retraining on the organisers' damage, a 4× larger network, a 2 s window), [`coupling_sweep.md`](results/track3/coupling_sweep.md) (9 settings × 25 recordings), [`docs/RESEARCH_REVIEW.md`](docs/RESEARCH_REVIEW.md) |
 | C++ port on three machines | [`docs/reports/`](docs/reports/README.md), [`phone_SM-M366B.json`](results/reports/phone_SM-M366B.json) |
 
@@ -164,8 +174,9 @@ make -C src && PF_ENTRY=cpp python -m pytest -q tests/stress     # the C++ port
 ## Design choices
 
 - **Bounded drift by design.** An IMU alone cannot observe absolute heading or position, so Path Finder pulls its
-  estimate gently back toward the start and weights the network by its own confidence. That keeps its ATE below
-  standing still on every recording, from small rooms to 20 m drone flights.
+  estimate gently back toward the start and weights the network by its own confidence. On a drone, rotor drag measures
+  velocity directly, so the pull can be gentler. That keeps its ATE below standing still on every recording, from small
+  rooms to 20 m drone flights.
 - **Room to grow.** Given ground-truth velocity in place of the network, the same filter reaches 2.56 m on our
   validation recordings, and 1.95 m with a gentler pull to the start (our own damage model;
   [`retrain_organiser.md`](results/track3/retrain_organiser.md)). A better velocity network is the next lever, and

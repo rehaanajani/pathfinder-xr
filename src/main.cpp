@@ -28,6 +28,23 @@ static const double G = 9.80665;
 static const double MOUNT_G_TOL = 0.05;     // see main.py
 // Gravity in the IMU frame at the start of the training recordings (EuRoC, TUM-VI); see main.py TRAIN_UP.
 static const double TRAIN_UP[2][3] = {{0.9412, -0.0101, -0.3376}, {0.0160, -0.0040, 0.9999}};
+// Rotor drag (see main.py DRONE_UP, DRAG_E1, DRAG_E2): thrust axis of the EuRoC airframe and the sideways plane.
+struct DragAxes {
+    double up[3], e1[3], e2[3];
+    DragAxes() {
+        double n = std::sqrt(0.9412 * 0.9412 + 0.0101 * 0.0101 + 0.3376 * 0.3376);
+        up[0] = 0.9412 / n; up[1] = -0.0101 / n; up[2] = -0.3376 / n;
+        double e[3] = {-up[0] * up[1], 1.0 - up[1] * up[1], -up[2] * up[1]};
+        double m = 0;
+        for (double c : e) m += c * c;
+        m = std::sqrt(m);
+        for (int i = 0; i < 3; i++) e1[i] = e[i] / m;
+        e2[0] = up[1] * e1[2] - up[2] * e1[1];
+        e2[1] = up[2] * e1[0] - up[0] * e1[2];
+        e2[2] = up[0] * e1[1] - up[1] * e1[0];
+    }
+};
+static const DragAxes DRAG;
 static const double NaN = std::nan("");
 
 // ------------------------------------------------------------------------------------------------ small math
@@ -78,6 +95,8 @@ struct Opt {
     double prescan = NaN, bias_rate = NaN, leak = 1.0, kp = NaN, ki = NaN, kp_boost = NaN, ki_calm = NaN;
     double tilt_lp = NaN, kp_boost_tau = 0.7, tilt_acc_tol = 1.5, acc_res_tau = 10.0, v_max = 3.0, pos_tau = NaN;
     double blind_vel_tau = 1.5, blind_turn_tau = 0.5, pos_tau_blind = NaN, pos_tau_nonet = NaN;
+    double drag_k1 = -0.19, drag_k2 = -0.17, drag_tau = 0.5, drag_lp = 0.3, drag_robust = 2.0, drag_hp = 0.0;
+    double drag_pos_tau = 12.0, drag_mount_deg = 15.0;
     int model_every = 20; double model_min_valid = 0.25, model_ref = NaN, model_vref = 1.0;
     double model_pos_gain = NaN, model_vel_gain = 1.0; int model_window = 200, model_dec = 1;
     std::string model_input = "world";
@@ -109,6 +128,10 @@ static void parse_args(int argc, char** argv, Opt& a) {
         {"tilt-acc-tol", &a.tilt_acc_tol, nullptr, nullptr}, {"acc-res-tau", &a.acc_res_tau, nullptr, nullptr},
         {"v-max", &a.v_max, nullptr, nullptr}, {"pos-tau", &a.pos_tau, nullptr, nullptr}, {"pos-tau-blind", &a.pos_tau_blind, nullptr, nullptr},
         {"pos-tau-nonet", &a.pos_tau_nonet, nullptr, nullptr},
+        {"drag-k1", &a.drag_k1, nullptr, nullptr}, {"drag-k2", &a.drag_k2, nullptr, nullptr},
+        {"drag-tau", &a.drag_tau, nullptr, nullptr}, {"drag-lp", &a.drag_lp, nullptr, nullptr},
+        {"drag-robust", &a.drag_robust, nullptr, nullptr}, {"drag-hp", &a.drag_hp, nullptr, nullptr},
+        {"drag-pos-tau", &a.drag_pos_tau, nullptr, nullptr}, {"drag-mount-deg", &a.drag_mount_deg, nullptr, nullptr},
         {"blind-vel-tau", &a.blind_vel_tau, nullptr, nullptr}, {"blind-turn-tau", &a.blind_turn_tau, nullptr, nullptr},
         {"model-every", nullptr, &a.model_every, nullptr}, {"model-min-valid", &a.model_min_valid, nullptr, nullptr},
         {"model-ref", &a.model_ref, nullptr, nullptr}, {"model-vref", &a.model_vref, nullptr, nullptr},
@@ -614,6 +637,8 @@ struct PathFinder {
     double bad_time = 0.0, good_time = 1e9;
     bool bias_known = false;
     bool have_f_lp = false; V3 f_lp{{0, 0, 0}};
+    bool drag_on = false, have_f_drag = false, have_f_drag_slow = false;
+    V3 f_drag{{0, 0, 0}}, f_drag_slow{{0, 0, 0}};
     double yaw_var = 0.0;
     bool have_dt_nom = false; double dt_nom = 0;
     VelNet* net = nullptr;
@@ -666,6 +691,15 @@ struct PathFinder {
         if (nm > 1e-6) {
             q = q_from_two({{ma[0] / nm, ma[1] / nm, ma[2] / nm}}, {{0.0, 0.0, 1.0}});
             check_mount(ma);
+            if (A.drag_k1 != 0 && A.drag_k2 != 0 && A.drag_mount_deg > 0) {   // see main.py init_from
+                double c = 0;
+                for (int i = 0; i < 3; i++) c += ma[i] / nm * DRAG.up[i];
+                double ang = std::acos(std::max(-1.0, std::min(1.0, c))) * 180.0 / M_PI;
+                drag_on = ang <= A.drag_mount_deg;
+                if (drag_on && A.drag_pos_tau > 0) { A.pos_tau = A.drag_pos_tau; A.pos_tau_nonet = A.drag_pos_tau; }
+                if (drag_on)
+                    std::fprintf(stderr, "rotor-drag aiding on (start-up gravity %.0f deg from the drone's thrust axis)\n", ang);
+            }
         }
         double var = 0;
         for (auto& b : init_buf) {
@@ -676,6 +710,33 @@ struct PathFinder {
         var /= n;
         if (var < A.still_gyro_var && !bias_known) bg = mg;
         initialised = true;
+    }
+
+    // Rotor-drag aiding (see main.py drag_update).
+    void drag_update(const V3& f, double dt, bool still) {
+        if (!have_f_drag || good_time <= dt) { f_drag = f; have_f_drag = true; return; }
+        double kl = std::min(1.0, dt / A.drag_lp);
+        for (int i = 0; i < 3; i++) f_drag[i] = f_drag[i] + kl * (f[i] - f_drag[i]);
+        V3 fd = f_drag;
+        if (A.drag_hp > 0) {
+            if (!have_f_drag_slow) { f_drag_slow = fd; have_f_drag_slow = true; }
+            double ks = std::min(1.0, dt / A.drag_hp);
+            for (int i = 0; i < 3; i++) f_drag_slow[i] = f_drag_slow[i] + ks * (fd[i] - f_drag_slow[i]);
+            for (int i = 0; i < 3; i++) fd[i] = fd[i] - f_drag_slow[i];
+        }
+        if (still) return;
+        V3 vb = qrot({q.w, -q.x, -q.y, -q.z}, v);
+        double kg = std::min(1.0, dt / A.drag_tau);
+        const double* es[2] = {DRAG.e1, DRAG.e2};
+        double ks2[2] = {A.drag_k1, A.drag_k2};
+        for (int j = 0; j < 2; j++) {
+            const double* e = es[j];
+            double m = (fd[0] * e[0] + fd[1] * e[1] + fd[2] * e[2]) / ks2[j];
+            double d = m - (vb[0] * e[0] + vb[1] * e[1] + vb[2] * e[2]);
+            double wr = A.drag_robust > 0 ? 1.0 / (1.0 + sq(d / A.drag_robust)) : 1.0;
+            for (int i = 0; i < 3; i++) vb[i] += kg * wr * d * e[i];
+        }
+        v = qrot(q, vb);
     }
 
     // Mount guard (see main.py check_mount): far from every training mount -> the gravity-aligned network.
@@ -816,7 +877,9 @@ struct PathFinder {
             }
             w_last = w;
             if (net && push_slot(body ? &w_raw : &w, &f)) learned_update();
-            if (zero_velocity(g, a)) {
+            bool still = zero_velocity(g, a);
+            if (drag_on) drag_update(f, dt, still);
+            if (still) {
                 double k = std::min(1.0, dt / A.zupt_tau);
                 for (int i = 0; i < 3; i++) {
                     v[i] *= 1.0 - k;

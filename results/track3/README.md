@@ -6,15 +6,16 @@ Raw results behind every number in the main README. Default settings (AirIO netw
 
 All runs use the organisers' `degrade_imu.py` with their seed and their documented accel-first columns
 (`tools/eval_organiser.py`), scored by `tools/score_track3.py`. Every run wrote exactly one pose per input row. The
-main table was produced with the C++ port for speed; `main.py` gives the same scores (file below).
+main table comes from `main.py`; the C++ port gives the same scores (file below).
 
 | File | What | Headline |
 |---|---|---|
-| [`per_recording.md`](per_recording.md) | all 11 EuRoC + 6 TUM-VI recordings, every metric, Path Finder vs standing still, per recording | better on 17/17 for ATE, checkpoints, dropouts and drift; blind 12/17 |
-| [`organiser_per_recording.json`](organiser_per_recording.json) | the raw numbers behind that table, plus the 8 Monado headset recordings | means: ATE 2.31 vs 2.62 m, checkpoints 2.13 vs 2.45, blind 2.24 vs 2.28, dropouts 2.13 vs 2.42, drift 0.57 vs 0.77; Monado 0.57 vs 0.83 m (8/8) |
-| [`organiser_per_recording_main_py.json`](organiser_per_recording_main_py.json) | the same 25 recordings scored with `src/main.py` itself (`--entry python`) | identical to the file above within 3e-7 m on every metric |
-| [`python_budget.json`](python_budget.json) | memory and CPU of `src/main.py`, 5 recordings (`tools/measure_python_budget.py`) | worst: algorithm 1.32 MiB, with `main.py` and its embedded network 3.75 MiB, 7.0 ms per second of IMU |
-| [`coupling_sweep.md`](coupling_sweep.md) | how the default settings were chosen: 9 settings × 25 recordings | the default is the setting that beats standing still on all 17 |
+| [`per_recording.md`](per_recording.md) | all 11 EuRoC + 6 TUM-VI recordings, every metric, Path Finder (`main.py`) vs standing still, per recording | better on 17/17 for ATE, checkpoints, dropouts and drift; blind 15/17 |
+| [`organiser_per_recording.json`](organiser_per_recording.json) | the raw numbers behind that table, plus the 8 Monado headset recordings | means: ATE 2.03 vs 2.62 m, checkpoints 1.90 vs 2.45, blind 1.85 vs 2.28, dropouts 1.86 vs 2.42, drift 0.52 vs 0.77; Monado 0.57 vs 0.83 m (8/8) |
+| [`organiser_per_recording_cpp.json`](organiser_per_recording_cpp.json) | the same 25 recordings scored with the C++ port (`--entry cpp`) | identical to the file above within 1e-6 m on every metric |
+| [`python_budget.json`](python_budget.json) | memory and CPU of `src/main.py`, 5 recordings (`tools/measure_python_budget.py`) | worst: algorithm 1.54 MiB; 5.81 MiB counting everything after numpy, including compiling `main.py`; 4.0 ms per second of IMU |
+| [`rotor_drag.md`](rotor_drag.md) | rotor-drag aiding and the gentler pull on the drone: fit, settings sweep, the smoother that did not help | ATE 2.31 -> 2.03 m, blind 2.24 -> 1.85 m; TUM-VI and Monado unchanged |
+| [`coupling_sweep.md`](coupling_sweep.md) | how the position coupling was chosen before rotor drag: 9 settings × 25 recordings | the setting that beats standing still on all 17 |
 | [`retrain_organiser.md`](retrain_organiser.md) | retraining on the organisers' damage, a 4× larger network, a 2 s window | no gain beyond seed noise; the current network stays |
 | [`mount_guard_check.json`](mount_guard_check.json) | mount guard on vs off on 16 recordings, and the same files rotated 90° (`tools/check_mount_guard.py`) | normal: 16/16 quiet and byte-identical; rotated: 14/16 switch networks |
 

@@ -3,47 +3,52 @@
  "python": "3.11.17",
  "machine": "macOS-27.2.1-arm64-arm-64bit",
  "processor": "arm",
- "method": "tracemalloc started after importing numpy and before importing main.py; heap_peak_incl_module = peak while running (main.py and its embedded network included); heap_peak_algorithm = that minus the memory main.py holds once imported; CPU = process time, best of 3, one thread",
+ "method": "tracemalloc started after importing numpy and before importing main.py; heap_peak_incl_module = the larger of the peak while loading main.py (compiled from source, as `python main.py` does) and the peak while running (main.py and its embedded network included); heap_peak_algorithm = that minus the memory main.py holds once imported; CPU = process time, best of 3, one thread",
  "worst": {
-  "heap_peak_algorithm_mib": 1.32,
-  "heap_peak_incl_module_mib": 3.75,
-  "cpu_ms_per_s": 7.04
+  "heap_peak_algorithm_mib": 1.54,
+  "heap_peak_incl_module_mib": 5.81,
+  "cpu_ms_per_s": 3.99
  },
  "rows": [
   {
    "data": "euroc:MH_04_difficult",
    "imu_seconds": 101.6,
-   "heap_peak_algorithm_mib": 1.32,
-   "heap_peak_incl_module_mib": 3.75,
-   "cpu_ms_per_s": 6.63
+   "heap_peak_algorithm_mib": 1.54,
+   "heap_peak_incl_module_mib": 5.81,
+   "import_peak_mib": 5.81,
+   "cpu_ms_per_s": 3.79
   },
   {
    "data": "euroc:V1_03_difficult",
    "imu_seconds": 107.5,
-   "heap_peak_algorithm_mib": 1.32,
-   "heap_peak_incl_module_mib": 3.75,
-   "cpu_ms_per_s": 6.47
+   "heap_peak_algorithm_mib": 1.54,
+   "heap_peak_incl_module_mib": 5.81,
+   "import_peak_mib": 5.81,
+   "cpu_ms_per_s": 3.73
   },
   {
    "data": "euroc:MH_05_difficult",
    "imu_seconds": 113.6,
-   "heap_peak_algorithm_mib": 1.32,
-   "heap_peak_incl_module_mib": 3.75,
-   "cpu_ms_per_s": 6.53
+   "heap_peak_algorithm_mib": 1.54,
+   "heap_peak_incl_module_mib": 5.81,
+   "import_peak_mib": 5.81,
+   "cpu_ms_per_s": 3.77
   },
   {
    "data": "euroc:V2_03_difficult",
    "imu_seconds": 116.8,
-   "heap_peak_algorithm_mib": 1.32,
-   "heap_peak_incl_module_mib": 3.75,
-   "cpu_ms_per_s": 7.04
+   "heap_peak_algorithm_mib": 1.54,
+   "heap_peak_incl_module_mib": 5.81,
+   "import_peak_mib": 5.81,
+   "cpu_ms_per_s": 3.99
   },
   {
    "data": "tumvi:room6",
    "imu_seconds": 131.8,
-   "heap_peak_algorithm_mib": 1.32,
-   "heap_peak_incl_module_mib": 3.75,
-   "cpu_ms_per_s": 7.01
+   "heap_peak_algorithm_mib": 1.54,
+   "heap_peak_incl_module_mib": 5.81,
+   "import_peak_mib": 5.81,
+   "cpu_ms_per_s": 3.63
   }
  ]
 }
