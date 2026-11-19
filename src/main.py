@@ -285,6 +285,50 @@ def detect_layout(inp, n_max=2000, columns="auto", ts_unit="auto", accel_unit="a
     return accel_first, t_scale, a_scale, "; ".join(notes)
 
 
+def despike(rows, A):
+    """Repair isolated spikes with a one-row look-ahead (offline processing is allowed). A row is a spike when at
+    least two of its six channels jump away from BOTH neighbours by more than T = max(A.despike x noise, floor) while
+    the two neighbours agree within T / 2; it is replaced by the mean of its neighbours. noise = running mean of the
+    absolute row-to-row change of each channel. Rows next to a gap, dead (all-zero) or non-finite rows are left alone.
+    Yields the same (t, g, a) rows, one row late."""
+    floor = (A.despike_floor_gyro,) * 3 + (A.despike_floor_acc,) * 3
+    s = [0.0] * 6                                   # running mean |change| per channel
+    n_s = 0
+    dt_nom = None
+    left = mid = None                               # (t, values)
+
+    def usable(r):
+        return r is not None and all(math.isfinite(x) for x in r[1]) and any(x != 0.0 for x in r[1])
+
+    for t, g, acc in rows:
+        cur = (t, tuple(g) + tuple(acc))
+        if mid is not None:
+            if usable(left) and usable(mid) and usable(cur) and dt_nom and n_s >= 50:
+                d1, d2 = (mid[0] - left[0]) * 1e-9, (cur[0] - mid[0]) * 1e-9
+                if 0 < d1 <= 1.5 * dt_nom and 0 < d2 <= 1.5 * dt_nom:
+                    hits = 0
+                    for i in range(6):
+                        T = max(A.despike * s[i], floor[i])
+                        x, lo, hi = mid[1][i], left[1][i], cur[1][i]
+                        if abs(x - lo) > T and abs(x - hi) > T and abs(lo - hi) < 0.5 * T:
+                            hits += 1
+                    if hits >= 2:
+                        mid = (mid[0], tuple(0.5 * (left[1][i] + cur[1][i]) for i in range(6)))
+            yield mid[0], mid[1][:3], mid[1][3:]
+            if usable(mid) and usable(cur) and cur[0] > mid[0]:
+                dt = (cur[0] - mid[0]) * 1e-9
+                if dt_nom is None or dt < 2 * dt_nom:
+                    dt_nom = dt if dt_nom is None else 0.99 * dt_nom + 0.01 * dt
+                if dt <= 1.5 * dt_nom:
+                    k = 1.0 / min(n_s + 1, 200)
+                    for i in range(6):
+                        s[i] += k * (abs(cur[1][i] - mid[1][i]) - s[i])
+                    n_s += 1
+        left, mid = mid, cur
+    if mid is not None:
+        yield mid[0], mid[1][:3], mid[1][3:]
+
+
 def parse_rows(f, layout=(False, 1, 1.0, "")):
     """Yield (t_ns, gyro(3), acc(3)) per data row, in our order and units whatever the file's (see detect_layout).
     Malformed numbers become NaN (row kept, marked bad)."""
@@ -722,7 +766,10 @@ def prescan_bias(inp, a, layout=(False, 1, 1.0, "")):
     pf = PathFinder(a)
     acc_sum, n_still, t0 = [0.0, 0.0, 0.0], 0, None
     with open_csv(inp) as f:
-        for t, g, acc in parse_rows(f, layout):
+        rows = parse_rows(f, layout)
+        if a.despike > 0:
+            rows = despike(rows, a)
+        for t, g, acc in rows:
             t0 = t if t0 is None else t0
             if (t - t0) * 1e-9 > a.prescan:
                 break
@@ -761,7 +808,10 @@ def run(inp, out, a, rec=None):
             x, y, z, qx, qy, qz, qw = pf.pose()
             o.write(f"{t * 1e-9:.9f} {x:.6f} {y:.6f} {z:.6f} {qx:.8f} {qy:.8f} {qz:.8f} {qw:.8f}\n")
 
-        for t, g, acc in parse_rows(f, layout):
+        rows = parse_rows(f, layout)
+        if a.despike > 0:
+            rows = despike(rows, a)
+        for t, g, acc in rows:
             ok = pf.healthy(g, acc)
             if not pf.initialised:
                 pending.append((t, g, acc, ok))
@@ -854,6 +904,10 @@ def args(argv=None):
                     help="s; pull back to the start once the IMU has been unusable for > 1 s (0 = same as --pos-tau)")
     ap.add_argument("--blind-vel-tau", type=float, default=1.5)
     ap.add_argument("--blind-turn-tau", type=float, default=0.5)
+    ap.add_argument("--despike", type=float, default=0.0,
+                    help="repair isolated spikes: threshold in multiples of the running row-to-row change (0 = off)")
+    ap.add_argument("--despike-floor-acc", type=float, default=1.0, help="m/s^2; smallest accelerometer spike repaired")
+    ap.add_argument("--despike-floor-gyro", type=float, default=0.2, help="rad/s; smallest gyro spike repaired")
     ap.add_argument("--bridge-max", type=float, default=0.5,
                     help="s; fill gaps up to this long between two trusted rows with interpolated readings (0 = off)")
     ap.add_argument("--model", default="auto",
