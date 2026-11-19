@@ -48,7 +48,8 @@ def one(job):
     d = INPUTS / s / spec.replace(":", "_")
     truth = json.loads((d / "truth.json").read_text())
     WORK.mkdir(parents=True, exist_ok=True)
-    h = hashlib.sha1(json.dumps([spec, s, opts]).encode()).hexdigest()[:12]
+    code = hashlib.sha1((ROOT / "src" / "main.py").read_bytes()).hexdigest()   # a cached run is tied to this main.py
+    h = hashlib.sha1(json.dumps([spec, s, opts, code]).encode()).hexdigest()[:12]
     est = WORK / f"{h}.txt"
     if opts == "still":
         write_still(d / "imu0" / "data.csv", est)
