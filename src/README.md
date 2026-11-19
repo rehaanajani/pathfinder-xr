@@ -72,10 +72,10 @@ appends 5 s of predicted poses after the last row.
 
 ## Measured
 
-`main.py`, worst of 5 recordings with the organisers' damage, MacBook Air M5, Python 3.11
+`main.py`, worst of 5 recordings with the organisers' damage, MacBook (Apple M4), Python 3.11
 ([`results/track3/python_budget.json`](../results/track3/python_budget.json), `tools/measure_python_budget.py`):
-peak heap of the algorithm **1.54 MiB** (5.81 MiB counting everything after numpy, including compiling `main.py`
-with its embedded network), CPU **4.0 ms** per second of IMU. The C++ port: 2.5 MB and 1.8 ms on the same Mac, 4.0 MB and 5.0 ms on a Galaxy M36
+peak heap of the algorithm **1.47 MiB** (5.87 MiB counting everything after numpy, including compiling `main.py`
+with its embedded network), CPU **4.9 ms** per second of IMU. The C++ port: 2.5 MB and 1.8 ms on the same Mac, 4.0 MB and 5.0 ms on a Galaxy M36
 phone CPU ([`docs/reports/`](../docs/reports/README.md)).
 
 Options: `python3 src/main.py --help` lists them; the C++ entry accepts the same ones.

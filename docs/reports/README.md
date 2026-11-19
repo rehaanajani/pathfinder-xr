@@ -1,7 +1,7 @@
 # Benchmark reports
 
-The current headline numbers are in the [main README](../../README.md): `src/main.py` uses 1.54 MiB of heap for the
-algorithm (5.81 MiB counting everything after numpy, including compiling `main.py`) and 4.0 ms per second of IMU
+The current headline numbers are in the [main README](../../README.md): `src/main.py` uses 1.47 MiB of heap for the
+algorithm (5.87 MiB counting everything after numpy, including compiling `main.py`) and 4.9 ms per second of IMU
 ([`python_budget.json`](../../results/track3/python_budget.json)), and beats standing still on all 17 recordings for
 ATE, checkpoints, dropouts and drift ([`per_recording.md`](../../results/track3/per_recording.md)).
 
