@@ -1,0 +1,140 @@
+{
+ "layout": "accel_first",
+ "extra": [
+  "--model",
+  "runs/hand/world_full_s1/velnet_hand.bin"
+ ],
+ "mean": {
+  "ate_rmse_m": 0.7908084614212525,
+  "checkpoints_m": 0.7358347130654029,
+  "blind_mean_m": 0.633018446418046,
+  "dropout_m": 0.7568511301397388
+ },
+ "rows": [
+  {
+   "rows": 27330,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.7341545943798342,
+   "position_drift_1s_m": 0.6228897682725387,
+   "checkpoints_m": 0.6095994583143205,
+   "blind_mean_m": 0.5387448870832442,
+   "blind_end_m": 0.28379988006012724,
+   "dropout_m": 0.6921640271366085,
+   "data": "tumvi:room1",
+   "layout": "accel_first",
+   "entry_stderr": [
+    "input layout: accel columns first, timestamps in ns, accel in m/s^2"
+   ],
+   "degradation": {
+    "rows_in": 28122,
+    "rows_out": 27330,
+    "spikes": 38,
+    "stuck_samples": 355,
+    "dropped_total": 827,
+    "duplicated_rows": 35,
+    "failure_frames": 997
+   }
+  },
+  {
+   "rows": 27879,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.6787702680369564,
+   "position_drift_1s_m": 0.5367303771215448,
+   "checkpoints_m": 0.6346177984410641,
+   "blind_mean_m": 0.6123881960604197,
+   "blind_end_m": 0.3483291745393349,
+   "dropout_m": 0.6276577253402443,
+   "data": "tumvi:room2",
+   "layout": "accel_first",
+   "entry_stderr": [
+    "input layout: accel columns first, timestamps in ns, accel in m/s^2"
+   ],
+   "degradation": {
+    "rows_in": 28732,
+    "rows_out": 27879,
+    "spikes": 34,
+    "stuck_samples": 374,
+    "dropped_total": 888,
+    "duplicated_rows": 35,
+    "failure_frames": 997
+   }
+  },
+  {
+   "rows": 27350,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.7775848011992291,
+   "position_drift_1s_m": 0.5415797844239382,
+   "checkpoints_m": 0.658941895924476,
+   "blind_mean_m": 0.6237771234740351,
+   "blind_end_m": 0.6702224582113203,
+   "dropout_m": 0.7496595609281212,
+   "data": "tumvi:room3",
+   "layout": "accel_first",
+   "entry_stderr": [
+    "input layout: accel columns first, timestamps in ns, accel in m/s^2"
+   ],
+   "degradation": {
+    "rows_in": 28124,
+    "rows_out": 27350,
+    "spikes": 38,
+    "stuck_samples": 350,
+    "dropped_total": 809,
+    "duplicated_rows": 35,
+    "failure_frames": 997
+   }
+  },
+  {
+   "rows": 21607,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.9274535541314013,
+   "position_drift_1s_m": 0.4565872393040002,
+   "checkpoints_m": 0.9264071532022452,
+   "blind_mean_m": 0.6972478823277951,
+   "blind_end_m": 0.5646531998847082,
+   "dropout_m": 0.9068101880854316,
+   "data": "tumvi:room4",
+   "layout": "accel_first",
+   "entry_stderr": [
+    "input layout: accel columns first, timestamps in ns, accel in m/s^2"
+   ],
+   "degradation": {
+    "rows_in": 22212,
+    "rows_out": 21607,
+    "spikes": 22,
+    "stuck_samples": 242,
+    "dropped_total": 631,
+    "duplicated_rows": 26,
+    "failure_frames": 997
+   }
+  },
+  {
+   "rows": 27600,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.8360790893588412,
+   "position_drift_1s_m": 0.6587944940193748,
+   "checkpoints_m": 0.8496072594449083,
+   "blind_mean_m": 0.692934143144736,
+   "blind_end_m": 0.6295135096798984,
+   "dropout_m": 0.8079641492082883,
+   "data": "tumvi:room5",
+   "layout": "accel_first",
+   "entry_stderr": [
+    "input layout: accel columns first, timestamps in ns, accel in m/s^2"
+   ],
+   "degradation": {
+    "rows_in": 28381,
+    "rows_out": 27600,
+    "spikes": 33,
+    "stuck_samples": 412,
+    "dropped_total": 815,
+    "duplicated_rows": 34,
+    "failure_frames": 997
+   }
+  }
+ ]
+}

@@ -1,0 +1,40 @@
+{
+ "layout": "accel_first",
+ "extra": [
+  "--model",
+  "runs/loro/world_room3_s1/w.bin"
+ ],
+ "mean": {
+  "ate_rmse_m": 0.841998212117114,
+  "checkpoints_m": 0.7505436918336778,
+  "blind_mean_m": 0.6040830433988303,
+  "dropout_m": 0.8247686523845552
+ },
+ "rows": [
+  {
+   "rows": 27350,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.841998212117114,
+   "position_drift_1s_m": 0.6134150572268273,
+   "checkpoints_m": 0.7505436918336778,
+   "blind_mean_m": 0.6040830433988303,
+   "blind_end_m": 0.6233385676918407,
+   "dropout_m": 0.8247686523845552,
+   "data": "tumvi:room3",
+   "layout": "accel_first",
+   "entry_stderr": [
+    "input layout: accel columns first, timestamps in ns, accel in m/s^2"
+   ],
+   "degradation": {
+    "rows_in": 28124,
+    "rows_out": 27350,
+    "spikes": 38,
+    "stuck_samples": 350,
+    "dropped_total": 809,
+    "duplicated_rows": 35,
+    "failure_frames": 997
+   }
+  }
+ ]
+}

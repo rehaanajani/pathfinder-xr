@@ -1,0 +1,37 @@
+{
+ "layout": "accel_first",
+ "extra": [],
+ "mean": {
+  "ate_rmse_m": 0.8874106703878727,
+  "checkpoints_m": 0.8660219960298072,
+  "blind_mean_m": 0.6077144638365896,
+  "dropout_m": 0.8189595944479479
+ },
+ "rows": [
+  {
+   "rows": 27522,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.8874106703878727,
+   "position_drift_1s_m": 0.7339701208837901,
+   "checkpoints_m": 0.8660219960298072,
+   "blind_mean_m": 0.6077144638365896,
+   "blind_end_m": 0.5665617342993665,
+   "dropout_m": 0.8189595944479479,
+   "data": "tumvi:room5",
+   "layout": "accel_first",
+   "entry_stderr": [
+    "input layout: accel columns first, timestamps in ns, accel in m/s^2"
+   ],
+   "degradation": {
+    "rows_in": 28381,
+    "rows_out": 27522,
+    "spikes": 36,
+    "stuck_samples": 365,
+    "dropped_total": 889,
+    "duplicated_rows": 30,
+    "failure_frames": 997
+   }
+  }
+ ]
+}

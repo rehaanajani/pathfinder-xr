@@ -1,0 +1,42 @@
+{
+ "layout": "accel_first",
+ "extra": [
+  "--model",
+  "runs/hand/world_full_s1/velnet_hand.bin",
+  "--pos-tau",
+  "10"
+ ],
+ "mean": {
+  "ate_rmse_m": 0.8457539603912096,
+  "checkpoints_m": 0.7637491704763825,
+  "blind_mean_m": 0.8958997810403078,
+  "dropout_m": 0.8049993151886555
+ },
+ "rows": [
+  {
+   "rows": 27586,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.8457539603912096,
+   "position_drift_1s_m": 0.6338380921692015,
+   "checkpoints_m": 0.7637491704763825,
+   "blind_mean_m": 0.8958997810403078,
+   "blind_end_m": 0.8150409499663823,
+   "dropout_m": 0.8049993151886555,
+   "data": "tumvi:room5",
+   "layout": "accel_first",
+   "entry_stderr": [
+    "input layout: accel columns first, timestamps in ns, accel in m/s^2"
+   ],
+   "degradation": {
+    "rows_in": 28381,
+    "rows_out": 27586,
+    "spikes": 19,
+    "stuck_samples": 324,
+    "dropped_total": 829,
+    "duplicated_rows": 34,
+    "failure_frames": 997
+   }
+  }
+ ]
+}

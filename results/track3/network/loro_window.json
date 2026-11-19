@@ -1,0 +1,165 @@
+{
+ "note": "leave-one-room-out window-level velocity error (m/s), best epoch chosen on a pool of the left-out room, room5, MH_04, V1_03 (same for both inputs)",
+ "runs": {
+  "body_room1_s0": {
+   "tumvi:room1": {
+    "vel_rmse_mps": 0.8261385903209442,
+    "vel_zero_mps": 1.1004396965185552
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.8418601244712752,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "body_room1_s1": {
+   "tumvi:room1": {
+    "vel_rmse_mps": 0.8668509439246901,
+    "vel_zero_mps": 1.1004396965185552
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.8273794932012849,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "body_room2_s0": {
+   "tumvi:room2": {
+    "vel_rmse_mps": 0.7516748681421398,
+    "vel_zero_mps": 1.0191274023011672
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.7753812150840605,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "body_room2_s1": {
+   "tumvi:room2": {
+    "vel_rmse_mps": 0.7943663788000891,
+    "vel_zero_mps": 1.0191274023011672
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.7420931119724414,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "body_room3_s0": {
+   "tumvi:room3": {
+    "vel_rmse_mps": 0.9186644446428868,
+    "vel_zero_mps": 1.020096523514908
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.7924554043987407,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "body_room3_s1": {
+   "tumvi:room3": {
+    "vel_rmse_mps": 0.9964494778970614,
+    "vel_zero_mps": 1.020096523514908
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.7780206744573782,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "body_room4_s0": {
+   "tumvi:room4": {
+    "vel_rmse_mps": 0.659263964618951,
+    "vel_zero_mps": 0.6542507013848708
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.7936923073199955,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "body_room4_s1": {
+   "tumvi:room4": {
+    "vel_rmse_mps": 0.6205554403560344,
+    "vel_zero_mps": 0.6542507013848708
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.7519643286160181,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "world_room1_s0": {
+   "tumvi:room1": {
+    "vel_rmse_mps": 0.7028152933173373,
+    "vel_zero_mps": 1.099326075331325
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.6990317312939764,
+    "vel_zero_mps": 1.0410800828004627
+   }
+  },
+  "world_room1_s1": {
+   "tumvi:room1": {
+    "vel_rmse_mps": 0.7044229516846593,
+    "vel_zero_mps": 1.099326075331325
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.6871351795210787,
+    "vel_zero_mps": 1.0410800828004627
+   }
+  },
+  "world_room2_s0": {
+   "tumvi:room2": {
+    "vel_rmse_mps": 0.42238871494817526,
+    "vel_zero_mps": 1.018812997327696
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.6367380636152667,
+    "vel_zero_mps": 1.0410800828004627
+   }
+  },
+  "world_room2_s1": {
+   "tumvi:room2": {
+    "vel_rmse_mps": 0.42440387418982645,
+    "vel_zero_mps": 1.018812997327696
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.6378854999127264,
+    "vel_zero_mps": 1.0410800828004627
+   }
+  },
+  "world_room3_s0": {
+   "tumvi:room3": {
+    "vel_rmse_mps": 0.45434422228469945,
+    "vel_zero_mps": 1.0195769088915718
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.6698676303257026,
+    "vel_zero_mps": 1.0410800828004627
+   }
+  },
+  "world_room3_s1": {
+   "tumvi:room3": {
+    "vel_rmse_mps": 0.42497305813719405,
+    "vel_zero_mps": 1.0195769088915718
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.655716872681428,
+    "vel_zero_mps": 1.0410800828004627
+   }
+  },
+  "world_room4_s0": {
+   "tumvi:room4": {
+    "vel_rmse_mps": 0.6203621670965078,
+    "vel_zero_mps": 0.6531739266198917
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.6296119426572289,
+    "vel_zero_mps": 1.0410800828004627
+   }
+  },
+  "world_room4_s1": {
+   "tumvi:room4": {
+    "vel_rmse_mps": 0.6004874837351714,
+    "vel_zero_mps": 0.6531739266198917
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.6377088572412766,
+    "vel_zero_mps": 1.0410800828004627
+   }
+  }
+ }
+}

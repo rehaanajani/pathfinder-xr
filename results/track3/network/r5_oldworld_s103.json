@@ -1,0 +1,41 @@
+{
+ "layout": "accel_first",
+ "extra": [
+  "--mount-guard-deg",
+  "0.001"
+ ],
+ "mean": {
+  "ate_rmse_m": 0.8253359861238141,
+  "checkpoints_m": 0.7874327664521534,
+  "blind_mean_m": 0.7063907214459769,
+  "dropout_m": 0.7807404172321318
+ },
+ "rows": [
+  {
+   "rows": 27551,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.8253359861238141,
+   "position_drift_1s_m": 0.6792014312871977,
+   "checkpoints_m": 0.7874327664521534,
+   "blind_mean_m": 0.7063907214459769,
+   "blind_end_m": 0.6453888784969892,
+   "dropout_m": 0.7807404172321318,
+   "data": "tumvi:room5",
+   "layout": "accel_first",
+   "entry_stderr": [
+    "input layout: accel columns first, timestamps in ns, accel in m/s^2",
+    "IMU mount 0 deg from the training mounts: using velnet_weights_world.bin"
+   ],
+   "degradation": {
+    "rows_in": 28381,
+    "rows_out": 27551,
+    "spikes": 32,
+    "stuck_samples": 303,
+    "dropped_total": 876,
+    "duplicated_rows": 46,
+    "failure_frames": 997
+   }
+  }
+ ]
+}
