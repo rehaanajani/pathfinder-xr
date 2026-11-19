@@ -349,7 +349,6 @@ class PathFinder:
         self.still_w, self.still_s, self.still_ss = [], [0.0] * 6, [0.0] * 6
         self.bad_time = 0.0                       # seconds since the last trusted sample
         self.last_good = None                     # (t, g, a) of the last trusted row, for bridging dropouts
-        self.v_hist = []                          # (t, v) over the last --blind-v-avg seconds of trusted motion
         self.good_time = 1e9                      # seconds of healthy data since the last dropout
         self.bias_known = False                   # gyro bias already taken from a still stretch (prescan)
         self.f_lp = None                          # low-passed specific force (body frame)
@@ -588,10 +587,6 @@ class PathFinder:
                 self.p[i] += self.v[i] * dt + 0.5 * acc_w[i] * dt * dt
                 self.v[i] += acc_w[i] * dt
             self.w_last = w
-            if A.blind_v_avg > 0:
-                self.v_hist.append((t, tuple(self.v)))
-                while self.v_hist and (t - self.v_hist[0][0]) * 1e-9 > A.blind_v_avg:
-                    self.v_hist.pop(0)
             if self.net is not None or self.rec is not None:
                 if self.push_slot(t, w_raw if self.body else w, f):
                     self.learned_update()
@@ -606,11 +601,6 @@ class PathFinder:
             leak = A.leak
         else:
             # Dead reckoning (dropout or failed IMU): turn rate and velocity decay, position keeps moving.
-            if self.bad_time == 0.0 and A.blind_v_avg > 0 and self.v_hist:
-                # Entering an outage: coast from the mean velocity of the last moments, not the last (noisiest) one.
-                n = len(self.v_hist)
-                self.v = [sum(h[1][i] for h in self.v_hist) / n for i in range(3)]
-                self.v_hist = []
             self.bad_time += dt
             self.yaw_var += A.yaw_q_blind * dt
             if self.bad_time > 0.25:
@@ -924,8 +914,6 @@ def args(argv=None):
                     help="s; pull back to the start once the IMU has been unusable for > 1 s (0 = same as --pos-tau)")
     ap.add_argument("--blind-vel-tau", type=float, default=1.5)
     ap.add_argument("--blind-turn-tau", type=float, default=0.5)
-    ap.add_argument("--blind-v-avg", type=float, default=0.0,
-                    help="s; when the IMU becomes unusable, coast from the mean velocity over this window (0 = last value)")
     ap.add_argument("--bridge-max", type=float, default=0.5,
                     help="s; fill gaps up to this long between two trusted rows with interpolated readings (0 = off)")
     ap.add_argument("--model", default="auto",
