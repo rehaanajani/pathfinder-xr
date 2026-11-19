@@ -1,0 +1,92 @@
+{
+ "layout": "accel_first",
+ "extra": [
+  "--model-vref",
+  "0.5"
+ ],
+ "mean": {
+  "ate_rmse_m": 2.3962978703835676,
+  "checkpoints_m": 2.3959747557667805,
+  "blind_mean_m": 1.495433531497273,
+  "dropout_m": 2.296486110768542
+ },
+ "rows": [
+  {
+   "rows": 19753,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 4.98561696057084,
+   "position_drift_1s_m": 0.7719495066925791,
+   "checkpoints_m": 5.018099745823389,
+   "blind_mean_m": 2.6513381942690426,
+   "blind_end_m": 2.7571806853896765,
+   "dropout_m": 4.80819319130177,
+   "data": "euroc:MH_04_difficult",
+   "layout": "accel_first",
+   "entry_stderr": [
+    "input layout: accel columns first, timestamps in ns, accel in m/s^2",
+    "rotor-drag aiding on (start-up gravity 4 deg from the drone's thrust axis)"
+   ],
+   "degradation": {
+    "rows_in": 20320,
+    "rows_out": 19753,
+    "spikes": 18,
+    "stuck_samples": 260,
+    "dropped_total": 586,
+    "duplicated_rows": 19,
+    "failure_frames": 1001
+   }
+  },
+  {
+   "rows": 20844,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 1.2956531181879585,
+   "position_drift_1s_m": 0.5451786803090409,
+   "checkpoints_m": 1.3129387527354868,
+   "blind_mean_m": 1.2198515676815855,
+   "blind_end_m": 1.2464792874089503,
+   "dropout_m": 1.23194236212019,
+   "data": "euroc:V1_03_difficult",
+   "layout": "accel_first",
+   "entry_stderr": [
+    "input layout: accel columns first, timestamps in ns, accel in m/s^2",
+    "rotor-drag aiding on (start-up gravity 4 deg from the drone's thrust axis)"
+   ],
+   "degradation": {
+    "rows_in": 21500,
+    "rows_out": 20844,
+    "spikes": 18,
+    "stuck_samples": 214,
+    "dropped_total": 671,
+    "duplicated_rows": 15,
+    "failure_frames": 1001
+   }
+  },
+  {
+   "rows": 27600,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.9076235323919039,
+   "position_drift_1s_m": 0.7222581850057018,
+   "checkpoints_m": 0.8568857687414664,
+   "blind_mean_m": 0.6151108325411908,
+   "blind_end_m": 0.570722710616202,
+   "dropout_m": 0.8493227788836655,
+   "data": "tumvi:room5",
+   "layout": "accel_first",
+   "entry_stderr": [
+    "input layout: accel columns first, timestamps in ns, accel in m/s^2"
+   ],
+   "degradation": {
+    "rows_in": 28381,
+    "rows_out": 27600,
+    "spikes": 33,
+    "stuck_samples": 412,
+    "dropped_total": 815,
+    "duplicated_rows": 34,
+    "failure_frames": 997
+   }
+  }
+ ]
+}

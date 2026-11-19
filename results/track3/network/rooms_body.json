@@ -1,0 +1,137 @@
+{
+ "layout": "accel_first",
+ "extra": [],
+ "mean": {
+  "ate_rmse_m": 0.7228767080152595,
+  "checkpoints_m": 0.6656097997445711,
+  "blind_mean_m": 0.6391137741542072,
+  "dropout_m": 0.6901176898288487
+ },
+ "rows": [
+  {
+   "rows": 27330,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.5719159459746739,
+   "position_drift_1s_m": 0.5125513613991943,
+   "checkpoints_m": 0.5156833388829962,
+   "blind_mean_m": 0.5177846382089618,
+   "blind_end_m": 0.32387136548216616,
+   "dropout_m": 0.5311436884791891,
+   "data": "tumvi:room1",
+   "layout": "accel_first",
+   "entry_stderr": [
+    "input layout: accel columns first, timestamps in ns, accel in m/s^2"
+   ],
+   "degradation": {
+    "rows_in": 28122,
+    "rows_out": 27330,
+    "spikes": 38,
+    "stuck_samples": 355,
+    "dropped_total": 827,
+    "duplicated_rows": 35,
+    "failure_frames": 997
+   }
+  },
+  {
+   "rows": 27879,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.6566213401792244,
+   "position_drift_1s_m": 0.5052742740538818,
+   "checkpoints_m": 0.6094890147309775,
+   "blind_mean_m": 0.7016730905648612,
+   "blind_end_m": 0.430759751042723,
+   "dropout_m": 0.6221315191081689,
+   "data": "tumvi:room2",
+   "layout": "accel_first",
+   "entry_stderr": [
+    "input layout: accel columns first, timestamps in ns, accel in m/s^2"
+   ],
+   "degradation": {
+    "rows_in": 28732,
+    "rows_out": 27879,
+    "spikes": 34,
+    "stuck_samples": 374,
+    "dropped_total": 888,
+    "duplicated_rows": 35,
+    "failure_frames": 997
+   }
+  },
+  {
+   "rows": 27350,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.724576819619657,
+   "position_drift_1s_m": 0.5020388827575094,
+   "checkpoints_m": 0.6139761278894429,
+   "blind_mean_m": 0.6366555697443838,
+   "blind_end_m": 0.6406678646578553,
+   "dropout_m": 0.7027429761589703,
+   "data": "tumvi:room3",
+   "layout": "accel_first",
+   "entry_stderr": [
+    "input layout: accel columns first, timestamps in ns, accel in m/s^2"
+   ],
+   "degradation": {
+    "rows_in": 28124,
+    "rows_out": 27350,
+    "spikes": 38,
+    "stuck_samples": 350,
+    "dropped_total": 809,
+    "duplicated_rows": 35,
+    "failure_frames": 997
+   }
+  },
+  {
+   "rows": 21607,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.753922652504192,
+   "position_drift_1s_m": 0.33347892087977427,
+   "checkpoints_m": 0.7306754719532489,
+   "blind_mean_m": 0.7170411653789197,
+   "blind_end_m": 0.57239183309771,
+   "dropout_m": 0.7463233177313149,
+   "data": "tumvi:room4",
+   "layout": "accel_first",
+   "entry_stderr": [
+    "input layout: accel columns first, timestamps in ns, accel in m/s^2"
+   ],
+   "degradation": {
+    "rows_in": 22212,
+    "rows_out": 21607,
+    "spikes": 22,
+    "stuck_samples": 242,
+    "dropped_total": 631,
+    "duplicated_rows": 26,
+    "failure_frames": 997
+   }
+  },
+  {
+   "rows": 27600,
+   "rows_match_input": true,
+   "quat_unit": true,
+   "ate_rmse_m": 0.907346781798551,
+   "position_drift_1s_m": 0.7212868170727705,
+   "checkpoints_m": 0.8582250452661903,
+   "blind_mean_m": 0.6224144068739094,
+   "blind_end_m": 0.5752256747795071,
+   "dropout_m": 0.8482469476665998,
+   "data": "tumvi:room5",
+   "layout": "accel_first",
+   "entry_stderr": [
+    "input layout: accel columns first, timestamps in ns, accel in m/s^2"
+   ],
+   "degradation": {
+    "rows_in": 28381,
+    "rows_out": 27600,
+    "spikes": 33,
+    "stuck_samples": 412,
+    "dropped_total": 815,
+    "duplicated_rows": 34,
+    "failure_frames": 997
+   }
+  }
+ ]
+}
