@@ -336,6 +336,11 @@ class PathFinder:
         self.still_w, self.still_s, self.still_ss = [], [0.0] * 6, [0.0] * 6
         self.bad_time = 0.0                       # seconds since the last trusted sample
         self.last_good = None                     # (t, g, a) of the last trusted row, for bridging dropouts
+        self.hf = [None, None]                    # smoothed row-to-row variance (gyro, accel), for the noise level
+        self.hf_ref = [None, None]                # its quietest value in the first 10 s (the clean level)
+        self.hf_prev = None                       # (t, g, a) of the previous trusted row
+        self.t_first = None
+        self.exc = [0.0, 0.0]                     # measured excess noise std (gyro rad/s, accel m/s^2)
         self.good_time = 1e9                      # seconds of healthy data since the last dropout
         self.bias_known = False                   # gyro bias already taken from a still stretch (prescan)
         self.f_lp = None                          # low-passed specific force (body frame)
@@ -436,6 +441,26 @@ class PathFinder:
             print(f"IMU mount {self.mount_angle:.0f} deg from the training mounts: using {weights_name(A.fallback_model)}",
                   file=sys.stderr)
 
+    def track_noise(self, t, g, a):
+        """Excess sensor noise above the clean start: per sensor, the row-to-row variance (half the mean squared
+        difference over the three axes, white-noise scale) smoothed over 2 s, minus its quietest value in the first
+        10 s, as a standard deviation."""
+        pr = self.hf_prev
+        self.hf_prev = (t, g, a)
+        if self.t_first is None:
+            self.t_first = t
+        if pr is None or not self.dt_nom or (t - pr[0]) * 1e-9 > 1.5 * self.dt_nom:
+            return
+        k = min(1.0, (t - pr[0]) * 1e-9 / 2.0)
+        for j, (x, y) in enumerate(((g, pr[1]), (a, pr[2]))):
+            d2 = sum((x[i] - y[i]) ** 2 for i in range(3)) / 6.0
+            self.hf[j] = d2 if self.hf[j] is None else self.hf[j] + k * (d2 - self.hf[j])
+            if (t - self.t_first) * 1e-9 <= 10.0:
+                if (t - self.t_first) * 1e-9 >= 2.0:
+                    self.hf_ref[j] = self.hf[j] if self.hf_ref[j] is None else min(self.hf_ref[j], self.hf[j])
+            elif self.hf_ref[j] is not None:
+                self.exc[j] = math.sqrt(max(0.0, self.hf[j] - self.hf_ref[j]))
+
     def zero_velocity(self, g, a):
         A = self.a
         w = A.zupt_window
@@ -458,7 +483,10 @@ class PathFinder:
             if len(self.still_w) < w:
                 return False
             var = [max(0.0, self.still_ss[i] / w - (self.still_s[i] / w) ** 2) for i in range(6)]
-            if max(var[:3]) < A.zupt_gyro_std ** 2 and max(var[3:]) < A.zupt_acc_std ** 2:
+            c = A.zupt_adapt
+            th_g = A.zupt_gyro_std ** 2 + (c * self.exc[0]) ** 2   # widened by the measured excess noise
+            th_a = A.zupt_acc_std ** 2 + (c * self.exc[1]) ** 2
+            if max(var[:3]) < th_g and max(var[3:]) < th_a:
                 self.still_gyro = (self.still_s[0] / w, self.still_s[1] / w, self.still_s[2] / w)
                 return True
             return False
@@ -564,6 +592,8 @@ class PathFinder:
             if self.net is not None or self.rec is not None:
                 if self.push_slot(t, w_raw if self.body else w, f):
                     self.learned_update()
+            if A.zupt_adapt > 0:
+                self.track_noise(t, g, a)
             if self.zero_velocity(g, a):
                 k = min(1.0, dt / A.zupt_tau)
                 for i in range(3):
@@ -854,6 +884,8 @@ def args(argv=None):
                     help="s; pull back to the start once the IMU has been unusable for > 1 s (0 = same as --pos-tau)")
     ap.add_argument("--blind-vel-tau", type=float, default=1.5)
     ap.add_argument("--blind-turn-tau", type=float, default=0.5)
+    ap.add_argument("--zupt-adapt", type=float, default=0.0,
+                    help="widen the still thresholds by this many times the measured excess noise (0 = off)")
     ap.add_argument("--bridge-max", type=float, default=0.5,
                     help="s; fill gaps up to this long between two trusted rows with interpolated readings (0 = off)")
     ap.add_argument("--model", default="auto",
