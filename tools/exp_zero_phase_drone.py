@@ -9,6 +9,7 @@ that shortens along the organisers' damage ramp; elsewhere the shipped output is
 tools/competitor_scoreboard.py (`inputs`). Rows go to runs/zp_drone/<phase>.json.
 """
 import argparse
+import os
 import json
 import subprocess
 import sys
@@ -23,13 +24,13 @@ from eval_track3 import source  # noqa: E402
 from score_track3 import score  # noqa: E402
 
 INPUTS = ROOT / "runs" / "scoreboard" / "inputs"
-WORK = ROOT / "runs" / "zp_drone"
+WORK = ROOT / "runs" / os.environ.get("ZP_WORK", "zp_drone")
 DEV = ["euroc:MH_01_easy", "euroc:MH_02_easy", "euroc:MH_03_medium", "euroc:V1_01_easy", "euroc:V1_02_medium",
        "euroc:V2_01_easy", "euroc:V2_02_medium"] + [f"tumvi:room{i}" for i in range(1, 5)]
 HELD = ["euroc:MH_04_difficult", "euroc:MH_05_difficult", "euroc:V1_03_difficult", "euroc:V2_03_difficult",
         "tumvi:room5", "tumvi:room6"]
 KEYS = ["ate_rmse_m", "checkpoints_m", "blind_mean_m", "dropout_m", "position_drift_1s_m"]
-OFF = ["--pos-tau", "0", "--pos-tau-nonet", "0", "--drag-pos-tau", "0"]
+OFF = ["--pos-tau", "0", "--pos-tau-nonet", "0", "--drag-pos-tau", "0", "--zp-tau-start", "0"]
 
 
 def ema(t, x, taus, reverse=False):
@@ -50,7 +51,13 @@ def zero_phase(t, p, tau0, tau1, gamma=1.7):
 
 
 SETTINGS = {"entry": None}
-for a, b in ((24, 6), (48, 6), (48, 12), (96, 6), (96, 12), (24, 12), (48, 24), (96, 24), (12, 12), (24, 24)):
+for a, b in ((2, 2), (3, 3), (4, 4), (6, 6), (10, 10), (6, 3), (10, 3), (20, 3), (3, 1.5), (6, 2)):
+    SETTINGS[f"hh {a}->{b}"] = (a, b, "keep", "handheld")
+if os.environ.get("ZP_WORK") == "zp_blind":
+    SETTINGS = {"entry": None}
+    for m in ("keep", "hold", "off", "mix0.25", "mix0.5"):
+        SETTINGS[f"bl {m}"] = (48, 12, m)
+for a, b in () if os.environ.get("ZP_WORK") else ((24, 6), (48, 6), (48, 12), (96, 6), (96, 12), (24, 12), (48, 24), (96, 24), (12, 12), (24, 24)):
     SETTINGS[f"zp {a}->{b}"] = (a, b)
     SETTINGS[f"zpb {a}->{b} entry"] = (a, b, "entry")
     SETTINGS[f"zpb {a}->{b} off"] = (a, b, "off")
@@ -71,9 +78,9 @@ def evaluate(spec, s, name):
     entry = run(d, WORK / f"{tag}_entry.txt", [])
     drone = "rotor-drag aiding on" in entry.with_suffix(".err").read_text()
     est = entry
-    if SETTINGS[name] is not None and drone:
+    cfg = SETTINGS[name]
+    if cfg is not None and (drone if len(cfg) < 4 else not drone):
         e = np.loadtxt(run(d, WORK / f"{tag}_off.txt", OFF), comments="#")
-        cfg = SETTINGS[name]
         if len(cfg) == 2:
             e[:, 1:4] = zero_phase(e[:, 0], e[:, 1:4], *cfg)
         else:   # smooth only up to the failure, then the blind motion of `cfg[2]` ("entry" or "off") from there
@@ -81,9 +88,19 @@ def evaluate(spec, s, name):
             k = len(raw)
             while k > 0 and not np.any(raw[k - 1, 1:7]):
                 k -= 1
-            src = e.copy() if cfg[2] == "off" else np.loadtxt(entry, comments="#")
+            src = e.copy() if cfg[2] == "off" or cfg[2].startswith("mix") else np.loadtxt(entry, comments="#")
             e[:k, 1:4] = zero_phase(e[:k, 0], e[:k, 1:4], cfg[0], cfg[1])
-            if cfg[2] == "keep":   # the shipped entry's own blind positions, untouched
+            if cfg[2] == "hold":     # hold the smoothed position at the failure
+                e[k:, 1:4] = e[k - 1, 1:4]
+            elif cfg[2] == "holdentry":   # hold the causal entry's position at the failure
+                en = np.loadtxt(entry, comments="#")
+                e[:k, 1:4] = en[:k, 1:4]
+                e[k:, 1:4] = en[k - 1, 1:4]
+            elif cfg[2].startswith("mix"):   # blend: kept blind rows and the un-pulled coast from the smoothed point
+                w = float(cfg[2][3:])
+                en = np.loadtxt(entry, comments="#")[k:, 1:4]
+                e[k:, 1:4] = (1 - w) * en + w * (e[k - 1, 1:4] + (src[k:, 1:4] - src[k - 1, 1:4]))
+            elif cfg[2] == "keep":   # the shipped entry's own blind positions, untouched
                 e[k:, 1:4] = np.loadtxt(entry, comments="#")[k:, 1:4]
             else:
                 e[k:, 1:4] = e[k - 1, 1:4] + (src[k:, 1:4] - src[k - 1, 1:4])
@@ -109,8 +126,7 @@ def main():
         sp, s = job
         d, tag = INPUTS / s / sp.replace(":", "_"), f"{s}_{sp.replace(':', '_')}"
         e = run(d, WORK / f"{tag}_entry.txt", [])
-        if "rotor-drag aiding on" in e.with_suffix(".err").read_text():
-            run(d, WORK / f"{tag}_off.txt", OFF)
+        run(d, WORK / f"{tag}_off.txt", OFF)
 
     with ThreadPoolExecutor(8) as ex:
         list(ex.map(prepare, {(j[0], j[1]) for j in jobs}))
