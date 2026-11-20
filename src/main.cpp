@@ -94,7 +94,7 @@ struct Opt {
     double zupt_gyro = 0.04, zupt_acc = 0.15, zupt_tau = 0.05, zupt_gyro_std = NaN, zupt_acc_std = 0.15;
     double prescan = NaN, bias_rate = NaN, leak = 1.0, kp = NaN, ki = NaN, kp_boost = NaN, ki_calm = NaN;
     double tilt_lp = NaN, kp_boost_tau = 0.7, tilt_acc_tol = 1.5, acc_res_tau = 10.0, v_max = 3.0, pos_tau = NaN;
-    double blind_vel_tau = 1.5, blind_turn_tau = 0.5, pos_tau_blind = NaN, pos_tau_nonet = NaN, bridge_max = 0.5;
+    double blind_vel_tau = 1.5, blind_turn_tau = 0.5, pos_tau_blind = NaN, pos_tau_nonet = NaN, bridge_max = 0.5, unstick_max = 0.1;
     double drag_k1 = -0.19, drag_k2 = -0.17, drag_tau = 0.5, drag_lp = 0.3, drag_robust = 2.0, drag_hp = 0.0;
     double drag_pos_tau = 12.0, drag_mount_deg = 15.0, zp_tau_start = 48.0, zp_tau_end = 12.0, two_pass = 10.0;
     int two_pass_res = 0;
@@ -136,7 +136,7 @@ static void parse_args(int argc, char** argv, Opt& a) {
         {"blind-vel-tau", &a.blind_vel_tau, nullptr, nullptr}, {"blind-turn-tau", &a.blind_turn_tau, nullptr, nullptr},
         {"two-pass", &a.two_pass, nullptr, nullptr}, {"two-pass-res", nullptr, &a.two_pass_res, nullptr},
         {"zp-tau-start", &a.zp_tau_start, nullptr, nullptr}, {"zp-tau-end", &a.zp_tau_end, nullptr, nullptr},
-        {"bridge-max", &a.bridge_max, nullptr, nullptr},
+        {"bridge-max", &a.bridge_max, nullptr, nullptr}, {"unstick-max", &a.unstick_max, nullptr, nullptr},
         {"model-every", nullptr, &a.model_every, nullptr}, {"model-min-valid", &a.model_min_valid, nullptr, nullptr},
         {"model-ref", &a.model_ref, nullptr, nullptr}, {"model-vref", &a.model_vref, nullptr, nullptr},
         {"model-pos-gain", &a.model_pos_gain, nullptr, nullptr}, {"model-vel-gain", &a.model_vel_gain, nullptr, nullptr},
@@ -351,6 +351,41 @@ static bool py_int(const std::string& s0, long long& out) {
 }
 
 struct Row { long long t; V3 g, a; };
+
+// Stuck runs, as main.py's unstick(): rows bit-identical to the last fresh row (later timestamp) are held back until the
+// next different row, then replaced by readings interpolated linearly in time; runs longer than max_s, runs ending in
+// an all-zero row and runs at the end of the file are left as they are.
+struct Unstick {
+    double max_s = 0;
+    bool have_last = false;
+    Row last{};
+    std::vector<Row> held;
+    void push(const Row& r, std::vector<Row>& out) {
+        long long tp = held.empty() ? last.t : held.back().t;
+        bool same = true;
+        for (int i = 0; i < 3; i++) same = same && r.g[i] == last.g[i] && r.a[i] == last.a[i];
+        if (have_last && r.t > tp && same) { held.push_back(r); return; }
+        if (!held.empty()) {
+            bool any = false;
+            for (int i = 0; i < 3; i++) any = any || r.g[i] != 0 || r.a[i] != 0;
+            bool fresh = any && r.t > held.back().t && (double)(r.t - last.t) * 1e-9 <= max_s;
+            for (Row h : held) {
+                if (fresh) {
+                    double u = (double)(h.t - last.t) / (double)(r.t - last.t);
+                    for (int i = 0; i < 3; i++) {
+                        h.g[i] = last.g[i] + u * (r.g[i] - last.g[i]);
+                        h.a[i] = last.a[i] + u * (r.a[i] - last.a[i]);
+                    }
+                }
+                out.push_back(h);
+            }
+            held.clear();
+        }
+        last = r; have_last = true;
+        out.push_back(r);
+    }
+    void flush(std::vector<Row>& out) { out.insert(out.end(), held.begin(), held.end()); held.clear(); }
+};
 
 // Column order and units of the input (see main.py detect_layout): EuRoC is ns, gyro first, accel in m/s^2; the
 // organisers' degradation script documents accel-first columns and accepts s/ms/us/ns timestamps and accel in g.
@@ -1042,6 +1077,22 @@ struct PathFinder {
 };
 
 // First pass over the start of the file: gyro bias = mean gyro of the first still stretch (main.py prescan_bias).
+// Every data row of the source, through the stuck-run repair when max_s > 0, to body (which returns false to stop).
+template <class F> static void read_rows(Source& src, double max_s, F&& body) {
+    Unstick us; us.max_s = max_s;
+    std::vector<Row> ready;
+    Row r;
+    while (src.getline()) {
+        if (!parse_line(src.line, r)) continue;
+        ready.clear();
+        if (max_s > 0) us.push(r, ready); else ready.push_back(r);
+        for (const Row& x : ready) if (!body(x)) return;
+    }
+    ready.clear();
+    us.flush(ready);
+    for (const Row& x : ready) if (!body(x)) return;
+}
+
 static bool prescan_bias(const Opt& a, V3& out) {
     PathFinder pf(a, nullptr);
     V3 sum{{0, 0, 0}};
@@ -1079,9 +1130,7 @@ static void warm_start(const Opt& a, VelNet* np, V3& bg, V3& res) {
     struct P { Row r; bool ok; };
     std::vector<P> pending;
     bool have_first = false; long long t_first = 0;
-    Row r;
-    while (src.getline()) {
-        if (!parse_line(src.line, r)) continue;
+    auto body = [&](const Row& r) -> bool {          // one row; false = stop reading
         bool ok = pf.healthy(r.g, r.a);
         if (!pf.initialised) {
             pending.push_back({r, ok});
@@ -1093,12 +1142,13 @@ static void warm_start(const Opt& a, VelNet* np, V3& bg, V3& res) {
                 pending.clear();
                 pf.init_buf.clear();
             }
-            continue;
+            return true;
         }
         pf.step(r.t, r.g, r.a, ok);
         if (!have_first) { t_first = r.t; have_first = true; }
-        if ((double)(r.t - t_first) * 1e-9 > a.two_pass) break;
-    }
+        return (double)(r.t - t_first) * 1e-9 <= a.two_pass;
+    };
+    read_rows(src, a.unstick_max, body);
     if (!pending.empty()) {
         if (!pf.init_buf.empty()) pf.init_from();
         for (auto& x : pending) pf.step(x.r.t, x.r.g, x.r.a, x.ok);
@@ -1154,7 +1204,6 @@ int main(int argc, char** argv) {
     std::vector<P> pending;
     long long n_out = 0;
     bool have_last = false; long long last_t = 0;
-    Row r;
     auto replay = [&](bool set_last) {
         for (auto& x : pending) {
             pf.step(x.r.t, x.r.g, x.r.a, x.ok);
@@ -1164,8 +1213,7 @@ int main(int argc, char** argv) {
         }
         pending.clear();
     };
-    while (src.getline()) {
-        if (!parse_line(src.line, r)) continue;
+    auto body = [&](const Row& r) -> bool {
         bool ok = pf.healthy(r.g, r.a);
         for (int i = 0; i < 3; i++)
             if (r.g[i] != 0 || r.a[i] != 0) { n_live = n_out + (long long)pending.size() + 1; break; }
@@ -1181,13 +1229,15 @@ int main(int argc, char** argv) {
                 pf.init_buf.shrink_to_fit();
                 pending.shrink_to_fit();
             }
-            continue;
+            return true;
         }
         pf.step(r.t, r.g, r.a, ok);
         emit(r.t);
         n_out++;
         last_t = r.t; have_last = true;
-    }
+        return true;
+    };
+    read_rows(src, a.unstick_max, body);
     if (!pending.empty()) {
         if (!pf.init_buf.empty()) pf.init_from();
         replay(true);
