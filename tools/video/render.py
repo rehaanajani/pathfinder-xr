@@ -104,6 +104,18 @@ def text(d, xy, s, size, weight="Regular", fill=INK, alpha=1.0, anchor="la", mon
     d.text(xy, s, font=font(size, weight, mono), fill=c, anchor=anchor)
 
 
+KOREAN = "/System/Library/Fonts/AppleSDGothicNeo.ttc"
+KO_WEIGHT = {"Regular": 0, "Medium": 2, "SemiBold": 4, "Bold": 6, "Light": 8}
+
+
+def ko_text(d, xy, s, size, weight="SemiBold", fill=INK, alpha=1.0, anchor="la"):
+    """Korean text (Apple SD Gothic Neo)."""
+    if alpha <= 0:
+        return
+    f = ImageFont.truetype(KOREAN, size, index=KO_WEIGHT[weight])
+    d.text(xy, s, font=f, fill=tuple(int(v * alpha) for v in fill), anchor=anchor)
+
+
 def title_block(im, t, start, lines, y=150, x=140):
     """Minimal headline that fades and rises in."""
     d = ImageDraw.Draw(im)
@@ -318,8 +330,9 @@ def sc_title(t, dur):
     im = Image.fromarray(np.clip(np.asarray(im, np.float32) + np.asarray(core, np.float32) * burst, 0, 255).astype(np.uint8))
     d = ImageDraw.Draw(im)
     a = fade(t, 0.3, 0.8)
-    text(d, (W / 2, H / 2 - 40), "Path Finder", 150, "Bold", INK, a, anchor="mm")
-    text(d, (W / 2, H / 2 + 75), "Trajectory from a degraded IMU alone", 36, "Light", (200, 210, 235), fade(t, 0.9), anchor="mm")
+    text(d, (W / 2, H / 2 - 75), "Path Finder", 150, "Bold", INK, a, anchor="mm")
+    ko_text(d, (W / 2, H / 2 + 52), "길잡이  ·  Giljabi", 46, "SemiBold", CYAN, fade(t, 0.7), anchor="mm")
+    text(d, (W / 2, H / 2 + 120), "Trajectory from a degraded IMU alone", 36, "Light", (200, 210, 235), fade(t, 0.9), anchor="mm")
     return im
 
 
@@ -453,7 +466,7 @@ def sc_network(t, dur):
     d = ImageDraw.Draw(im)
     text(d, (xs[0], 460), "1 s of IMU", 26, "Medium", INK, fade(t, 0.3), anchor="mm")
     text(d, (xs[-1], 460), "velocity + how sure", 26, "Medium", GREEN, fade(t, 2.5), anchor="mm")
-    text(d, (W / 2, 960), "runs inside the C++ entry: no ML runtime", 26, "Regular", MUTED, fade(t, 4.0), anchor="mm")
+    text(d, (W / 2, 960), "runs inside main.py: no ML runtime", 26, "Regular", MUTED, fade(t, 4.0), anchor="mm")
     put_formulas(im, t, [r"(\hat{\mathbf{v}},\,\sigma)=f_{\theta}(\mathbf{x}_{t-1\,\mathrm{s}\,:\,t}),\qquad w=\frac{\sigma_{0}^{2}}{\sigma_{0}^{2}+\sigma^{2}}"],
                  W / 2, 405, start=3.0, size=30, anchor_center=True)
     return im
@@ -479,6 +492,10 @@ def sc_coast(t, dur):
     text(d, (1450, 800), "5 s blind:", 30, "Semibold", INK, fade(t, 0.8))
     text(d, (1450, 845), "turn rate and speed decay", 24, "Regular", MUTED, fade(t, 1.0))
     text(d, (1450, 880), "from the last trusted state", 24, "Regular", MUTED, fade(t, 1.2))
+    text(d, (1450, 650), "On a drone, also:", 30, "Semibold", INK, fade(t, 3.0))
+    text(d, (1450, 695), "rotor drag measures sideways speed", 24, "Regular", MUTED, fade(t, 3.4))
+    text(d, (1450, 730), "the whole flight smoothed offline", 24, "Regular", MUTED, fade(t, 3.8))
+    text(d, (1450, 765), "it lands where it took off", 24, "Regular", GREEN, fade(t, 4.2))
     put_formulas(im, t, [r"\boldsymbol{\omega}(t)=\boldsymbol{\omega}_0\,e^{-t/\tau_{\omega}},\quad \mathbf{v}(t)=\mathbf{v}_0\,e^{-t/\tau_{v}}"],
                  1120, 470, start=1.0, size=30)
     return im
@@ -493,7 +510,7 @@ def ring(d, cx, cy, r, frac, col, width=14):
 def sc_budget(t, dur):
     im = background(t, (BLUE, CYAN), 1.0)
     k = ease_out(t / 3.0)
-    mem, cpu = 2.5 * k, 1.8 * k
+    mem, cpu = 3.5 * k, 5.8 * k
 
     def draw(d):
         ring(d, 640, 520, 190, mem / 8, GREEN)
@@ -506,8 +523,8 @@ def sc_budget(t, dur):
     text(d, (1280, 570), "per second of IMU, of 20", 26, "Regular", MUTED, 1, anchor="mm")
     title_block(im, t, 0.1, [("Tiny, and fast.", 56, "Semibold", INK)], y=110)
     a = fade(t, dur - 5.5)
-    text(d, (W / 2, 830), "On a Galaxy phone's own CPU:  4.0 MB  ·  5.0 ms", 40, "Semibold", GREEN, a, anchor="mm")
-    text(d, (W / 2, 885), "C++17, one thread, no ML runtime, streamed input", 26, "Regular", MUTED, fade(t, 2.0), anchor="mm")
+    text(d, (W / 2, 830), "Its C++ port on a Galaxy phone's own CPU:  4.0 MB  ·  5.0 ms", 40, "Semibold", GREEN, a, anchor="mm")
+    text(d, (W / 2, 885), "one Python file (main.py), one thread, network inside, no ML runtime", 26, "Regular", MUTED, fade(t, 2.0), anchor="mm")
     return im
 
 
@@ -554,8 +571,8 @@ def sc_results(t, dur):
     text(d, (200, 160), "EuRoC MH_05, never trained on", 30, "Semibold", INK, fade(t, 0.2))
     text(d, (200, 200), "white: motion capture   green: Path Finder, IMU only", 24, "Regular", MUTED, fade(t, 0.4))
     # bars: 17 recordings, organisers' damage
-    metrics = [("ATE", 2.62, 2.32), ("Checkpoints", 2.45, 2.13), ("Dropouts", 2.42, 2.13), ("Blind 5 s", 2.28, 2.24),
-               ("Drift / 1 s", 0.77, 0.57)]
+    metrics = [("ATE", 2.62, 1.47), ("Checkpoints", 2.45, 1.35), ("Dropouts", 2.42, 1.36), ("Blind 5 s", 2.28, 1.37),
+               ("Drift / 1 s", 0.77, 0.42)]
     a0 = fade(t, 1.5)
     text(d, (1060, 230), "All 17 public recordings, organisers' damage", 30, "Semibold", INK, a0)
     text(d, (1060, 270), "metres, lower is better", 22, "Regular", MUTED, a0)
@@ -570,7 +587,7 @@ def sc_results(t, dur):
             text(d, (1070 + sw, y + 43), f"{still:.2f} still", 22, "Regular", MUTED, 1, anchor="lm")
             text(d, (1070 + ow, y + 69), f"{ours:.2f} ours", 22, "Semibold", GREEN, 1, anchor="lm")
     a = fade(t, dur - 7.0)
-    text(d, (1060, 920), "12 % lower error, 26 % less drift. Blind 5 s: about level.", 26, "Semibold", AMBER, a)
+    text(d, (1060, 920), "45 % lower at checkpoints, 44 % through dropouts, 40 % in the blind 5 s.", 26, "Semibold", AMBER, a)
     return im
 
 
@@ -601,8 +618,9 @@ def sc_phone(t, dur):
 def sc_outro(t, dur):
     im = background(t, (BLUE, VIOLET), 1.2)
     d = ImageDraw.Draw(im)
-    text(d, (W / 2, 400), "Path Finder", 120, "Bold", INK, fade(t, 0.2, 0.8), anchor="mm")
-    text(d, (W / 2, 500), "Know where you are, even when your sensors lie.", 40, "Light", (205, 215, 240), fade(t, 1.0), anchor="mm")
+    text(d, (W / 2, 380), "Path Finder", 120, "Bold", INK, fade(t, 0.2, 0.8), anchor="mm")
+    ko_text(d, (W / 2, 468), "길잡이  ·  Giljabi, \u201cthe one who finds the way\u201d", 36, "Medium", CYAN, fade(t, 0.6), anchor="mm")
+    text(d, (W / 2, 545), "Know where you are, even when your sensors lie.", 40, "Light", (205, 215, 240), fade(t, 1.0), anchor="mm")
     text(d, (W / 2, 660), "Team California Burrito  ·  SRM Institute of Science and Technology", 30, "Medium", INK,
          fade(t, 2.5), anchor="mm")
     text(d, (W / 2, 710), "Rehaan Ajani  ·  Nikhil Solanki  ·  Debadrita Haldar  ·  Mayank Yadav", 26, "Regular", MUTED,

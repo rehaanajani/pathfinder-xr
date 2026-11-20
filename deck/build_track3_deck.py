@@ -184,7 +184,9 @@ def main():
     text(s, 5.6, 2.86, 3.2, 1.3, ["Rehaan Ajani  (lead)", "Nikhil Solanki", "Debadrita Haldar", "Mayank Yadav"],
          size=11, color=SOFT, name="Members list", space=3)
     text(s, 0.55, 3.75, 4.9, 1.2,
-         [[("Trajectory from a degraded IMU alone", {"size": 16, "bold": True, "color": INK})],
+         [[("Path Finder  ·  ", {"size": 16, "bold": True, "color": INK}),
+           ("길잡이 (Giljabi)", {"size": 16, "bold": True, "color": ACCENT, "font": "Apple SD Gothic Neo"})],
+          [("Trajectory from a degraded IMU alone", {"size": 11.5, "color": SOFT})],
           [(f"{R['mac_mb']} MB of memory  ·  {R['mac_ms']} ms per second of data  ·  one CPU thread",
             {"size": 10.5, "color": MUTED})],
           [("Track 3: Trajectory Estimation Under Sensor Degradation", {"size": 9.5, "color": MUTED})]],

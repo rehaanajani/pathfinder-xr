@@ -1,14 +1,14 @@
 Every headset, every phone, knows where you are because of one tiny chip. The I M U. It feels every turn and every step, hundreds of times a second.
 But what if that chip is being jammed? Noise rises. Readings spike, freeze, and vanish. Then the sensor dies completely. And you still need to know where you went.
 Integrate it directly, and a tiny tilt error lets gravity leak into the motion. Even with clean data, a drone that never left a twenty metre hall ends up tens of kilometres away.
-This is Path Finder. It treats every reading as a suspect.
+This is Path Finder. In Korean, Giljabi: the one who finds the way. It treats every reading as a suspect.
 First, every sample is checked. Missing, frozen, zeroed and impossible values are caught, row by row.
 Gravity and gyro bias come from the data itself. No ground truth, no calibration.
 A physics filter integrates the motion, with brakes. It knows when you are standing still, and how fast you can really move.
 Then a tiny neural network, just forty two thousand parameters, reads one second of motion, and predicts your velocity, and how sure it is.
-When the sensor dies, Path Finder coasts on the last state it trusted.
-All of it runs in C plus plus, with no machine learning runtime. Two and a half megabytes of memory. Under two milliseconds for each second of data. Even on a Galaxy phone's own processor: four megabytes, five milliseconds.
-Here it is on the organisers' own damage script. Twenty two thousand broken rows in. Exactly one pose out for every row, in less than half a second.
-Across all seventeen public EuRoC and TUM V I recordings, Path Finder's error is twelve percent lower than standing still, and its drift is a quarter lower. An I M U alone cannot see its heading, so we say where it struggles: in the blind five seconds, it is about level.
+When the sensor dies, Path Finder coasts on the last state it trusted. On a drone it does more: it reads rotor drag, smooths the whole flight, and uses the fact that a drone lands where it took off.
+All of it is one Python file, with the network inside. Three and a half megabytes of memory. Under six milliseconds for each second of data. Its C plus plus port even runs on a Galaxy phone's own processor.
+Here it is on the organisers' own damage script. Twenty two thousand broken rows in. Exactly one pose out for every row, in under a second.
+Across all seventeen public EuRoC and TUM V I recordings, Path Finder's error is forty five percent lower than standing still at the checkpoints, forty four percent lower through the dropouts, and forty percent lower in the blind five seconds after the sensor dies.
 On a real Galaxy phone, in a small room, the camera was covered for forty eight seconds. A standard tracker drifted two hundred and twenty seven metres. Path Finder stayed within three and a half. Simply freezing in place would have been closer still, which is why the scored entry pulls back toward where it started.
 Path Finder. Know where you are, even when your sensors lie. Team California Burrito, S R M Institute of Science and Technology.

@@ -1,4 +1,6 @@
-# Path Finder
+# Path Finder · 길잡이 (Giljabi)
+
+<sub>길잡이 (gil-ja-bi): Korean for "the one who finds the way", a guide.</sub>
 
 **6-DoF trajectory from a degraded IMU alone: about 45 % less error than standing still, in 3.5 MiB of memory and 6 ms per second of data.**
 
