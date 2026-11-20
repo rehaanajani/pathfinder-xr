@@ -352,6 +352,7 @@ class PathFinder:
         self.still_w, self.still_s, self.still_ss = [], [0.0] * 6, [0.0] * 6
         self.bad_time = 0.0                       # seconds since the last trusted sample
         self.last_good = None                     # (t, g, a) of the last trusted row, for bridging dropouts
+        self.fn_mean = None                       # slow mean of |specific force| in calm moments (accel scale)
         self.good_time = 1e9                      # seconds of healthy data since the last dropout
         self.bias_known = False                   # gyro bias already taken from a still stretch (prescan)
         self.f_lp = None                          # low-passed specific force (body frame)
@@ -545,6 +546,16 @@ class PathFinder:
             w = [g[0] - self.bg[0], g[1] - self.bg[1], g[2] - self.bg[2]]
             w_raw = (w[0], w[1], w[2])            # bias-corrected gyro before the gravity correction (body input)
             f = (a[0] - self.ba[0], a[1] - self.ba[1], a[2] - self.ba[2])
+            if A.acc_scale_tau > 0:
+                # Accelerometer scale: in calm moments (slow turn, |f| near 1 g) the specific force averages to g,
+                # so g / (slow mean of |f|) estimates the scale error the damage random-walks; clamped to 5 %.
+                fn0 = norm3(f)
+                if norm3(w) < A.acc_scale_calm and abs(fn0 - G) < 1.0:
+                    kf = min(1.0, dt / A.acc_scale_tau)
+                    self.fn_mean = fn0 if self.fn_mean is None else self.fn_mean + kf * (fn0 - self.fn_mean)
+                if self.fn_mean is not None:
+                    sc = min(1.05, max(0.95, G / self.fn_mean))
+                    f = (f[0] * sc, f[1] * sc, f[2] * sc)
             # Gravity correction (Mahony complementary filter): when the specific force is close to 1 g, pull the
             # estimated "down" toward the measured one and learn the gyro bias from the disagreement.
             fn = norm3(f)
@@ -990,6 +1001,9 @@ def args(argv=None):
     ap.add_argument("--two-pass", type=float, default=10.0,
                     help="s; offline two-pass start: learn the gyro bias (and residual) over this much first (0 = off)")
     ap.add_argument("--two-pass-res", type=int, default=0, help="1: also carry over the acceleration residual")
+    ap.add_argument("--acc-scale-tau", type=float, default=0.0,
+                    help="s; track the accelerometer scale from |f| in calm moments with this time constant (0 = off)")
+    ap.add_argument("--acc-scale-calm", type=float, default=0.3, help="rad/s; 'calm' = turn rate below this")
     ap.add_argument("--bridge-max", type=float, default=0.5,
                     help="s; fill gaps up to this long between two trusted rows with interpolated readings (0 = off)")
     ap.add_argument("--model", default="auto",
