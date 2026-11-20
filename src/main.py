@@ -377,6 +377,7 @@ class PathFinder:
         self.still_w, self.still_s, self.still_ss = [], [0.0] * 6, [0.0] * 6
         self.bad_time = 0.0                       # seconds since the last trusted sample
         self.last_good = None                     # (t, g, a) of the last trusted row, for bridging dropouts
+        self.drag_bias = [0.0, 0.0]               # slow offset of the two rotor-drag readings (m/s)
         self.good_time = 1e9                      # seconds of healthy data since the last dropout
         self.bias_known = False                   # gyro bias already taken from a still stretch (prescan)
         self.f_lp = None                          # low-passed specific force (body frame)
@@ -698,9 +699,18 @@ class PathFinder:
         qi = (self.q[0], -self.q[1], -self.q[2], -self.q[3])
         vb = list(qrot(qi, self.v))
         kg = min(1.0, dt / A.drag_tau)
-        for e, kd in ((DRAG_E1, A.drag_k1), (DRAG_E2, A.drag_k2)):
+        for j, (e, kd) in enumerate(((DRAG_E1, A.drag_k1), (DRAG_E2, A.drag_k2))):
             m = (fd[0] * e[0] + fd[1] * e[1] + fd[2] * e[2]) / kd
             d = m - (vb[0] * e[0] + vb[1] * e[1] + vb[2] * e[2])
+            d -= (A.drag_off1, A.drag_off2)[j]       # fixed offset of the reading (drone calibration, development fit)
+            if A.drag_bias_tau > 0:
+                # The reading carries a slowly varying offset (accelerometer offset and thrust-axis misalignment, about
+                # 0.7 m/s on EuRoC): track it as the slow mean of reading minus our velocity, and remove it. Readings
+                # far from our velocity (carried, on the ground) do not update it.
+                r = d - self.drag_bias[j]
+                if A.drag_robust <= 0 or abs(r) < A.drag_robust:
+                    self.drag_bias[j] += min(1.0, dt / A.drag_bias_tau) * r
+                d -= self.drag_bias[j]
             wr = 1.0 / (1.0 + (d / A.drag_robust) ** 2) if A.drag_robust > 0 else 1.0
             for i in range(3):
                 vb[i] += kg * wr * d * e[i]
@@ -1030,6 +1040,10 @@ def args(argv=None):
     ap.add_argument("--drag-tau", type=float, default=0.5, help="s; how fast velocity follows the drag measurement")
     ap.add_argument("--drag-lp", type=float, default=0.3, help="s; low-pass of the specific force for drag")
     ap.add_argument("--drag-robust", type=float, default=2.0, help="m/s; Cauchy scale of the drag innovation (0 = none)")
+    ap.add_argument("--drag-off1", type=float, default=0.0, help="m/s; fixed offset of the first rotor-drag reading")
+    ap.add_argument("--drag-off2", type=float, default=0.0, help="m/s; fixed offset of the second rotor-drag reading")
+    ap.add_argument("--drag-bias-tau", type=float, default=0.0,
+                    help="s; track and remove the slow offset of the rotor-drag readings with this time constant (0 = off)")
     ap.add_argument("--drag-hp", type=float, default=0.0, help="s; remove the slow mean of the force (bias), 0 = off")
     ap.add_argument("--drag-pos-tau", type=float, default=12.0,
                     help="s; pull to the start while drag aiding is on (0 = same as --pos-tau)")
