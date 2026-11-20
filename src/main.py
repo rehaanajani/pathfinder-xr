@@ -363,6 +363,9 @@ class PathFinder:
         self.p_raw = [0.0, 0.0, 0.0]              # position without the pull to the start (offline smoothing input)
         self.v = [0.0, 0.0, 0.0]
         self.drag_on = False                      # rotor-drag velocity aiding (set in init_from for a drone mount)
+        self.shadow = False                       # drone + offline smoothing: a second velocity with offset-corrected
+        self.v2 = [0.0, 0.0, 0.0]                 # rotor-drag readings, integrated into p2 (the smoothing input);
+        self.p2 = [0.0, 0.0, 0.0]                 # the output's causal rows keep the uncorrected velocity
         self.f_drag = None                        # low-passed body-frame specific force for the drag measurement
         self.f_drag_slow = None                   # slow mean of it (sensor bias), removed when --drag-hp > 0
         self.bg = [0.0, 0.0, 0.0]
@@ -377,6 +380,7 @@ class PathFinder:
         self.still_w, self.still_s, self.still_ss = [], [0.0] * 6, [0.0] * 6
         self.bad_time = 0.0                       # seconds since the last trusted sample
         self.last_good = None                     # (t, g, a) of the last trusted row, for bridging dropouts
+        self.drag_bias = [0.0, 0.0]               # slow offset of the two rotor-drag readings (m/s)
         self.good_time = 1e9                      # seconds of healthy data since the last dropout
         self.bias_known = False                   # gyro bias already taken from a still stretch (prescan)
         self.f_lp = None                          # low-passed specific force (body frame)
@@ -442,6 +446,7 @@ class PathFinder:
                 u = [c / norm3(ma) for c in ma]
                 ang = math.degrees(math.acos(max(-1.0, min(1.0, sum(u[i] * DRONE_UP[i] for i in range(3))))))
                 self.drag_on = ang <= A.drag_mount_deg
+                self.shadow = self.drag_on and A.zp_tau_start > 0 and (A.zp_drag_off1 != 0 or A.zp_drag_off2 != 0)
                 if self.drag_on and A.drag_pos_tau > 0:
                     # Drag measures the drone's velocity directly, so the bounded-space pull can be gentler there.
                     import copy
@@ -531,7 +536,7 @@ class PathFinder:
     def step(self, t, g, a, ok):
         """Advance to time t; if anything turns non-finite, keep the last finite state (never emit NaN)."""
         saved = (self.q, list(self.p), list(self.v), list(self.bg), tuple(self.w_last), list(self.acc_res),
-                 list(self.p_raw))
+                 list(self.p_raw), list(self.v2), list(self.p2))
         lg = self.last_good
         if ok and lg is not None and self.t_prev == lg[0] and self.dt_nom and self.a.bridge_max > 0:
             # Rows went missing between two trusted readings: fill the gap with readings interpolated linearly
@@ -547,9 +552,11 @@ class PathFinder:
                                tuple(lg[2][i] + u * (a[i] - lg[2][i]) for i in range(3)), True)
         self.last_good = (t, tuple(g), tuple(a)) if ok else None
         self._step(t, g, a, ok)
-        if not all(math.isfinite(c) for c in (*self.q, *self.p, *self.v, *self.bg, *self.w_last, *self.acc_res)):
-            self.q, self.p, self.v, self.bg, self.w_last, self.acc_res, self.p_raw = saved
+        if not all(math.isfinite(c) for c in (*self.q, *self.p, *self.v, *self.bg, *self.w_last, *self.acc_res,
+                                               *self.v2, *self.p2)):
+            self.q, self.p, self.v, self.bg, self.w_last, self.acc_res, self.p_raw, self.v2, self.p2 = saved
             self.v = [0.0, 0.0, 0.0]
+            self.v2 = [0.0, 0.0, 0.0]
 
     def _step(self, t, g, a, ok):
         """Advance to time t with reading (g, a); ok=False means dead-reckon through this sample."""
@@ -617,6 +624,10 @@ class PathFinder:
                 self.p[i] += dp
                 self.p_raw[i] += dp
                 self.v[i] += acc_w[i] * dt
+            if self.shadow:
+                for i in range(3):
+                    self.p2[i] += self.v2[i] * dt + 0.5 * acc_w[i] * dt * dt
+                    self.v2[i] += acc_w[i] * dt
             self.w_last = w
             if self.net is not None or self.rec is not None:
                 if self.push_slot(t, w_raw if self.body else w, f):
@@ -628,6 +639,7 @@ class PathFinder:
                 k = min(1.0, dt / A.zupt_tau)
                 for i in range(3):
                     self.v[i] *= 1.0 - k
+                    self.v2[i] *= 1.0 - k
                     self.bg[i] += min(1.0, A.bias_rate * dt) * (self.still_gyro[i] - self.bg[i])
             leak = A.leak
         else:
@@ -645,6 +657,8 @@ class PathFinder:
                 self.p[i] += self.v[i] * dt
                 self.p_raw[i] += self.v[i] * dt
                 self.v[i] *= vk
+                self.p2[i] += self.v2[i] * dt
+                self.v2[i] *= vk
             leak = 0.0
             if self.net is not None or self.rec is not None:
                 n = max(1, int(round(dt / self.dt_nom))) if self.dt_nom else 1
@@ -655,6 +669,7 @@ class PathFinder:
             k = min(1.0, leak * dt)
             for i in range(3):
                 self.v[i] *= 1.0 - k
+                self.v2[i] *= 1.0 - k
         # Bounded-space prior: position slowly reverts to the start point (exponential, so a long gap cannot overshoot);
         # once the IMU has been unusable for over 1 s the pull is firmer. The part of this step past the 1 s mark gets
         # the firmer pull, the rest the normal one.
@@ -674,6 +689,11 @@ class PathFinder:
         if sp > A.v_max:
             s = A.v_max / sp
             self.v = [c * s for c in self.v]
+        if self.shadow:
+            sp = norm3(self.v2)
+            if sp > A.v_max:
+                s = A.v_max / sp
+                self.v2 = [c * s for c in self.v2]
 
     def drag_update(self, f, dt, still):
         """Rotor-drag aiding: the low-passed sideways specific force, divided by the drag constant, measures the
@@ -698,13 +718,31 @@ class PathFinder:
         qi = (self.q[0], -self.q[1], -self.q[2], -self.q[3])
         vb = list(qrot(qi, self.v))
         kg = min(1.0, dt / A.drag_tau)
-        for e, kd in ((DRAG_E1, A.drag_k1), (DRAG_E2, A.drag_k2)):
+        for j, (e, kd) in enumerate(((DRAG_E1, A.drag_k1), (DRAG_E2, A.drag_k2))):
             m = (fd[0] * e[0] + fd[1] * e[1] + fd[2] * e[2]) / kd
             d = m - (vb[0] * e[0] + vb[1] * e[1] + vb[2] * e[2])
+            d -= (A.drag_off1, A.drag_off2)[j]       # fixed offset of the reading (drone calibration, development fit)
+            if A.drag_bias_tau > 0:
+                # The reading carries a slowly varying offset (accelerometer offset and thrust-axis misalignment, about
+                # 0.7 m/s on EuRoC): track it as the slow mean of reading minus our velocity, and remove it. Readings
+                # far from our velocity (carried, on the ground) do not update it.
+                r = d - self.drag_bias[j]
+                if A.drag_robust <= 0 or abs(r) < A.drag_robust:
+                    self.drag_bias[j] += min(1.0, dt / A.drag_bias_tau) * r
+                d -= self.drag_bias[j]
             wr = 1.0 / (1.0 + (d / A.drag_robust) ** 2) if A.drag_robust > 0 else 1.0
             for i in range(3):
                 vb[i] += kg * wr * d * e[i]
         self.v = list(qrot(self.q, vb))
+        if self.shadow:
+            # The same update for the shadow velocity, with the readings' offset removed (development fit, PR #61)
+            vb = list(qrot(qi, self.v2))
+            for e, kd, off in ((DRAG_E1, A.drag_k1, A.zp_drag_off1), (DRAG_E2, A.drag_k2, A.zp_drag_off2)):
+                d = (fd[0] * e[0] + fd[1] * e[1] + fd[2] * e[2]) / kd - (vb[0] * e[0] + vb[1] * e[1] + vb[2] * e[2]) - off
+                wr = 1.0 / (1.0 + (d / A.drag_robust) ** 2) if A.drag_robust > 0 else 1.0
+                for i in range(3):
+                    vb[i] += kg * wr * d * e[i]
+            self.v2 = list(qrot(self.q, vb))
 
     def push_slot(self, t, w, f):
         """Feed one sample period to the network window (w, f = bias-corrected gyro and specific force, or None for
@@ -786,6 +824,8 @@ class PathFinder:
             self.p[i] += dp
             self.p_raw[i] += dp
             self.v[i] += gv * (v[i] - self.v[i])
+            self.v2[i] += gv * (v[i] - self.v2[i])
+            self.p2[i] += dp
         self.net_ok = True
 
     def net_usable(self):
@@ -867,7 +907,7 @@ def run(inp, out, a, rec=None, _stop_s=None):
             o.write(f"{t * 1e-9:.9f} {x:.6f} {y:.6f} {z:.6f} {qx:.8f} {qy:.8f} {qz:.8f} {qw:.8f}\n")
             if smooth and pf.drag_on:
                 ts.append(t * 1e-9)
-                raw.extend(pf.p_raw)
+                raw.extend(pf.p2 if pf.shadow else pf.p_raw)
 
         rows = parse_rows(f, layout)
         if a.unstick_max > 0:
@@ -1030,11 +1070,19 @@ def args(argv=None):
     ap.add_argument("--drag-tau", type=float, default=0.5, help="s; how fast velocity follows the drag measurement")
     ap.add_argument("--drag-lp", type=float, default=0.3, help="s; low-pass of the specific force for drag")
     ap.add_argument("--drag-robust", type=float, default=2.0, help="m/s; Cauchy scale of the drag innovation (0 = none)")
+    ap.add_argument("--drag-off1", type=float, default=0.0, help="m/s; fixed offset of the first rotor-drag reading")
+    ap.add_argument("--drag-off2", type=float, default=0.0, help="m/s; fixed offset of the second rotor-drag reading")
+    ap.add_argument("--drag-bias-tau", type=float, default=0.0,
+                    help="s; track and remove the slow offset of the rotor-drag readings with this time constant (0 = off)")
     ap.add_argument("--drag-hp", type=float, default=0.0, help="s; remove the slow mean of the force (bias), 0 = off")
     ap.add_argument("--drag-pos-tau", type=float, default=12.0,
                     help="s; pull to the start while drag aiding is on (0 = same as --pos-tau)")
     ap.add_argument("--zp-tau-start", type=float, default=48.0,
                     help="s; drone mount: offline zero-phase pull to the start, time constant at the start (0 = off)")
+    ap.add_argument("--zp-drag-off1", type=float, default=-0.6,
+                    help="m/s; drone, smoothing input only: offset removed from the first rotor-drag reading (0 = none)")
+    ap.add_argument("--zp-drag-off2", type=float, default=-0.3,
+                    help="m/s; ... and from the second")
     ap.add_argument("--zp-tau-end", type=float, default=12.0,
                     help="s; ... and at the IMU failure (it shortens along the damage ramp)")
     ap.add_argument("--drag-mount-deg", type=float, default=15.0,

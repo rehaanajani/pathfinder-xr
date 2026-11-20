@@ -97,6 +97,7 @@ struct Opt {
     double blind_vel_tau = 1.5, blind_turn_tau = 0.5, pos_tau_blind = NaN, pos_tau_nonet = NaN, bridge_max = 0.5, unstick_max = 0.1;
     double drag_k1 = -0.19, drag_k2 = -0.17, drag_tau = 0.5, drag_lp = 0.3, drag_robust = 2.0, drag_hp = 0.0;
     double drag_pos_tau = 12.0, drag_mount_deg = 15.0, zp_tau_start = 48.0, zp_tau_end = 12.0, two_pass = 10.0;
+    double zp_drag_off1 = -0.6, zp_drag_off2 = -0.3;
     int two_pass_res = 0;
     int model_every = 20; double model_min_valid = 0.25, model_ref = NaN, model_vref = 1.0;
     double model_pos_gain = NaN, model_vel_gain = 1.0; int model_window = 200, model_dec = 1;
@@ -135,7 +136,8 @@ static void parse_args(int argc, char** argv, Opt& a) {
         {"drag-pos-tau", &a.drag_pos_tau, nullptr, nullptr}, {"drag-mount-deg", &a.drag_mount_deg, nullptr, nullptr},
         {"blind-vel-tau", &a.blind_vel_tau, nullptr, nullptr}, {"blind-turn-tau", &a.blind_turn_tau, nullptr, nullptr},
         {"two-pass", &a.two_pass, nullptr, nullptr}, {"two-pass-res", nullptr, &a.two_pass_res, nullptr},
-        {"zp-tau-start", &a.zp_tau_start, nullptr, nullptr}, {"zp-tau-end", &a.zp_tau_end, nullptr, nullptr},
+        {"zp-tau-start", &a.zp_tau_start, nullptr, nullptr},
+        {"zp-drag-off1", &a.zp_drag_off1, nullptr, nullptr}, {"zp-drag-off2", &a.zp_drag_off2, nullptr, nullptr}, {"zp-tau-end", &a.zp_tau_end, nullptr, nullptr},
         {"bridge-max", &a.bridge_max, nullptr, nullptr}, {"unstick-max", &a.unstick_max, nullptr, nullptr},
         {"model-every", nullptr, &a.model_every, nullptr}, {"model-min-valid", &a.model_min_valid, nullptr, nullptr},
         {"model-ref", &a.model_ref, nullptr, nullptr}, {"model-vref", &a.model_vref, nullptr, nullptr},
@@ -665,6 +667,8 @@ struct PathFinder {
     Opt A;                                   // a copy: the mount guard changes the coupling when it switches networks
     Q q{1, 0, 0, 0};
     V3 p_raw{{0, 0, 0}};                        // position without the pull to the start (offline smoothing input)
+    bool shadow = false;                        // drone + smoothing: second velocity with offset-corrected drag readings
+    V3 v2{{0, 0, 0}}, p2{{0, 0, 0}};            // (as main.py), integrated into p2, the smoothing input
     V3 p{{0, 0, 0}}, v{{0, 0, 0}}, bg{{0, 0, 0}}, ba{{0, 0, 0}}, w_last{{0, 0, 0}}, acc_res{{0, 0, 0}};
     bool have_t_prev = false; long long t_prev = 0;
     std::vector<std::pair<V3, V3>> init_buf;
@@ -737,6 +741,7 @@ struct PathFinder {
                 for (int i = 0; i < 3; i++) c += ma[i] / nm * DRAG.up[i];
                 double ang = std::acos(std::max(-1.0, std::min(1.0, c))) * 180.0 / M_PI;
                 drag_on = ang <= A.drag_mount_deg;
+                shadow = drag_on && A.zp_tau_start > 0 && (A.zp_drag_off1 != 0 || A.zp_drag_off2 != 0);
                 if (drag_on && A.drag_pos_tau > 0) { A.pos_tau = A.drag_pos_tau; A.pos_tau_nonet = A.drag_pos_tau; }
                 if (drag_on)
                     std::fprintf(stderr, "rotor-drag aiding on (start-up gravity %.0f deg from the drone's thrust axis)\n", ang);
@@ -778,6 +783,17 @@ struct PathFinder {
             for (int i = 0; i < 3; i++) vb[i] += kg * wr * d * e[i];
         }
         v = qrot(q, vb);
+        if (shadow) {
+            V3 vb2 = qrot({q.w, -q.x, -q.y, -q.z}, v2);
+            double offs[2] = {A.zp_drag_off1, A.zp_drag_off2};
+            for (int j = 0; j < 2; j++) {
+                const double* e = es[j];
+                double d = (fd[0] * e[0] + fd[1] * e[1] + fd[2] * e[2]) / ks2[j] - (vb2[0] * e[0] + vb2[1] * e[1] + vb2[2] * e[2]) - offs[j];
+                double wr = A.drag_robust > 0 ? 1.0 / (1.0 + sq(d / A.drag_robust)) : 1.0;
+                for (int i = 0; i < 3; i++) vb2[i] += kg * wr * d * e[i];
+            }
+            v2 = qrot(q, vb2);
+        }
     }
 
     // Mount guard (see main.py check_mount): far from every training mount -> the gravity-aligned network.
@@ -845,7 +861,7 @@ struct PathFinder {
 
     // Advance to time t; if anything turns non-finite, keep the last finite state (never emit NaN).
     void step(long long t, const V3& g, const V3& a, bool ok) {
-        Q q0 = q; V3 p0 = p, pr0 = p_raw, v0 = v, bg0 = bg, w0 = w_last, r0 = acc_res;
+        Q q0 = q; V3 p0 = p, pr0 = p_raw, v20 = v2, p20 = p2, v0 = v, bg0 = bg, w0 = w_last, r0 = acc_res;
         if (ok && have_last_good && have_t_prev && t_prev == lg_t && have_dt_nom && dt_nom > 0 && A.bridge_max > 0) {
             // Rows went missing between two trusted readings: fill the gap with readings interpolated linearly
             // between them (as main.py), so a turn made during the dropout is not lost.
@@ -866,8 +882,8 @@ struct PathFinder {
         bool fin = std::isfinite(q.w) && std::isfinite(q.x) && std::isfinite(q.y) && std::isfinite(q.z);
         for (int i = 0; i < 3; i++)
             fin = fin && std::isfinite(p[i]) && std::isfinite(v[i]) && std::isfinite(bg[i]) &&
-                  std::isfinite(w_last[i]) && std::isfinite(acc_res[i]);
-        if (!fin) { q = q0; p = p0; p_raw = pr0; v = {{0, 0, 0}}; bg = bg0; w_last = w0; acc_res = r0; (void)v0; }
+                  std::isfinite(w_last[i]) && std::isfinite(acc_res[i]) && std::isfinite(v2[i]) && std::isfinite(p2[i]);
+        if (!fin) { q = q0; p = p0; p_raw = pr0; p2 = p20; v2 = {{0, 0, 0}}; (void)v20; v = {{0, 0, 0}}; bg = bg0; w_last = w0; acc_res = r0; (void)v0; }
     }
 
     void step_(long long t, const V3& g, const V3& a, bool ok) {
@@ -934,6 +950,11 @@ struct PathFinder {
                 p_raw[i] += dp;
                 v[i] += acc_w[i] * dt;
             }
+            if (shadow)
+                for (int i = 0; i < 3; i++) {
+                    p2[i] += v2[i] * dt + 0.5 * acc_w[i] * dt * dt;
+                    v2[i] += acc_w[i] * dt;
+                }
             w_last = w;
             if (net && push_slot(body ? &w_raw : &w, &f)) learned_update();
             bool still = zero_velocity(g, a);
@@ -942,6 +963,7 @@ struct PathFinder {
                 double k = std::min(1.0, dt / A.zupt_tau);
                 for (int i = 0; i < 3; i++) {
                     v[i] *= 1.0 - k;
+                    v2[i] *= 1.0 - k;
                     bg[i] += std::min(1.0, A.bias_rate * dt) * (still_gyro[i] - bg[i]);
                 }
             }
@@ -959,6 +981,8 @@ struct PathFinder {
                 p[i] += v[i] * dt;
                 p_raw[i] += v[i] * dt;
                 v[i] *= vk;
+                p2[i] += v2[i] * dt;
+                v2[i] *= vk;
             }
             leak = 0.0;
             if (net) {
@@ -969,7 +993,7 @@ struct PathFinder {
         }
         if (leak > 0) {
             double k = std::min(1.0, leak * dt);
-            for (int i = 0; i < 3; i++) v[i] *= 1.0 - k;
+            for (int i = 0; i < 3; i++) { v[i] *= 1.0 - k; v2[i] *= 1.0 - k; }
         }
         // Bounded-space prior (see main.py): exponential pull to the start, firmer for the part of the step past 1 s of
         // unusable IMU.
@@ -984,6 +1008,10 @@ struct PathFinder {
         if (sp > A.v_max) {
             double s = A.v_max / sp;
             for (int i = 0; i < 3; i++) v[i] = v[i] * s;
+        }
+        if (shadow) {
+            double s2 = norm3(v2);
+            if (s2 > A.v_max) for (int i = 0; i < 3; i++) v2[i] = v2[i] * (A.v_max / s2);
         }
     }
 
@@ -1071,6 +1099,8 @@ struct PathFinder {
             p[i] += dp;
             p_raw[i] += dp;
             v[i] += gv * (vv[i] - v[i]);
+            v2[i] += gv * (vv[i] - v2[i]);
+            p2[i] += dp;
         }
         net_ok = true;
     }
@@ -1197,7 +1227,7 @@ int main(int argc, char** argv) {
                      q.x, q.y, q.z, q.w);
     };
     auto emit = [&](long long t) {
-        if (smooth && pf.drag_on) rows.push_back({t, pf.p, pf.p_raw, pf.q});
+        if (smooth && pf.drag_on) rows.push_back({t, pf.p, pf.shadow ? pf.p2 : pf.p_raw, pf.q});
         else write_row(t, pf.p, pf.q);
     };
     struct P { Row r; bool ok; };
