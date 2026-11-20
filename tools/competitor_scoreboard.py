@@ -57,6 +57,7 @@ ENTRIES = {
     "vortex": ("ArnavJain2005_Vortex", ["{cpy}", "main.py", "{csv}", "{out}"]),
     "ridhima": ("ridhima936_PathFinder-IMU-Trajectory", ["{cpy}", "src/main.py", "{csv}", "-o", "{out}"]),
     "trustnav": ("Am-berneal_TrustNav-GPS-Denied-Navigation", ["{cpy}", "src/main.py", "{csv}", "{out}"]),
+    "icbm": ("darshanvijayakumar50-arch_ICBM", ["{cpy}", "src/main.py", "{csv}", "{out}", "--no-future"]),
     "trustnav_rows": ("Am-berneal_TrustNav-GPS-Denied-Navigation",
                       ["{cpy}", "src/main.py", "{csv}", "{out}", "--no-fill", "--blind", "0"]),
 }
@@ -159,6 +160,13 @@ def run_one(job):
             return res
     try:
         res["contract"] = contract(inp, est)
+        if entry == "icbm" and est.exists():
+            # ICBM writes CSV with a header and integer-ns timestamps (not TUM): the contract above records that;
+            # its accuracy is scored on a TUM copy (seconds, spaces).
+            c = np.loadtxt(est, delimiter=",", skiprows=1)
+            c[:, 0] *= 1e-9
+            est = est.with_suffix(".tum.txt")
+            np.savetxt(est, c, fmt="%.9f %.6f %.6f %.6f %.6f %.6f %.6f %.6f")
         gt = source(spec)[1]
         res["score"] = score(str(est), str(gt), truth, None)
     except Exception as ex:                                           # noqa: BLE001
