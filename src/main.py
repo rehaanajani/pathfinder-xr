@@ -297,6 +297,31 @@ def detect_layout(inp, n_max=2000, columns="auto", ts_unit="auto", accel_unit="a
     return accel_first, t_scale, a_scale, "; ".join(notes)
 
 
+def unstick(rows, max_s):
+    """Stuck runs (the organisers' damage repeats a row 2-10 times): rows whose readings are bit-identical to the row
+    before (with a later timestamp) are held back until the next different row arrives, then replaced by readings
+    interpolated linearly in time between the last real row and that one. Runs longer than max_s seconds, runs that
+    end in an all-zero row and runs at the end of the file are left as they are (a frozen or dead sensor)."""
+    last = None                                     # (t, g, a) of the last row with fresh readings
+    held = []
+    for t, g, a in rows:
+        if last is not None and t > (held[-1][0] if held else last[0]) and g == last[1] and a == last[2]:
+            held.append((t, g, a))
+            continue
+        if held:
+            fresh = (any(g) or any(a)) and t > held[-1][0] and (t - last[0]) * 1e-9 <= max_s
+            for th, gh, ah in held:
+                if fresh:
+                    u = (th - last[0]) / (t - last[0])
+                    gh = tuple(last[1][i] + u * (g[i] - last[1][i]) for i in range(3))
+                    ah = tuple(last[2][i] + u * (a[i] - last[2][i]) for i in range(3))
+                yield th, gh, ah
+            held = []
+        last = (t, g, a)
+        yield t, g, a
+    yield from held
+
+
 def parse_rows(f, layout=(False, 1, 1.0, "")):
     """Yield (t_ns, gyro(3), acc(3)) per data row, in our order and units whatever the file's (see detect_layout).
     Malformed numbers become NaN (row kept, marked bad)."""
@@ -844,7 +869,10 @@ def run(inp, out, a, rec=None, _stop_s=None):
                 ts.append(t * 1e-9)
                 raw.extend(pf.p_raw)
 
-        for t, g, acc in parse_rows(f, layout):
+        rows = parse_rows(f, layout)
+        if a.unstick_max > 0:
+            rows = unstick(rows, a.unstick_max)
+        for t, g, acc in rows:
             ok = pf.healthy(g, acc)
             if any(g) or any(acc):
                 n_live[0] = n_out + len(pending) + 1
@@ -990,6 +1018,8 @@ def args(argv=None):
     ap.add_argument("--two-pass", type=float, default=10.0,
                     help="s; offline two-pass start: learn the gyro bias (and residual) over this much first (0 = off)")
     ap.add_argument("--two-pass-res", type=int, default=0, help="1: also carry over the acceleration residual")
+    ap.add_argument("--unstick-max", type=float, default=0.1,
+                    help="s; replace stuck runs up to this long by interpolated readings (0 = off)")
     ap.add_argument("--bridge-max", type=float, default=0.5,
                     help="s; fill gaps up to this long between two trusted rows with interpolated readings (0 = off)")
     ap.add_argument("--model", default="auto",
