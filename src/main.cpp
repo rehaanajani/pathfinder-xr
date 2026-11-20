@@ -96,7 +96,8 @@ struct Opt {
     double tilt_lp = NaN, kp_boost_tau = 0.7, tilt_acc_tol = 1.5, acc_res_tau = 10.0, v_max = 3.0, pos_tau = NaN;
     double blind_vel_tau = 1.5, blind_turn_tau = 0.5, pos_tau_blind = NaN, pos_tau_nonet = NaN, bridge_max = 0.5;
     double drag_k1 = -0.19, drag_k2 = -0.17, drag_tau = 0.5, drag_lp = 0.3, drag_robust = 2.0, drag_hp = 0.0;
-    double drag_pos_tau = 12.0, drag_mount_deg = 15.0, zp_tau_start = 48.0, zp_tau_end = 12.0;
+    double drag_pos_tau = 12.0, drag_mount_deg = 15.0, zp_tau_start = 48.0, zp_tau_end = 12.0, two_pass = 10.0;
+    int two_pass_res = 0;
     int model_every = 20; double model_min_valid = 0.25, model_ref = NaN, model_vref = 1.0;
     double model_pos_gain = NaN, model_vel_gain = 1.0; int model_window = 200, model_dec = 1;
     std::string model_input = "world";
@@ -133,6 +134,7 @@ static void parse_args(int argc, char** argv, Opt& a) {
         {"drag-robust", &a.drag_robust, nullptr, nullptr}, {"drag-hp", &a.drag_hp, nullptr, nullptr},
         {"drag-pos-tau", &a.drag_pos_tau, nullptr, nullptr}, {"drag-mount-deg", &a.drag_mount_deg, nullptr, nullptr},
         {"blind-vel-tau", &a.blind_vel_tau, nullptr, nullptr}, {"blind-turn-tau", &a.blind_turn_tau, nullptr, nullptr},
+        {"two-pass", &a.two_pass, nullptr, nullptr}, {"two-pass-res", nullptr, &a.two_pass_res, nullptr},
         {"zp-tau-start", &a.zp_tau_start, nullptr, nullptr}, {"zp-tau-end", &a.zp_tau_end, nullptr, nullptr},
         {"bridge-max", &a.bridge_max, nullptr, nullptr},
         {"model-every", nullptr, &a.model_every, nullptr}, {"model-min-valid", &a.model_min_valid, nullptr, nullptr},
@@ -1064,6 +1066,47 @@ static bool prescan_bias(const Opt& a, V3& out) {
     return true;
 }
 
+// Offline two-pass start (as main.py): a silent first pass over the first --two-pass seconds after initialisation
+// learns the gyro bias and the slow acceleration residual; the real pass starts from them.
+static void warm_start(const Opt& a, VelNet* np, V3& bg, V3& res) {
+    PathFinder pf(a, np);
+    if (a.prescan > 0 && a.zupt_gyro_std > 0) {
+        V3 b;
+        if (prescan_bias(a, b)) { pf.bg = b; pf.bias_known = true; }
+    }
+    Source src;
+    open_source(src, a.input);
+    struct P { Row r; bool ok; };
+    std::vector<P> pending;
+    bool have_first = false; long long t_first = 0;
+    Row r;
+    while (src.getline()) {
+        if (!parse_line(src.line, r)) continue;
+        bool ok = pf.healthy(r.g, r.a);
+        if (!pf.initialised) {
+            pending.push_back({r, ok});
+            if (ok) pf.init_buf.push_back({r.g, r.a});
+            if ((int)pf.init_buf.size() >= a.init_samples || (int)pending.size() >= 4 * a.init_samples) {
+                if (!pf.init_buf.empty()) pf.init_from();
+                else pf.initialised = true;
+                for (auto& x : pending) pf.step(x.r.t, x.r.g, x.r.a, x.ok);
+                pending.clear();
+                pf.init_buf.clear();
+            }
+            continue;
+        }
+        pf.step(r.t, r.g, r.a, ok);
+        if (!have_first) { t_first = r.t; have_first = true; }
+        if ((double)(r.t - t_first) * 1e-9 > a.two_pass) break;
+    }
+    if (!pending.empty()) {
+        if (!pf.init_buf.empty()) pf.init_from();
+        for (auto& x : pending) pf.step(x.r.t, x.r.g, x.r.a, x.ok);
+    }
+    close_source(src);
+    bg = pf.bg; res = pf.acc_res;
+}
+
 int main(int argc, char** argv) {
     Opt a;
     parse_args(argc, argv, a);
@@ -1084,6 +1127,9 @@ int main(int argc, char** argv) {
         V3 b;
         if (prescan_bias(a, b)) { pf.bg = b; pf.bias_known = true; }
     }
+    V3 warm_bg{{0, 0, 0}}, warm_res{{0, 0, 0}};
+    const bool warm = a.two_pass > 0;
+    if (warm) { warm_start(a, np, warm_bg, warm_res); pf.bias_known = true; }
     Source src;
     open_source(src, a.input);
     FILE* o = std::fopen(a.output.c_str(), "w");
@@ -1129,6 +1175,7 @@ int main(int argc, char** argv) {
             if ((int)pf.init_buf.size() >= a.init_samples || (int)pending.size() >= 4 * a.init_samples) {
                 if (!pf.init_buf.empty()) pf.init_from();
                 else pf.initialised = true;
+                if (warm) { pf.bg = warm_bg; if (a.two_pass_res) pf.acc_res = warm_res; }
                 replay(true);
                 pf.init_buf.clear();
                 pf.init_buf.shrink_to_fit();

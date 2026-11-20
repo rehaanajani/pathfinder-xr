@@ -44,7 +44,7 @@ RECORDINGS = ([f"euroc:{n}" for n in ("MH_01_easy", "MH_02_easy", "MH_03_medium"
                                       "V1_01_easy", "V1_02_medium", "V1_03_difficult", "V2_01_easy", "V2_02_medium",
                                       "V2_03_difficult")] + [f"tumvi:room{i}" for i in range(1, 7)])
 SETS = {"s42_accel_first": (42, "accel_first"), "s42_euroc": (42, "euroc"),
-        "s1_accel_first": (1, "accel_first"), "s7_accel_first": (7, "accel_first")}
+        "s1_accel_first": (1, "accel_first"), "s7_accel_first": (7, "accel_first"), "s2026_accel_first": (2026, "accel_first")}
 
 # name -> (repo folder under --competitors, argv template). {csv} input file, {dir} its folder, {out} output file.
 ENTRIES = {

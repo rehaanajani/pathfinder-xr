@@ -28,6 +28,7 @@ Pipeline (single pass over the samples, single thread, standard library only):
 import argparse
 import math
 from array import array
+import os
 import sys
 from pathlib import Path
 
@@ -805,7 +806,7 @@ def prescan_bias(inp, a, layout=(False, 1, 1.0, "")):
     return [c / n_still for c in acc_sum] if n_still >= 100 else None
 
 
-def run(inp, out, a, rec=None):
+def run(inp, out, a, rec=None, _stop_s=None):
     layout = detect_layout(inp, columns=a.columns, ts_unit=a.ts_unit, accel_unit=a.accel_unit)
     accel_first, t_scale, a_scale, note = layout
     if accel_first or t_scale != 1 or a_scale != 1.0 or note:
@@ -819,10 +820,17 @@ def run(inp, out, a, rec=None):
             pf.bg = bias
             pf.bias_known = True
     pf.rec = rec                                   # optional slot recorder (training data preparation)
+    warm = None
+    if a.two_pass > 0 and _stop_s is None:
+        # Offline two-pass start: a silent first pass over the first --two-pass seconds learns the gyro bias and
+        # the slow acceleration residual; the real pass starts from them instead of learning them from scratch.
+        warm = run(inp, os.devnull, a, _stop_s=a.two_pass)
+        pf.bias_known = True
     n_out = 0
+    t_first = None
     last_t = None
     pending = []                                   # rows seen before initialisation
-    smooth = a.zp_tau_start > 0                    # offline zero-phase pull (drone mount only, decided after init)
+    smooth = a.zp_tau_start > 0 and _stop_s is None   # offline zero-phase pull (drone mount only, decided after init)
     ts, raw = array("d"), array("d")               # time (s) and un-pulled position of every row, for that pass
     n_live = [0]                                   # rows up to and including the last row with any IMU reading
     tmp = Path(str(out) + ".part") if smooth else Path(out)
@@ -849,6 +857,10 @@ def run(inp, out, a, rec=None):
                         pf.init_from(pf.init_buf)
                     else:
                         pf.initialised = True
+                    if warm is not None:
+                        pf.bg = list(warm.bg)
+                        if a.two_pass_res:
+                            pf.acc_res = list(warm.acc_res)
                     for tt, gg, aa, oo in pending:     # replay the buffered rows from the start
                         pf.step(tt, gg, aa, oo)
                         emit(tt)
@@ -858,6 +870,11 @@ def run(inp, out, a, rec=None):
                     pf.init_buf = []
                 continue
             pf.step(t, g, acc, ok)
+            if _stop_s is not None:
+                t_first = t if t_first is None else t_first
+                if (t - t_first) * 1e-9 > _stop_s:
+                    return pf
+                continue
             emit(t)
             n_out += 1
             last_t = t
@@ -882,7 +899,7 @@ def run(inp, out, a, rec=None):
             zero_phase_rewrite(tmp, out, ts, raw, n_live[0], a)
         else:
             tmp.replace(out)
-    return n_out
+    return pf if _stop_s is not None else n_out
 
 
 def zero_phase_rewrite(tmp, out, ts, raw, n, a):
@@ -970,6 +987,9 @@ def args(argv=None):
                     help="s; pull back to the start once the IMU has been unusable for > 1 s (0 = same as --pos-tau)")
     ap.add_argument("--blind-vel-tau", type=float, default=1.5)
     ap.add_argument("--blind-turn-tau", type=float, default=0.5)
+    ap.add_argument("--two-pass", type=float, default=10.0,
+                    help="s; offline two-pass start: learn the gyro bias (and residual) over this much first (0 = off)")
+    ap.add_argument("--two-pass-res", type=int, default=0, help="1: also carry over the acceleration residual")
     ap.add_argument("--bridge-max", type=float, default=0.5,
                     help="s; fill gaps up to this long between two trusted rows with interpolated readings (0 = off)")
     ap.add_argument("--model", default="auto",
