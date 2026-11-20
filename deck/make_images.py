@@ -97,7 +97,7 @@ def terminal(work):
     keep = [s.split("        #")[0].rstrip() for s in keep]          # drop our own annotation comment
     keep = [s for i, s in enumerate(keep) if s.strip() or (i and keep[i - 1].strip())]
     f2 = ImageFont.truetype("/System/Library/Fonts/SFNSMono.ttf", 26)
-    W2, H2 = 1180, 70 + 36 * len(keep)
+    W2, H2 = 1330, 70 + 36 * len(keep)
     im2 = Image.new("RGB", (W2, H2), "#0D1117")
     d2 = ImageDraw.Draw(im2)
     d2.rectangle([0, 0, W2, 40], fill="#161B22")
