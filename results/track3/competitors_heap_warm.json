@@ -120,41 +120,6 @@
   "cpu_traced_s": 1.72451
  },
  {
-  "entry": "ours",
-  "data": "euroc:MH_04_difficult",
-  "protocol": "warm",
-  "heap_peak_bytes": 1114839,
-  "cpu_traced_s": 8.774351000000001
- },
- {
-  "entry": "ours",
-  "data": "euroc:V1_03_difficult",
-  "protocol": "warm",
-  "heap_peak_bytes": 1115225,
-  "cpu_traced_s": 8.240465
- },
- {
-  "entry": "ours",
-  "data": "euroc:MH_05_difficult",
-  "protocol": "warm",
-  "heap_peak_bytes": 1115297,
-  "cpu_traced_s": 7.813483999999999
- },
- {
-  "entry": "ours",
-  "data": "euroc:V2_03_difficult",
-  "protocol": "warm",
-  "heap_peak_bytes": 1114770,
-  "cpu_traced_s": 7.989362
- },
- {
-  "entry": "ours",
-  "data": "tumvi:room6",
-  "protocol": "warm",
-  "heap_peak_bytes": 1113559,
-  "cpu_traced_s": 7.718940999999999
- },
- {
   "entry": "vioedge",
   "data": "euroc:MH_04_difficult",
   "protocol": "warm",
@@ -223,5 +188,40 @@
   "protocol": "warm",
   "heap_peak_bytes": 760418,
   "cpu_traced_s": 69.54132100000001
+ },
+ {
+  "entry": "ours",
+  "data": "euroc:MH_04_difficult",
+  "protocol": "warm",
+  "heap_peak_bytes": 2339745,
+  "cpu_traced_s": 8.375908
+ },
+ {
+  "entry": "ours",
+  "data": "euroc:V1_03_difficult",
+  "protocol": "warm",
+  "heap_peak_bytes": 2375855,
+  "cpu_traced_s": 8.729958
+ },
+ {
+  "entry": "ours",
+  "data": "euroc:MH_05_difficult",
+  "protocol": "warm",
+  "heap_peak_bytes": 2448731,
+  "cpu_traced_s": 9.228504000000001
+ },
+ {
+  "entry": "ours",
+  "data": "euroc:V2_03_difficult",
+  "protocol": "warm",
+  "heap_peak_bytes": 2504673,
+  "cpu_traced_s": 10.094265
+ },
+ {
+  "entry": "ours",
+  "data": "tumvi:room6",
+  "protocol": "warm",
+  "heap_peak_bytes": 1417387,
+  "cpu_traced_s": 8.578661
  }
 ]
