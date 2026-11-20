@@ -184,6 +184,31 @@ make -C src && PF_ENTRY=cpp python -m pytest -q tests/stress     # the C++ port
 - **Clean evaluation.** 11 of the 17 recordings trained the network; the 3 it never saw are reported separately, and
   they were also among the recordings used to choose the filter settings.
 
+## Ideas we learned from
+
+We ran every public Track 3 entry on our own damaged files and scored it the same way as ours
+([`competitors.md`](results/track3/competitors.md), PR #46), read the two strongest line by line
+([`competitor_code_notes.md`](results/track3/competitor_code_notes.md)), and wrote our own version of the ideas that
+might close the gaps. Neither of those two repositories has a licence; none of their code is in ours. In the entry:
+
+- **Bridging dropouts** with readings interpolated between the trusted rows on each side: SRMIST_vortexxx
+  ([`RaktimChandra/pathfinder`](https://github.com/RaktimChandra/pathfinder)) integrates the gyro trapezoidally across
+  missing rows; ZeroDrift ([`Gem2005/VITChennai_ZeroDrift`](https://github.com/Gem2005/VITChennai_ZeroDrift))
+  sub-steps them ([`gap_bridge_rotor.md`](results/track3/gap_bridge_rotor.md)).
+- **Offline zero-phase drift removal whose cut-off shortens with the damage**, on the drone: ZeroDrift's drift removal
+  ([`zero_phase_drone.md`](results/track3/zero_phase_drone.md)).
+- **Offline two-pass start**: ZeroDrift's two-pass filter ([`two_pass_on_smoothing.md`](results/track3/two_pass_on_smoothing.md)).
+- **Rotor drag as a velocity measurement** on the drone: also used by SRMIST_vortexxx, ZeroDrift and TrustNav
+  ([`Am-berneal/TrustNav-GPS-Denied-Navigation`](https://github.com/Am-berneal/TrustNav-GPS-Denied-Navigation)), after
+  Leishman et al. (2014) ([`rotor_drag.md`](results/track3/rotor_drag.md)).
+
+Pending the team's decision: **stuck runs replaced by interpolated readings**, from ZeroDrift's inverse preprocessing
+(PR #53). Tried and measured, not kept (each PR has its page): an RTS smoother with a workspace-centre state and a
+smoothed failure state for the blind window (SRMIST_vortexxx; #41, #54), an accelerometer-scale estimate (ZeroDrift;
+#55), spike repair and an averaged blackout velocity (VIO-Edge,
+[`rohithkrishnaak/Path-Finder---Trajectory-Estimation-Under-Sensor-Degradation`](https://github.com/rohithkrishnaak/Path-Finder---Trajectory-Estimation-Under-Sensor-Degradation);
+#42, #47) and noise-adaptive rest detection (SRMIST_vortexxx, TrustNav; #43).
+
 ## Beyond the scored task
 
 The same ideas on real hardware, with cameras and several IMUs:
