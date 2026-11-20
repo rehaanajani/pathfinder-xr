@@ -898,6 +898,7 @@ def run(inp, out, a, rec=None, _stop_s=None):
     smooth = a.zp_tau_start > 0 and _stop_s is None   # offline zero-phase pull (drone mount only, decided after init)
     ts, raw = array("d"), array("d")               # time (s) and un-pulled position of every row, for that pass
     n_live = [0]                                   # rows up to and including the last row with any IMU reading
+    quiet = (array("d"), array("d"), [0.0, 0.0, 0])  # accel-norm sum / sum of squares per 50 input rows (pad rest)
     tmp = Path(str(out) + ".part") if smooth else Path(out)
     with open_csv(inp) as f, open(tmp, "w") as o:
         o.write("# timestamp tx ty tz qx qy qz qw\n")
@@ -910,6 +911,8 @@ def run(inp, out, a, rec=None, _stop_s=None):
                 raw.extend(pf.p2 if pf.shadow else pf.p_raw)
 
         rows = parse_rows(f, layout)
+        if smooth and a.loop_flight > 0:
+            rows = tap_accel(rows, quiet)
         if a.unstick_max > 0:
             rows = unstick(rows, a.unstick_max)
         for t, g, acc in rows:
@@ -964,13 +967,48 @@ def run(inp, out, a, rec=None, _stop_s=None):
                 n_out += 1                         # the message counts every pose written
     if smooth:
         if pf.drag_on and len(ts) == n_out and n_live[0] >= 2:
-            zero_phase_rewrite(tmp, out, ts, raw, n_live[0], a)
+            zero_phase_rewrite(tmp, out, ts, raw, n_live[0], a, quiet)
         else:
             tmp.replace(out)
     return pf if _stop_s is not None else n_out
 
 
-def zero_phase_rewrite(tmp, out, ts, raw, n, a):
+def tap_accel(rows, quiet, block=50):
+    """Pass rows through, keeping the accelerometer-norm sum and sum of squares of every `block` rows (for
+    takeoff_row)."""
+    bs, bs2, cur = quiet
+    for t, g, acc in rows:
+        m = math.sqrt(acc[0] * acc[0] + acc[1] * acc[1] + acc[2] * acc[2])
+        cur[0] += m
+        cur[1] += m * m
+        cur[2] += 1
+        if cur[2] == block:
+            bs.append(cur[0])
+            bs2.append(cur[1])
+            cur[0], cur[1], cur[2] = 0.0, 0.0, 0
+        yield t, g, acc
+
+
+def takeoff_row(quiet, n, a, block=50, win_blocks=4):
+    """A row while the drone sits on its pad before take-off: the end of the last 1 s window (4 x 50 rows at 200 Hz)
+    in the first --loop-frac of the rows before the failure whose accelerometer-norm scatter is below --loop-quiet
+    (rotors at most idling; in flight it stays well above). None if there is no such window."""
+    bs, bs2, _ = quiet
+    w = block * win_blocks
+    last = int(a.loop_frac * n) - w
+    best = None
+    i = 0
+    while i < last and i // block + win_blocks <= len(bs):
+        b = i // block
+        s1 = sum(bs[b:b + win_blocks]) / w
+        s2 = sum(bs2[b:b + win_blocks]) / w
+        if math.sqrt(max(0.0, s2 - s1 * s1)) < a.loop_quiet:
+            best = i + w
+        i += block
+    return best
+
+
+def zero_phase_rewrite(tmp, out, ts, raw, n, a, quiet=None):
     """Drone mount, offline: the causal pull to the start is replaced, up to the IMU failure, by a zero-phase one
     (forward-backward low-pass of the un-pulled position, subtracted) whose time constant shortens from
     --zp-tau-start to --zp-tau-end along the organisers' damage ramp (gamma 1.7). Rows after the failure keep
@@ -989,16 +1027,34 @@ def zero_phase_rewrite(tmp, out, ts, raw, n, a):
         k = 1.0 - math.exp(-abs(ts[i] - ts[i + 1]) / tau(i))
         for j in range(3 * i, 3 * i + 3):
             low[j] = low[j + 3] + k * (low[j] - low[j + 3])
+    for j in range(3 * n):
+        low[j] = raw[j] - low[j]                   # low now holds the smoothed positions
+    # Loop closure: the drone lands back on its pad, so the gap between the smoothed position at the failure and at
+    # take-off is drift; it is removed linearly in time over the flight (weight --loop-flight) and, for the blind
+    # rows, in part (--loop-blind).
+    shift_blind = (0.0, 0.0, 0.0)
+    j0 = takeoff_row(quiet, n, a) if quiet is not None and a.loop_flight > 0 else None
+    if j0 is not None and n - 1 > j0:
+        gap = [low[3 * (n - 1) + c] - low[3 * j0 + c] for c in range(3)]
+        span = ts[n - 1] - ts[j0]
+        for i in range(j0 + 1, n):
+            u = a.loop_flight * (ts[i] - ts[j0]) / span
+            for c in range(3):
+                low[3 * i + c] -= u * gap[c]
+        shift_blind = tuple(a.loop_blind * c for c in gap)
     with open(tmp) as fi, open(out, "w") as fo:
         i = 0
         for line in fi:
-            if line[0] == "#" or i >= n:
+            if line[0] == "#":
                 fo.write(line)
-                if line[0] != "#":
-                    i += 1
                 continue
             c = line.split(" ")
-            x, y, z = (raw[3 * i + j] - low[3 * i + j] for j in range(3))
+            if i >= n:
+                x, y, z = (float(c[1 + j]) - shift_blind[j] for j in range(3))
+                fo.write(f"{c[0]} {x:.6f} {y:.6f} {z:.6f} {' '.join(c[4:])}")
+                i += 1
+                continue
+            x, y, z = low[3 * i], low[3 * i + 1], low[3 * i + 2]
             fo.write(f"{c[0]} {x:.6f} {y:.6f} {z:.6f} {' '.join(c[4:])}")
             i += 1
     tmp.unlink()
@@ -1079,6 +1135,12 @@ def args(argv=None):
                     help="s; pull to the start while drag aiding is on (0 = same as --pos-tau)")
     ap.add_argument("--zp-tau-start", type=float, default=48.0,
                     help="s; drone mount: offline zero-phase pull to the start, time constant at the start (0 = off)")
+    ap.add_argument("--loop-flight", type=float, default=1.0,
+                    help="drone: remove the gap between the take-off and failure positions as drift over the flight (0 = off)")
+    ap.add_argument("--loop-blind", type=float, default=0.5, help="share of that gap removed from the blind rows")
+    ap.add_argument("--loop-quiet", type=float, default=0.35,
+                    help="m/s^2; accelerometer-norm scatter below which the drone is on its pad")
+    ap.add_argument("--loop-frac", type=float, default=0.5, help="look for the pad rest in this first share of the flight")
     ap.add_argument("--zp-drag-off1", type=float, default=-0.6,
                     help="m/s; drone, smoothing input only: offset removed from the first rotor-drag reading (0 = none)")
     ap.add_argument("--zp-drag-off2", type=float, default=-0.3,
