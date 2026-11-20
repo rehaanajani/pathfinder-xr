@@ -363,6 +363,7 @@ class PathFinder:
         self.p_raw = [0.0, 0.0, 0.0]              # position without the pull to the start (offline smoothing input)
         self.v = [0.0, 0.0, 0.0]
         self.drag_on = False                      # rotor-drag velocity aiding (set in init_from for a drone mount)
+        self.quiet = False                        # the silent first pass (--two-pass) prints nothing
         self.shadow = False                       # drone + offline smoothing: a second velocity with offset-corrected
         self.v2 = [0.0, 0.0, 0.0]                 # rotor-drag readings, integrated into p2 (the smoothing input);
         self.p2 = [0.0, 0.0, 0.0]                 # the output's causal rows keep the uncorrected velocity
@@ -453,8 +454,9 @@ class PathFinder:
                     self.a = A = copy.copy(A)
                     A.pos_tau = A.pos_tau_nonet = A.drag_pos_tau
                 if self.drag_on:
-                    print(f"rotor-drag aiding on (start-up gravity {ang:.0f} deg from the drone's thrust axis)",
-                          file=sys.stderr)
+                    if not self.quiet:
+                        print(f"rotor-drag aiding on (start-up gravity {ang:.0f} deg from the drone's thrust axis)",
+                              file=sys.stderr)
         var_g = sum(sum((b[0][i] - mg[i]) ** 2 for i in range(3)) for b in buf) / n
         if var_g < self.a.still_gyro_var and not self.bias_known:   # still at start: the mean gyro is its bias
             self.bg = mg
@@ -473,14 +475,16 @@ class PathFinder:
         self.mount_angle = math.degrees(math.acos(max(-1.0, min(1.0, cos))))
         if self.mount_angle > A.mount_guard_deg:
             if abs(n / G - 1.0) > MOUNT_G_TOL:     # sustained acceleration tilts the mean; that is not a mount
-                print(f"mount guard: start-up specific force {n:.2f} m/s^2 is not gravity alone; "
-                      "keeping the body-frame network", file=sys.stderr)
+                if not self.quiet:
+                    print(f"mount guard: start-up specific force {n:.2f} m/s^2 is not gravity alone; "
+                          "keeping the body-frame network", file=sys.stderr)
                 return
             try:
                 fb = VelNet(A.fallback_model)
             except Exception as e:                # unusable fallback: keep the body-frame network (as the C++ entry)
-                print(f"mount guard: cannot load {A.fallback_model} ({e}); keeping the body-frame network",
-                      file=sys.stderr)
+                if not self.quiet:
+                    print(f"mount guard: cannot load {A.fallback_model} ({e}); keeping the body-frame network",
+                          file=sys.stderr)
                 return
             self.net = fb
             # The heavier network coupling of the "learned" preset was chosen with the body-frame network on its
@@ -492,8 +496,9 @@ class PathFinder:
                 setattr(A, k, v)
             self.W, self.dec = self.net.window, self.net.dec
             self.body = self.net.version >= 3
-            print(f"IMU mount {self.mount_angle:.0f} deg from the training mounts: using {weights_name(A.fallback_model)}",
-                  file=sys.stderr)
+            if not self.quiet:
+                print(f"IMU mount {self.mount_angle:.0f} deg from the training mounts: using {weights_name(A.fallback_model)}",
+                      file=sys.stderr)
 
     def zero_velocity(self, g, a):
         A = self.a
@@ -874,11 +879,12 @@ def prescan_bias(inp, a, layout=(False, 1, 1.0, "")):
 def run(inp, out, a, rec=None, _stop_s=None):
     layout = detect_layout(inp, columns=a.columns, ts_unit=a.ts_unit, accel_unit=a.accel_unit)
     accel_first, t_scale, a_scale, note = layout
-    if accel_first or t_scale != 1 or a_scale != 1.0 or note:
+    if (accel_first or t_scale != 1 or a_scale != 1.0 or note) and _stop_s is None:
         unit = {1: "ns", 10 ** 3: "us", 10 ** 6: "ms", 10 ** 9: "s"}[t_scale]
         print(f"input layout: {'accel' if accel_first else 'gyro'} columns first, timestamps in {unit}, "
               f"accel in {'g' if a_scale != 1.0 else 'm/s^2'}" + (f" ({note})" if note else ""), file=sys.stderr)
     pf = PathFinder(a)
+    pf.quiet = _stop_s is not None
     if a.prescan > 0 and a.zupt_gyro_std > 0:
         bias = prescan_bias(inp, a, layout)
         if bias is not None:

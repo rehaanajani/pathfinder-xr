@@ -686,6 +686,7 @@ struct PathFinder {
     bool bias_known = false;
     bool have_f_lp = false; V3 f_lp{{0, 0, 0}};
     bool drag_on = false, have_f_drag = false, have_f_drag_slow = false;
+    bool quiet = false;                         // the silent first pass (--two-pass) prints nothing
     V3 f_drag{{0, 0, 0}}, f_drag_slow{{0, 0, 0}};
     double yaw_var = 0.0;
     bool have_dt_nom = false; double dt_nom = 0;
@@ -747,7 +748,7 @@ struct PathFinder {
                 shadow = drag_on && A.zp_tau_start > 0 && (A.zp_drag_off1 != 0 || A.zp_drag_off2 != 0);
                 if (drag_on && A.drag_pos_tau > 0) { A.pos_tau = A.drag_pos_tau; A.pos_tau_nonet = A.drag_pos_tau; }
                 if (drag_on)
-                    std::fprintf(stderr, "rotor-drag aiding on (start-up gravity %.0f deg from the drone's thrust axis)\n", ang);
+                    if (!quiet) std::fprintf(stderr, "rotor-drag aiding on (start-up gravity %.0f deg from the drone's thrust axis)\n", ang);
             }
         }
         double var = 0;
@@ -811,12 +812,12 @@ struct PathFinder {
         double ang = std::acos(std::max(-1.0, std::min(1.0, best))) * 180.0 / M_PI;
         if (ang <= A.mount_guard_deg) return;
         if (std::fabs(n / G - 1.0) > MOUNT_G_TOL) {      // sustained acceleration tilts the mean; not a mount
-            std::fprintf(stderr, "mount guard: start-up specific force %.2f m/s^2 is not gravity alone; "
+            if (!quiet) std::fprintf(stderr, "mount guard: start-up specific force %.2f m/s^2 is not gravity alone; "
                                  "keeping the body-frame network\n", n);
             return;
         }
         if (!fallback.load(A.fallback_model)) {           // unusable file: keep the body-frame network (as main.py)
-            std::fprintf(stderr, "mount guard: cannot load %s; keeping the body-frame network\n", A.fallback_model.c_str());
+            if (!quiet) std::fprintf(stderr, "mount guard: cannot load %s; keeping the body-frame network\n", A.fallback_model.c_str());
             return;
         }
         net = &fallback;
@@ -826,7 +827,7 @@ struct PathFinder {
         body = net->version >= 3;
         const std::string& f = A.fallback_model;
         size_t sl = f.find_last_of("/\\");
-        std::fprintf(stderr, "IMU mount %.0f deg from the training mounts: using %s\n", ang,
+        if (!quiet) std::fprintf(stderr, "IMU mount %.0f deg from the training mounts: using %s\n", ang,
                      (sl == std::string::npos ? f : f.substr(sl + 1)).c_str());
     }
 
@@ -1167,6 +1168,7 @@ static bool prescan_bias(const Opt& a, V3& out) {
 // learns the gyro bias and the slow acceleration residual; the real pass starts from them.
 static void warm_start(const Opt& a, VelNet* np, V3& bg, V3& res) {
     PathFinder pf(a, np);
+    pf.quiet = true;
     if (a.prescan > 0 && a.zupt_gyro_std > 0) {
         V3 b;
         if (prescan_bias(a, b)) { pf.bg = b; pf.bias_known = true; }
