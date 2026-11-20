@@ -75,13 +75,14 @@ def run(name, jobs, phase):
 def tables(name):
     rows = json.loads((ROOT / "results" / "track3" / f"{name}.json").read_text())
     out = []
-    for phase, title in (("sweep", "Development sweep (11 development recordings, seed 42; mean metres)"),
+    for phase, title in (("sweep", "Development sweep (11 development recordings; mean metres)"),
                          ("check", "Check of the frozen variant (mean metres)")):
         rs = [r for r in rows if r["phase"] == phase]
         if not rs:
             continue
         labels = list(dict.fromkeys(r["setting"] for r in rs))
-        sets = [("dev, seed 42", lambda r: r["set"] == "s42_accel_first" and r["data"] in DEV)] if phase == "sweep" else \
+        sets = [(f"dev, seed {x.split('_')[0][1:]}", (lambda x: lambda r: r["set"] == x and r["data"] in DEV)(x))
+                for x in dict.fromkeys(r["set"] for r in rs)] if phase == "sweep" else \
             [("held-out 6, seed 42", lambda r: r["set"] == "s42_accel_first" and r["data"] in HELD)] + \
             [(f"all 17, seed {s.split('_')[0][1:]}", (lambda s: lambda r: r["set"] == s)(s)) for s in SEEDS]
         out += [f"\n### {title}\n", "| inputs | setting | " + " | ".join(n for _, n in KEYS) +
@@ -114,10 +115,12 @@ def main():
     ap.add_argument("--variants", help="JSON {label: [main.py options]}")
     ap.add_argument("--variant", help="JSON [main.py options] of the frozen variant")
     ap.add_argument("--label", default="frozen")
+    ap.add_argument("--sweep-sets", nargs="+", default=["s42_accel_first"],
+                    help="input sets for `sweep` (development recordings only); e.g. s42_accel_first s1_accel_first")
     a = ap.parse_args()
     if a.cmd == "sweep":
         v = {"entry": [], "standing still": "still", **json.loads(a.variants)}
-        run(a.name, [(sp, "s42_accel_first", lab, o) for lab, o in v.items() for sp in DEV], "sweep")
+        run(a.name, [(sp, st, lab, o) for st in a.sweep_sets for lab, o in v.items() for sp in DEV], "sweep")
     elif a.cmd == "check":
         v = {"entry": [], "standing still": "still", a.label: json.loads(a.variant)}
         run(a.name, [(sp, s, lab, o) for lab, o in v.items() for s in SEEDS for sp in DEV + HELD], "check")
