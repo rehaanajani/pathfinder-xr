@@ -377,6 +377,7 @@ class PathFinder:
         self.still_w, self.still_s, self.still_ss = [], [0.0] * 6, [0.0] * 6
         self.bad_time = 0.0                       # seconds since the last trusted sample
         self.last_good = None                     # (t, g, a) of the last trusted row, for bridging dropouts
+        self.span = None                          # (first, last) timestamp of the file, ns (offline: for the damage ramp)
         self.good_time = 1e9                      # seconds of healthy data since the last dropout
         self.bias_known = False                   # gyro bias already taken from a still stretch (prescan)
         self.f_lp = None                          # low-passed specific force (body frame)
@@ -777,11 +778,19 @@ class PathFinder:
         # while we see nothing) rotate our frame by an unknown yaw. With a heading error of variance s2 the best
         # estimate of a horizontal vector is the predicted one shrunk by E[cos] = exp(-s2 / 2).
         k = math.exp(-0.5 * self.yaw_var)
+        fade = 0.0
+        if A.net_fade > 0 and self.drag_on and self.span and self.t_prev is not None:
+            # Drone mount: the network under-reads speed on the most damaged input, while rotor drag does not, so
+            # its velocity counts less as the organisers' damage ramp (t / T) ** 1.7 rises.
+            u = min(1.0, max(0.0, (self.t_prev - self.span[0]) / max(self.span[1] - self.span[0], 1)))
+            fade = A.net_fade * u ** 1.7
         d = [d[0] * k, d[1] * k, d[2]]
         v = [v[0] * k, v[1] * k, v[2]]
         for i in range(3):
             gp = A.model_pos_gain * A.model_ref ** 2 / (A.model_ref ** 2 + sd[i] ** 2)
             gv = A.model_vel_gain * A.model_vref ** 2 / (A.model_vref ** 2 + sv[i] ** 2)
+            if fade > 0:
+                gv /= 1.0 + fade
             dp = gp * (self.p_then[i] + d[i] - self.p[i])
             self.p[i] += dp
             self.p_raw[i] += dp
@@ -805,6 +814,16 @@ def rot_cov(q, m, s):
     c = [qrot(q, e) for e in ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))]   # columns of R
     sw = [math.sqrt(sum((c[j][i] * s[j]) ** 2 for j in range(3))) for i in range(3)]
     return list(mw), sw
+
+
+def file_span(inp, layout):
+    """First and last timestamp (ns) of the file, from one pass over its rows."""
+    first = last = None
+    with open_csv(inp) as f:
+        for t, _, _ in parse_rows(f, layout):
+            first = t if first is None else first
+            last = t
+    return (first, last) if first is not None and last > first else None
 
 
 def prescan_bias(inp, a, layout=(False, 1, 1.0, "")):
@@ -845,6 +864,8 @@ def run(inp, out, a, rec=None, _stop_s=None):
             pf.bg = bias
             pf.bias_known = True
     pf.rec = rec                                   # optional slot recorder (training data preparation)
+    if a.net_fade > 0:
+        pf.span = file_span(inp, layout)
     warm = None
     if a.two_pass > 0 and _stop_s is None:
         # Offline two-pass start: a silent first pass over the first --two-pass seconds learns the gyro bias and
@@ -1020,6 +1041,8 @@ def args(argv=None):
     ap.add_argument("--two-pass-res", type=int, default=0, help="1: also carry over the acceleration residual")
     ap.add_argument("--unstick-max", type=float, default=0.1,
                     help="s; replace stuck runs up to this long by interpolated readings (0 = off)")
+    ap.add_argument("--net-fade", type=float, default=0.0,
+                    help="drone mount: network velocity gain divided by 1 + this x (t/T)^1.7 (0 = off)")
     ap.add_argument("--bridge-max", type=float, default=0.5,
                     help="s; fill gaps up to this long between two trusted rows with interpolated readings (0 = off)")
     ap.add_argument("--model", default="auto",
