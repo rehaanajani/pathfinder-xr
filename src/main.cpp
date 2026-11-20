@@ -97,6 +97,7 @@ struct Opt {
     double blind_vel_tau = 1.5, blind_turn_tau = 0.5, pos_tau_blind = NaN, pos_tau_nonet = NaN, bridge_max = 0.5, unstick_max = 0.1;
     double drag_k1 = -0.19, drag_k2 = -0.17, drag_tau = 0.5, drag_lp = 0.3, drag_robust = 2.0, drag_hp = 0.0;
     double drag_pos_tau = 12.0, drag_mount_deg = 15.0, zp_tau_start = 48.0, zp_tau_end = 12.0, two_pass = 10.0;
+    double loop_flight = 1.0, loop_blind = 0.5, loop_quiet = 0.35, loop_frac = 0.5;
     double zp_drag_off1 = -0.6, zp_drag_off2 = -0.3;
     int two_pass_res = 0;
     int model_every = 20; double model_min_valid = 0.25, model_ref = NaN, model_vref = 1.0;
@@ -137,6 +138,8 @@ static void parse_args(int argc, char** argv, Opt& a) {
         {"blind-vel-tau", &a.blind_vel_tau, nullptr, nullptr}, {"blind-turn-tau", &a.blind_turn_tau, nullptr, nullptr},
         {"two-pass", &a.two_pass, nullptr, nullptr}, {"two-pass-res", nullptr, &a.two_pass_res, nullptr},
         {"zp-tau-start", &a.zp_tau_start, nullptr, nullptr},
+        {"loop-flight", &a.loop_flight, nullptr, nullptr}, {"loop-blind", &a.loop_blind, nullptr, nullptr},
+        {"loop-quiet", &a.loop_quiet, nullptr, nullptr}, {"loop-frac", &a.loop_frac, nullptr, nullptr},
         {"zp-drag-off1", &a.zp_drag_off1, nullptr, nullptr}, {"zp-drag-off2", &a.zp_drag_off2, nullptr, nullptr}, {"zp-tau-end", &a.zp_tau_end, nullptr, nullptr},
         {"bridge-max", &a.bridge_max, nullptr, nullptr}, {"unstick-max", &a.unstick_max, nullptr, nullptr},
         {"model-every", nullptr, &a.model_every, nullptr}, {"model-min-valid", &a.model_min_valid, nullptr, nullptr},
@@ -1108,12 +1111,25 @@ struct PathFinder {
 
 // First pass over the start of the file: gyro bias = mean gyro of the first still stretch (main.py prescan_bias).
 // Every data row of the source, through the stuck-run repair when max_s > 0, to body (which returns false to stop).
+// Accelerometer-norm sum / sum of squares per 50 input rows, for finding the pad rest before take-off (as main.py).
+struct Quiet {
+    std::vector<double> bs, bs2;
+    double c0 = 0, c1 = 0; int cn = 0;
+    void add(const Row& r) {
+        double m = std::sqrt(r.a[0] * r.a[0] + r.a[1] * r.a[1] + r.a[2] * r.a[2]);
+        c0 += m; c1 += m * m;
+        if (++cn == 50) { bs.push_back(c0); bs2.push_back(c1); c0 = c1 = 0; cn = 0; }
+    }
+};
+static Quiet* g_quiet = nullptr;
+
 template <class F> static void read_rows(Source& src, double max_s, F&& body) {
     Unstick us; us.max_s = max_s;
     std::vector<Row> ready;
     Row r;
     while (src.getline()) {
         if (!parse_line(src.line, r)) continue;
+        if (g_quiet) g_quiet->add(r);
         ready.clear();
         if (max_s > 0) us.push(r, ready); else ready.push_back(r);
         for (const Row& x : ready) if (!body(x)) return;
@@ -1267,7 +1283,10 @@ int main(int argc, char** argv) {
         last_t = r.t; have_last = true;
         return true;
     };
+    Quiet quiet;
+    if (smooth && a.loop_flight > 0) g_quiet = &quiet;
     read_rows(src, a.unstick_max, body);
+    g_quiet = nullptr;
     if (!pending.empty()) {
         if (!pf.init_buf.empty()) pf.init_from();
         replay(true);
@@ -1311,6 +1330,29 @@ int main(int argc, char** argv) {
             }
             for (long long i = 0; i < n; i++)
                 for (int j = 0; j < 3; j++) rows[i].p[j] = rows[i].pr[j] - lo[i][j];
+            // Loop closure (as main.py): the drone lands back on its pad, so the gap between the smoothed positions at
+            // the failure and at take-off is drift, removed linearly over the flight and in part from the blind rows.
+            if (a.loop_flight > 0) {
+                long long w = 200, last = (long long)(a.loop_frac * n) - w, j0 = -1;
+                for (long long i = 0; i < last && i / 50 + 4 <= (long long)quiet.bs.size(); i += 50) {
+                    long long b = i / 50;
+                    double s1 = 0, s2 = 0;
+                    for (int q = 0; q < 4; q++) { s1 += quiet.bs[b + q]; s2 += quiet.bs2[b + q]; }
+                    s1 /= w; s2 /= w;
+                    if (std::sqrt(std::max(0.0, s2 - s1 * s1)) < a.loop_quiet) j0 = i + w;
+                }
+                if (j0 >= 0 && n - 1 > j0) {
+                    V3 gap;
+                    for (int c = 0; c < 3; c++) gap[c] = rows[n - 1].p[c] - rows[j0].p[c];
+                    double span = (rows[n - 1].t - rows[j0].t) * 1e-9;
+                    for (long long i = j0 + 1; i < n; i++) {
+                        double u = a.loop_flight * (rows[i].t - rows[j0].t) * 1e-9 / span;
+                        for (int c = 0; c < 3; c++) rows[i].p[c] -= u * gap[c];
+                    }
+                    for (long long i = n; i < (long long)rows.size(); i++)
+                        for (int c = 0; c < 3; c++) rows[i].p[c] -= a.loop_blind * gap[c];
+                }
+            }
         }
         for (auto& x : rows) write_row(x.t, x.p, x.q);
     }
