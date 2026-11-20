@@ -27,6 +27,7 @@ Pipeline (single pass over the samples, single thread, standard library only):
 
 import argparse
 import math
+from array import array
 import sys
 from pathlib import Path
 
@@ -333,6 +334,7 @@ class PathFinder:
         self.a = a
         self.q = (1.0, 0.0, 0.0, 0.0)
         self.p = [0.0, 0.0, 0.0]
+        self.p_raw = [0.0, 0.0, 0.0]              # position without the pull to the start (offline smoothing input)
         self.v = [0.0, 0.0, 0.0]
         self.drag_on = False                      # rotor-drag velocity aiding (set in init_from for a drone mount)
         self.f_drag = None                        # low-passed body-frame specific force for the drag measurement
@@ -502,7 +504,8 @@ class PathFinder:
 
     def step(self, t, g, a, ok):
         """Advance to time t; if anything turns non-finite, keep the last finite state (never emit NaN)."""
-        saved = (self.q, list(self.p), list(self.v), list(self.bg), tuple(self.w_last), list(self.acc_res))
+        saved = (self.q, list(self.p), list(self.v), list(self.bg), tuple(self.w_last), list(self.acc_res),
+                 list(self.p_raw))
         lg = self.last_good
         if ok and lg is not None and self.t_prev == lg[0] and self.dt_nom and self.a.bridge_max > 0:
             # Rows went missing between two trusted readings: fill the gap with readings interpolated linearly
@@ -519,7 +522,7 @@ class PathFinder:
         self.last_good = (t, tuple(g), tuple(a)) if ok else None
         self._step(t, g, a, ok)
         if not all(math.isfinite(c) for c in (*self.q, *self.p, *self.v, *self.bg, *self.w_last, *self.acc_res)):
-            self.q, self.p, self.v, self.bg, self.w_last, self.acc_res = saved
+            self.q, self.p, self.v, self.bg, self.w_last, self.acc_res, self.p_raw = saved
             self.v = [0.0, 0.0, 0.0]
 
     def _step(self, t, g, a, ok):
@@ -584,7 +587,9 @@ class PathFinder:
                 acc_w[i] -= self.acc_res[i]
             self.q = qnorm(qmul(self.q, qexp((w[0] * dt, w[1] * dt, w[2] * dt))))
             for i in range(3):
-                self.p[i] += self.v[i] * dt + 0.5 * acc_w[i] * dt * dt
+                dp = self.v[i] * dt + 0.5 * acc_w[i] * dt * dt
+                self.p[i] += dp
+                self.p_raw[i] += dp
                 self.v[i] += acc_w[i] * dt
             self.w_last = w
             if self.net is not None or self.rec is not None:
@@ -612,6 +617,7 @@ class PathFinder:
             vk = math.exp(-dt / (self.v_blind_tau if self.net_ok else A.blind_vel_tau))
             for i in range(3):
                 self.p[i] += self.v[i] * dt
+                self.p_raw[i] += self.v[i] * dt
                 self.v[i] *= vk
             leak = 0.0
             if self.net is not None or self.rec is not None:
@@ -750,7 +756,9 @@ class PathFinder:
         for i in range(3):
             gp = A.model_pos_gain * A.model_ref ** 2 / (A.model_ref ** 2 + sd[i] ** 2)
             gv = A.model_vel_gain * A.model_vref ** 2 / (A.model_vref ** 2 + sv[i] ** 2)
-            self.p[i] += gp * (self.p_then[i] + d[i] - self.p[i])
+            dp = gp * (self.p_then[i] + d[i] - self.p[i])
+            self.p[i] += dp
+            self.p_raw[i] += dp
             self.v[i] += gv * (v[i] - self.v[i])
         self.net_ok = True
 
@@ -814,15 +822,24 @@ def run(inp, out, a, rec=None):
     n_out = 0
     last_t = None
     pending = []                                   # rows seen before initialisation
-    with open_csv(inp) as f, open(out, "w") as o:
+    smooth = a.zp_tau_start > 0                    # offline zero-phase pull (drone mount only, decided after init)
+    ts, raw = array("d"), array("d")               # time (s) and un-pulled position of every row, for that pass
+    n_live = [0]                                   # rows up to and including the last row with any IMU reading
+    tmp = Path(str(out) + ".part") if smooth else Path(out)
+    with open_csv(inp) as f, open(tmp, "w") as o:
         o.write("# timestamp tx ty tz qx qy qz qw\n")
 
         def emit(t):
             x, y, z, qx, qy, qz, qw = pf.pose()
             o.write(f"{t * 1e-9:.9f} {x:.6f} {y:.6f} {z:.6f} {qx:.8f} {qy:.8f} {qz:.8f} {qw:.8f}\n")
+            if smooth and pf.drag_on:
+                ts.append(t * 1e-9)
+                raw.extend(pf.p_raw)
 
         for t, g, acc in parse_rows(f, layout):
             ok = pf.healthy(g, acc)
+            if any(g) or any(acc):
+                n_live[0] = n_out + len(pending) + 1
             if not pf.initialised:
                 pending.append((t, g, acc, ok))
                 if ok:
@@ -860,7 +877,46 @@ def run(inp, out, a, rec=None):
                 pf.step(t, (0.0,) * 3, (0.0,) * 3, False)
                 emit(t)
                 n_out += 1                         # the message counts every pose written
+    if smooth:
+        if pf.drag_on and len(ts) == n_out and n_live[0] >= 2:
+            zero_phase_rewrite(tmp, out, ts, raw, n_live[0], a)
+        else:
+            tmp.replace(out)
     return n_out
+
+
+def zero_phase_rewrite(tmp, out, ts, raw, n, a):
+    """Drone mount, offline: the causal pull to the start is replaced, up to the IMU failure, by a zero-phase one
+    (forward-backward low-pass of the un-pulled position, subtracted) whose time constant shortens from
+    --zp-tau-start to --zp-tau-end along the organisers' damage ramp (gamma 1.7). Rows after the failure keep
+    the causal entry's positions; orientation is unchanged."""
+    t0, span = ts[0], max(ts[n - 1] - ts[0], 1e-9)
+
+    def tau(i):
+        return a.zp_tau_start + (a.zp_tau_end - a.zp_tau_start) * min(1.0, max(0.0, (ts[i] - t0) / span)) ** 1.7
+
+    low = raw[:3 * n]                              # forward then backward low-pass, in place (one extra array)
+    for i in range(1, n):
+        k = 1.0 - math.exp(-abs(ts[i] - ts[i - 1]) / tau(i))
+        for j in range(3 * i, 3 * i + 3):
+            low[j] = low[j - 3] + k * (low[j] - low[j - 3])
+    for i in range(n - 2, -1, -1):
+        k = 1.0 - math.exp(-abs(ts[i] - ts[i + 1]) / tau(i))
+        for j in range(3 * i, 3 * i + 3):
+            low[j] = low[j + 3] + k * (low[j] - low[j + 3])
+    with open(tmp) as fi, open(out, "w") as fo:
+        i = 0
+        for line in fi:
+            if line[0] == "#" or i >= n:
+                fo.write(line)
+                if line[0] != "#":
+                    i += 1
+                continue
+            c = line.split(" ")
+            x, y, z = (raw[3 * i + j] - low[3 * i + j] for j in range(3))
+            fo.write(f"{c[0]} {x:.6f} {y:.6f} {z:.6f} {' '.join(c[4:])}")
+            i += 1
+    tmp.unlink()
 
 
 # Option defaults. "physics" is the filter as first submitted; "learned" was chosen on the validation recordings
@@ -927,6 +983,10 @@ def args(argv=None):
     ap.add_argument("--drag-hp", type=float, default=0.0, help="s; remove the slow mean of the force (bias), 0 = off")
     ap.add_argument("--drag-pos-tau", type=float, default=12.0,
                     help="s; pull to the start while drag aiding is on (0 = same as --pos-tau)")
+    ap.add_argument("--zp-tau-start", type=float, default=48.0,
+                    help="s; drone mount: offline zero-phase pull to the start, time constant at the start (0 = off)")
+    ap.add_argument("--zp-tau-end", type=float, default=12.0,
+                    help="s; ... and at the IMU failure (it shortens along the damage ramp)")
     ap.add_argument("--drag-mount-deg", type=float, default=15.0,
                     help="deg; drag only when start-up gravity is this close to the drone's thrust axis")
     ap.add_argument("--model-every", type=int, default=20, help="healthy samples between network updates")
