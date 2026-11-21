@@ -199,18 +199,37 @@ class VelNet:
 
 
 
-def open_csv(path):
-    p = Path(path)
+def find_input(path):
+    """The IMU file for an input path: a CSV, a .zip, or a folder holding imu0/data.csv, mav0/imu0/data.csv,
+    data.csv (the imu0 folder itself) or one of those one level down (an unpacked zip); None = the current folder."""
+    p = Path(path) if path else Path(".")
     if p.is_dir():
-        for cand in (p / "imu0" / "data.csv", p / "mav0" / "imu0" / "data.csv"):
+        for cand in (p / "imu0" / "data.csv", p / "mav0" / "imu0" / "data.csv", p / "data.csv"):
             if cand.exists():
-                return open(cand, "r", newline="")
+                return cand
+        for pat in ("*/imu0/data.csv", "*/mav0/imu0/data.csv"):
+            found = sorted(p.glob(pat))
+            if found:
+                return found[0]
+        zips = sorted(p.glob("*.zip"))
+        if len(zips) == 1:
+            return zips[0]
         raise SystemExit(f"no imu0/data.csv under {p}")
+    return p
+
+
+def open_csv(path):
+    p = find_input(path)
     if p.suffix == ".zip":
         import io                         # only needed for zip input: keeps start-up memory low
         import zipfile
         z = zipfile.ZipFile(p)
-        name = next(n for n in z.namelist() if n.endswith("imu0/data.csv"))
+        names = [n for n in z.namelist() if not n.endswith("/")]
+        name = (next((n for n in names if n.endswith("imu0/data.csv")), None)
+                or next((n for n in names if n.endswith("data.csv")), None)
+                or next((n for n in names if n.endswith(".csv")), None))
+        if name is None:
+            raise SystemExit(f"no imu0/data.csv in {p}")
         return io.TextIOWrapper(z.open(name), newline="")
     return open(p, "r", newline="")
 
@@ -904,6 +923,7 @@ def run(inp, out, a, rec=None, _stop_s=None):
     smooth = a.zp_tau_start > 0 and _stop_s is None   # offline zero-phase pull (drone mount only, decided after init)
     ts, raw = array("d"), array("d")               # time (s) and un-pulled position of every row, for that pass
     n_live = [0]                                   # rows up to and including the last row with any IMU reading
+    capped = [False]                               # more rows than --zp-max-rows: no offline pass
     quiet = (array("d"), array("d"), [0.0, 0.0, 0])  # accel-norm sum / sum of squares per 50 input rows (pad rest)
     tmp = Path(str(out) + ".part") if smooth else Path(out)
     with open_csv(inp) as f, open(tmp, "w") as o:
@@ -912,7 +932,13 @@ def run(inp, out, a, rec=None, _stop_s=None):
         def emit(t):
             x, y, z, qx, qy, qz, qw = pf.pose()
             o.write(f"{t * 1e-9:.9f} {x:.6f} {y:.6f} {z:.6f} {qx:.8f} {qy:.8f} {qz:.8f} {qw:.8f}\n")
-            if smooth and pf.drag_on:
+            if smooth and pf.drag_on and not capped[0]:
+                if len(ts) >= a.zp_max_rows:
+                    # Too long (or too high a rate) to keep within the memory budget: keep the causal output
+                    capped[0] = True
+                    del ts[:], raw[:]
+                    print(f"offline smoothing skipped: more than {a.zp_max_rows} rows", file=sys.stderr)
+                    return
                 ts.append(t * 1e-9)
                 raw.extend(pf.p2 if pf.shadow else pf.p_raw)
 
@@ -1081,8 +1107,11 @@ PRESETS = {
 
 def args(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("input")
-    ap.add_argument("-o", "--output", default="estimated_trajectory.txt")
+    ap.add_argument("input", nargs="?", default=None,
+                    help="imu0/data.csv, a folder holding it (or imu0 itself), or a .zip; default: the current folder")
+    ap.add_argument("output_pos", nargs="?", default=None, metavar="output",
+                    help="output file (same as -o)")
+    ap.add_argument("-o", "--output", default=None, help="output file (default estimated_trajectory.txt)")
     ap.add_argument("--extend-blind", type=float, default=0.0,
                     help="append this many seconds of dead-reckoned poses after the last input row")
     ap.add_argument("--init-samples", type=int, default=200)
@@ -1141,6 +1170,8 @@ def args(argv=None):
                     help="s; pull to the start while drag aiding is on (0 = same as --pos-tau)")
     ap.add_argument("--zp-tau-start", type=float, default=48.0,
                     help="s; drone mount: offline zero-phase pull to the start, time constant at the start (0 = off)")
+    ap.add_argument("--zp-max-rows", type=int, default=80000,
+                    help="drone: skip the offline pass for files with more rows than this (memory budget)")
     ap.add_argument("--loop-flight", type=float, default=1.0,
                     help="drone: remove the gap between the take-off and failure positions as drift over the flight (0 = off)")
     ap.add_argument("--loop-blind", type=float, default=0.5, help="share of that gap removed from the blind rows")
@@ -1202,6 +1233,7 @@ def args(argv=None):
 
 def main(argv=None):
     a = args(argv)
+    a.output = a.output or a.output_pos or "estimated_trajectory.txt"
     n = run(a.input, a.output, a)
     print(f"wrote {n} poses to {a.output}", file=sys.stderr)
 

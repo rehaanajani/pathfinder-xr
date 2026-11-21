@@ -32,7 +32,8 @@ python3 src/main.py path/to/imu0_folder -o estimated_trajectory.txt
 ```
 
 Needs only Python 3 and numpy; `src/main.py` is self-contained and can be copied anywhere on its own. **Input:** a folder with `imu0/data.csv` (or
-`mav0/imu0/data.csv`), a `.zip` of it, or the CSV itself. Both column orders are detected (EuRoC
+`mav0/imu0/data.csv`, or the `imu0` folder itself), a `.zip` of it, or the CSV itself; with no argument it looks in the
+current folder, and the output can also be given as a second argument. Both column orders are detected (EuRoC
 `timestamp, gyro, accel` and the organisers' `timestamp, accel, gyro`), as are timestamps in s/ms/µs/ns and
 acceleration in m/s² or g; it prints what it found. **Output:** `timestamp tx ty tz qx qy qz qw`, one pose per input
 row, including the rows after the IMU dies. Options: `python3 src/main.py --help` and [`src/README.md`](src/README.md).

@@ -15,9 +15,9 @@ jobs:
       - name: Build the C++ port
         run: make -C src
       - name: Same tests on the C++ port (one pose per row, bad rows, 8 MB, 20 ms/s)
-        run: PF_ENTRY=cpp python -m pytest -q tests/stress/test_main_contract.py tests/stress/test_review_fixes.py tests/stress/test_mount_guard.py tests/stress/test_rotor_drag.py
+        run: PF_ENTRY=cpp python -m pytest -q tests/stress/test_main_contract.py tests/stress/test_review_fixes.py tests/stress/test_mount_guard.py tests/stress/test_rotor_drag.py tests/stress/test_offline_pass.py tests/stress/test_entry_calls.py
       - name: Same tests on main.py (weights embedded)
-        run: python -m pytest -q tests/stress/test_main_contract.py tests/stress/test_review_fixes.py tests/stress/test_mount_guard.py tests/stress/test_standalone.py tests/stress/test_rotor_drag.py
+        run: python -m pytest -q tests/stress/test_main_contract.py tests/stress/test_review_fixes.py tests/stress/test_mount_guard.py tests/stress/test_standalone.py tests/stress/test_rotor_drag.py tests/stress/test_offline_pass.py tests/stress/test_entry_calls.py
   docker:
     runs-on: ubuntu-latest
     steps:
