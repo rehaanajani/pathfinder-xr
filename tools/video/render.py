@@ -1,11 +1,11 @@
-"""Renders the narrated Track 3 film (about 2 min 15 s, 1080p, 25 fps) from real data: the organisers' damage applied
+"""Renders the narrated Track 3 film (about 2 min 55 s, 1080p, 25 fps) from real data: the organisers' damage applied
 to EuRoC MH_05, the entry's own output and trajectory, the 17-recording results and the phone test.
 
     python tools/video/render.py --work <folder> --gt <MH_05 state_groundtruth_estimate0/data.csv> --out film.mp4
 
 <folder> holds: clean.csv and run/imu0/data.csv (MH_05 before and after the organisers' degrade_imu.py), est.txt
 (the entry's trajectory), terminal.txt (the captured run), naive.npz (error of plain integration), and audio/ with
-one narration clip per scene (tools/video/narration.txt, spoken by tools/video/tts.swift). Needs imageio-ffmpeg.
+one narration clip per scene (tools/video/narration.txt, spoken by tools/video/voice.sh). Needs imageio-ffmpeg.
 """
 import argparse
 import math
@@ -330,9 +330,10 @@ def sc_title(t, dur):
     im = Image.fromarray(np.clip(np.asarray(im, np.float32) + np.asarray(core, np.float32) * burst, 0, 255).astype(np.uint8))
     d = ImageDraw.Draw(im)
     a = fade(t, 0.3, 0.8)
-    text(d, (W / 2, H / 2 - 75), "Path Finder", 150, "Bold", INK, a, anchor="mm")
-    ko_text(d, (W / 2, H / 2 + 52), "길잡이  ·  Giljabi", 46, "SemiBold", CYAN, fade(t, 0.7), anchor="mm")
-    text(d, (W / 2, H / 2 + 120), "Trajectory from a degraded IMU alone", 36, "Light", (200, 210, 235), fade(t, 0.9), anchor="mm")
+    ko_text(d, (W / 2, H / 2 - 80), "길잡이", 170, "Bold", INK, a, anchor="mm")
+    text(d, (W / 2, H / 2 + 52), "Giljabi  ·  \u201cthe one who finds the way\u201d", 44, "Medium", CYAN, fade(t, 0.7), anchor="mm")
+    text(d, (W / 2, H / 2 + 120), "Path Finder track  ·  trajectory from a degraded IMU alone", 34, "Light", (200, 210, 235),
+         fade(t, 0.9), anchor="mm")
     return im
 
 
@@ -569,7 +570,7 @@ def sc_results(t, dur):
     im = add(im, [glow_layer(draw, 12, 1.4)])
     d = ImageDraw.Draw(im)
     text(d, (200, 160), "EuRoC MH_05, never trained on", 30, "Semibold", INK, fade(t, 0.2))
-    text(d, (200, 200), "white: motion capture   green: Path Finder, IMU only", 24, "Regular", MUTED, fade(t, 0.4))
+    text(d, (200, 200), "white: motion capture   green: Giljabi, IMU only", 24, "Regular", MUTED, fade(t, 0.4))
     # bars: 17 recordings, organisers' damage
     metrics = [("ATE", 2.62, 1.47), ("Checkpoints", 2.45, 1.35), ("Dropouts", 2.42, 1.36), ("Blind 5 s", 2.28, 1.37),
                ("Drift / 1 s", 0.77, 0.42)]
@@ -606,7 +607,7 @@ def sc_phone(t, dur):
     title_block(im, t, 0.1, [("On a real Galaxy phone.", 56, "Semibold", INK),
                              ("Small room, camera covered for 48 s while walking.", 30, "Regular", MUTED)], y=140, x=200)
     text(d, (200, 470), "standard tracker", 28, "Medium", INK, fade(t, 0.8))
-    text(d, (200, 650), "Path Finder", 28, "Medium", INK, fade(t, 0.8))
+    text(d, (200, 650), "Giljabi", 28, "Medium", INK, fade(t, 0.8))
     text(d, (220 + std * scale, 540), f"{std:.0f} m", 44, "Bold", RED, fade(t, 1.0), anchor="lm")
     text(d, (230 + ours * scale, 720), f"{ours:.1f} m", 44, "Bold", GREEN, fade(t, 1.0), anchor="lm")
     text(d, (200, 810), "freezing in place", 28, "Medium", INK, fade(t, 0.8))
@@ -618,15 +619,15 @@ def sc_phone(t, dur):
 def sc_outro(t, dur):
     im = background(t, (BLUE, VIOLET), 1.2)
     d = ImageDraw.Draw(im)
-    text(d, (W / 2, 380), "Path Finder", 120, "Bold", INK, fade(t, 0.2, 0.8), anchor="mm")
-    ko_text(d, (W / 2, 468), "길잡이  ·  Giljabi, \u201cthe one who finds the way\u201d", 36, "Medium", CYAN, fade(t, 0.6), anchor="mm")
+    ko_text(d, (W / 2, 370), "길잡이", 140, "Bold", INK, fade(t, 0.2, 0.8), anchor="mm")
+    text(d, (W / 2, 468), "Giljabi  ·  \u201cthe one who finds the way\u201d", 36, "Medium", CYAN, fade(t, 0.6), anchor="mm")
     text(d, (W / 2, 545), "Know where you are, even when your sensors lie.", 40, "Light", (205, 215, 240), fade(t, 1.0), anchor="mm")
     text(d, (W / 2, 660), "Team California Burrito  ·  SRM Institute of Science and Technology", 30, "Medium", INK,
          fade(t, 2.5), anchor="mm")
     text(d, (W / 2, 710), "Rehaan Ajani  ·  Nikhil Solanki  ·  Debadrita Haldar  ·  Mayank Yadav", 26, "Regular", MUTED,
          fade(t, 3.0), anchor="mm")
     text(d, (W / 2, 800), "github.com/rehaanajani/pathfinder-xr", 30, "Medium", CYAN, fade(t, 3.6), anchor="mm")
-    text(d, (W / 2, 850), "Samsung PRISM XR Hackathon 2026  ·  Track 3", 22, "Regular", MUTED, fade(t, 3.8), anchor="mm")
+    text(d, (W / 2, 850), "Samsung PRISM XR Hackathon 2026  ·  Track 3, Path Finder", 22, "Regular", MUTED, fade(t, 3.8), anchor="mm")
     return im
 
 
@@ -703,7 +704,7 @@ def main():
     clips, durs = [], []
     for i in range(len(SCENES)):
         alt = {2: "a02", 11: "a11", 12: "a12"}
-        files = sorted((work / alt[i]).glob("s*.caf")) if i in alt else sorted((work / "audio").glob(f"s{i:02d}*.caf"))
+        files = sorted((work / alt[i]).glob("s*.caf")) if i in alt and (work / alt[i]).is_dir() else sorted((work / "audio").glob(f"s{i:02d}*.caf"))
         voice = np.concatenate([read_audio(f, ff, sr) for f in files])
         lead = int(0.35 * sr)
         clip = np.concatenate([np.zeros(lead, np.float32), voice, np.zeros(int(PAD[i] * sr), np.float32)])
