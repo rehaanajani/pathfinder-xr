@@ -64,3 +64,15 @@ def test_every_call_style_gives_the_same_trajectory(tmp_path):
     first = next(iter(outs.values()))
     for name, rows in outs.items():
         assert rows == first, name
+
+
+def test_main_py_still_runs_without_numpy(tmp_path):
+    if CPP:
+        return
+    write_csv(tmp_path / "imu0" / "data.csv")
+    code = ("import sys, runpy; sys.modules['numpy'] = None; "
+            f"sys.argv = ['main.py', {str(tmp_path)!r}, '-o', {str(tmp_path / 'out.txt')!r}]; "
+            f"runpy.run_path({str(ROOT / 'src' / 'main.py')!r}, run_name='__main__')")
+    p = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    assert "numpy not available" in p.stderr
+    assert len(poses(tmp_path / "out.txt")) == N

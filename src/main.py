@@ -149,6 +149,9 @@ def weights_name(source):
     return Path(s).name
 
 
+_NO_NUMPY = [False]                               # set once numpy fails to import
+
+
 class VelNet:
     """1-D CNN: (n_in, window) IMU slots -> displacement, velocity and their log standard deviations (12 outputs)."""
 
@@ -419,8 +422,13 @@ class PathFinder:
         # or "body" (version 3, 10 channels, AirIO style: body-frame gyro and specific force with gravity kept, the
         # gravity direction in the body frame from our own orientation, health; outputs in the body frame).
         self.body = a.model_input == "body"
-        if a.model:
-            self.net = VelNet(a.model)
+        if a.model and not _NO_NUMPY[0]:
+            try:
+                self.net = VelNet(a.model)
+            except ImportError:                   # no numpy on this machine: physics only, still one pose per row
+                _NO_NUMPY[0] = True
+                print("numpy not available: running without the velocity network", file=sys.stderr)
+        if self.net is not None:
             self.W, self.dec = self.net.window, self.net.dec
             self.body = self.net.version >= 3
             if a.model_blind_tau > 0:
