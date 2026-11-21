@@ -15,8 +15,8 @@ Rehaan Ajani (lead) · Nikhil Solanki · Mayank Yadav · Debadrita Haldar
 | Item | Where |
 |---|---|
 | **Source code** | [`src/main.py`](src/main.py): Python, network weights embedded; needs only Python 3 and numpy |
-| **Presentation** | **[Google Slides](https://docs.google.com/presentation/d/1UhfNcmeuGhQjBOyQcsvGrlvwcIb-xog0/edit?usp=sharing)** · [`deck/SRMIST_CaliforniaBurrito.pptx`](deck/SRMIST_CaliforniaBurrito.pptx) (Samsung's template) |
-| **Video** (under 3 min, narrated) | **[Google Drive](https://drive.google.com/file/d/1fMtWITCb1RfrTKooN9tEU_daj5p_4nbL/view?usp=sharing)** · [`docs/media/Giljabi_Track3.mp4`](docs/media/Giljabi_Track3.mp4) |
+| **Presentation** | **[Google Slides](https://docs.google.com/presentation/d/1m3OZiMzlMfgZEZ3Lyf8iNLHis_BDRbju/edit?usp=sharing)** · [`deck/SRMIST_CaliforniaBurrito.pptx`](deck/SRMIST_CaliforniaBurrito.pptx) (Samsung's template) |
+| **Video** (under 3 min, narrated) | **[Google Drive](https://drive.google.com/file/d/1nX8n_IJVjvUbYx03Qe8aF-BZF9VN2FaQ/view?usp=sharing)** · [`docs/media/Giljabi_Track3.mp4`](docs/media/Giljabi_Track3.mp4) |
 | **AI disclosure** | [`AI_DISCLOSURE.md`](AI_DISCLOSURE.md) |
 | **README** | this page |
 | Output | `estimated_trajectory.txt`, TUM format, exactly one pose per input IMU row |
