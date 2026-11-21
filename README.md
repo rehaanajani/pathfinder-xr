@@ -70,14 +70,24 @@ From the organisers' Track 3 slides and their official FAQ (`Track3_FAQ_Response
 | Only the degraded IMU file as input; waypoints hidden | No other input is read |
 | Offline, non-causal processing allowed | Used on drones: whole-flight zero-phase smoothing and a take-off / landing loop closure |
 | Scored with evo ATE and RPE after SE(3) (Umeyama) alignment | Our own scoring uses the same alignment ([`tools/score_track3.py`](tools/score_track3.py)) |
-| Scoring: memory 20 · runtime 20 · checkpoints 30 · blind 5 s 20 · dropouts 10 | Results below, per window |
-| Demo video 2-3 min, at most 3 | under 3 min |
+| Scoring: memory 20 · runtime 20 · checkpoints 30 · blind 5 s 20 · dropouts 10 | Each one measured in [Results](#results) |
+| Demo video 2-3 min, at most 3 | 2 min 54 s |
 
 ## Results
 
 All numbers are measured, with the raw files linked. Accuracy uses the **organisers' own degradation script**
 (`degrade_imu.py`, their seed, their documented accel-first columns), SE(3)-aligned like evo; what each metric
 measures is in [`results/track3/README.md`](results/track3/README.md#current-results-organisers-degradation-script).
+
+**What is scored, and where we stand** (all 17 public recordings; accuracy in metres, lower is better):
+
+| Scored item | Points | Giljabi | Reference |
+|---|---:|---:|---:|
+| Peak memory | 20 | **3.5 MiB** | budget 8 MB |
+| Runtime per 1 s of IMU | 20 | **5.8 ms** | budget 20 ms |
+| Checkpoints error | 30 | **1.35 m** | standing still 2.45 m |
+| Blind 5 s after the IMU dies | 20 | **1.37 m** | standing still 2.28 m |
+| Error through dropouts | 10 | **1.36 m** | standing still 2.42 m |
 
 **All 17 public recordings (11 EuRoC + 6 TUM-VI), metres, lower is better:**
 
@@ -175,7 +185,7 @@ Design notes: [`docs/AIRIO.md`](docs/AIRIO.md) (network), [`docs/LEARNED_VELOCIT
 | Rotated IMU handled | [`mount_guard_check.json`](results/track3/mount_guard_check.json); CI flips the IMU inside Docker |
 | Rotor drag and the drone pull | [`rotor_drag.md`](results/track3/rotor_drag.md): fit against motion capture, about 20 settings × 25 recordings |
 | Each later step, checked on 17 recordings × 4 corruption seeds | [`gap_bridge_rotor.md`](results/track3/gap_bridge_rotor.md) (dropout bridging), [`zero_phase_drone.md`](results/track3/zero_phase_drone.md) (drone smoothing), [`two_pass_on_smoothing.md`](results/track3/two_pass_on_smoothing.md) (two-pass start), [`stuck_runs.md`](results/track3/stuck_runs.md) (stuck runs), [`drag_offset_smoothing.md`](results/track3/drag_offset_smoothing.md) (drag offset), [`loop_closure.md`](results/track3/loop_closure.md) (take-off / landing) |
-| Ideas tried and not kept | [`blind_and_handheld.md`](results/track3/blind_and_handheld.md), and one page per idea in the pull requests that record them |
+| Ideas tried and not kept | [`not_kept.md`](results/track3/not_kept.md): every experiment pull request with its result, plus [`blind_and_handheld.md`](results/track3/blind_and_handheld.md) |
 | Every alternative was measured | [`retrain_organiser.md`](results/track3/retrain_organiser.md) (retraining on the organisers' damage, a 4× larger network, a 2 s window), [`coupling_sweep.md`](results/track3/coupling_sweep.md) (9 settings × 25 recordings), [`docs/RESEARCH_REVIEW.md`](docs/RESEARCH_REVIEW.md) |
 | C++ port on three machines | [`docs/reports/`](docs/reports/README.md), [`phone_SM-M366B.json`](results/reports/phone_SM-M366B.json) |
 
@@ -244,7 +254,8 @@ ZeroDrift has a licence; none of their code is in ours. We wrote our own version
 The same ideas on real hardware, with cameras and several IMUs:
 
 - **Live Galaxy phone demo**: the phone streams its IMU and camera tracking to a laptop dashboard; with the camera
-  covered, Giljabi keeps tracking and reports its own uncertainty ([`docs/reports/03_phone.md`](docs/reports/03_phone.md)).
+  covered for 48 s in a small room, a standard tracker drifted 227 m while Giljabi stayed within 3.5 m and reported its
+  own uncertainty (freezing in place would have been 1.8 m; [`docs/reports/03_phone.md`](docs/reports/03_phone.md)).
 - **On a phone's own CPU**: the C++ port runs at 4.0 MB and 5.0 ms per second of data on a Galaxy M36.
 - **Real VR headsets**: IMU clipping on Samsung Odyssey+ and Valve Index recordings, spotted from the data itself.
 - **Several IMUs**: sensors on one rigid frame must agree; a biased, stuck or spiking one is voted out.
