@@ -21,7 +21,7 @@ docker build -t pathfinder src/
 docker run --rm -v "$PWD/data:/data" pathfinder /data -o /data/estimated_trajectory.txt
 ```
 
-**The C++ port** (same algorithm, output within 1 µm; for on-device use; reads `velnet_weights*.bin` next to it):
+**The C++ port** (same algorithm, output within 3 µm; for on-device use; reads `velnet_weights*.bin` next to it):
 
 ```bash
 make -C src                                   # needs a C++17 compiler and zlib
@@ -65,17 +65,21 @@ appends 5 s of predicted poses after the last row.
    **Mount guard:** the body-frame network learned the training IMUs' axes, so if gravity at start-up points more
    than 25° away from every training mount (a rotated IMU), the entry switches to `velnet_weights_world.bin` and says
    so on stderr (`--mount-guard-deg 0` turns it off; `docs/MOUNT_GUARD.md`). Keep both weight files next to the binary.
-5. **Dropouts and IMU death**: dead reckoning from the last trusted state, with turn rate and velocity decaying.
+5. **Drones** (start-up gravity along the EuRoC thrust axis): rotor drag measures sideways velocity; offline, up to
+   the IMU failure the position is smoothed forwards and backwards (`--zp-tau-start/--zp-tau-end`, input with the drag
+   offset removed, `--zp-drag-off1/2`), and the gap between take-off and failure is removed as drift
+   (`--loop-flight`, `--loop-blind`).
+6. **Dropouts and IMU death**: short gaps and stuck runs are bridged with interpolated readings (`--bridge-max`,
+   `--unstick-max`); otherwise dead reckoning from the last trusted state, with turn rate and velocity decaying.
 
-`main.py` is the commented reference; `main.cpp` is a line-by-line port (exact match without the network, within
-1 µm with it).
+`main.py` is the entry (the FAQ asks for Python); `main.cpp` is a line-by-line port for devices (within 3 µm).
 
 ## Measured
 
-`main.py`, worst of 5 recordings with the organisers' damage, MacBook Air M5, Python 3.11
+`main.py`, worst of 6 recordings with the organisers' damage, MacBook Air M5, Python 3.11
 ([`results/track3/python_budget.json`](../results/track3/python_budget.json), `tools/measure_python_budget.py`):
-peak heap of the algorithm **1.54 MiB** (5.81 MiB counting everything after numpy, including compiling `main.py`
-with its embedded network), CPU **4.0 ms** per second of IMU. The C++ port: 2.5 MB and 1.8 ms on the same Mac, 4.0 MB and 5.0 ms on a Galaxy M36
+peak heap of the algorithm **3.5 MiB** (6.6 MiB counting everything after numpy, including compiling `main.py`
+with its embedded network), CPU **5.8 ms** per second of IMU. The C++ port (earlier build): 2.5 MB and 1.8 ms on the same Mac, 4.0 MB and 5.0 ms on a Galaxy M36
 phone CPU ([`docs/reports/`](../docs/reports/README.md)).
 
-Options: `python3 src/main.py --help` lists them; the C++ entry accepts the same ones.
+Options: `python3 src/main.py --help` lists them; the C++ port accepts the same ones.

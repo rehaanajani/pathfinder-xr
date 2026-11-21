@@ -1,6 +1,8 @@
-# Path Finder
+# 길잡이 · Giljabi
 
-**6-DoF trajectory from a degraded IMU alone, in under 6 MiB of memory and 4 ms per second of data.**
+<sub>길잡이 (gil-ja-bi): Korean for "the one who finds the way", a guide. Our entry for the Path Finder track.</sub>
+
+**6-DoF trajectory from a degraded IMU alone: about 45 % less error than standing still, in 3.5 MiB of memory and 6 ms per second of data.**
 
 Samsung PRISM XR Hackathon 2026 · Track 3: *Path Finder, Trajectory Estimation Under Sensor Degradation*
 Team **California Burrito** · SRM Institute of Science and Technology, Kattankulathur
@@ -13,8 +15,8 @@ Rehaan Ajani (lead) · Nikhil Solanki · Mayank Yadav · Debadrita Haldar
 | Item | Where |
 |---|---|
 | **Source code** | [`src/main.py`](src/main.py): Python, network weights embedded; needs only Python 3 and numpy |
-| **Presentation** | **[Google Slides](https://docs.google.com/presentation/d/1UhfNcmeuGhQjBOyQcsvGrlvwcIb-xog0/edit?usp=sharing)** · [`deck/SRMIST_CaliforniaBurrito.pptx`](deck/SRMIST_CaliforniaBurrito.pptx) (Samsung's template) |
-| **Video** (2.5 min, narrated) | **[Google Drive](https://drive.google.com/file/d/1fMtWITCb1RfrTKooN9tEU_daj5p_4nbL/view?usp=sharing)** · [`docs/media/PathFinder_Track3.mp4`](docs/media/PathFinder_Track3.mp4) |
+| **Presentation** | **[Google Slides](https://docs.google.com/presentation/d/1m3OZiMzlMfgZEZ3Lyf8iNLHis_BDRbju/edit?usp=sharing)** · [`deck/SRMIST_CaliforniaBurrito.pptx`](deck/SRMIST_CaliforniaBurrito.pptx) (Samsung's template) |
+| **Video** (under 3 min, narrated) | **[Google Drive](https://drive.google.com/file/d/1nX8n_IJVjvUbYx03Qe8aF-BZF9VN2FaQ/view?usp=sharing)** · [`docs/media/Giljabi_Track3.mp4`](docs/media/Giljabi_Track3.mp4) |
 | **AI disclosure** | [`AI_DISCLOSURE.md`](AI_DISCLOSURE.md) |
 | **README** | this page |
 | Output | `estimated_trajectory.txt`, TUM format, exactly one pose per input IMU row |
@@ -30,7 +32,8 @@ python3 src/main.py path/to/imu0_folder -o estimated_trajectory.txt
 ```
 
 Needs only Python 3 and numpy; `src/main.py` is self-contained and can be copied anywhere on its own. **Input:** a folder with `imu0/data.csv` (or
-`mav0/imu0/data.csv`), a `.zip` of it, or the CSV itself. Both column orders are detected (EuRoC
+`mav0/imu0/data.csv`, or the `imu0` folder itself), a `.zip` of it, or the CSV itself; with no argument it looks in the
+current folder, and the output can also be given as a second argument. Both column orders are detected (EuRoC
 `timestamp, gyro, accel` and the organisers' `timestamp, accel, gyro`), as are timestamps in s/ms/µs/ns and
 acceleration in m/s² or g; it prints what it found. **Output:** `timestamp tx ty tz qx qy qz qw`, one pose per input
 row, including the rows after the IMU dies. Options: `python3 src/main.py --help` and [`src/README.md`](src/README.md).
@@ -52,44 +55,72 @@ pose for every input row, including 5 s after the IMU dies, using **only** that 
 Integrating the damaged signal as it is fails completely: on EuRoC MH_05 damaged by the organisers' own script, plain
 integration is **72 km** off after 113 s.
 
+### Official rules and how we meet them
+
+From the organisers' Track 3 slides and their official FAQ (`Track3_FAQ_Responses.txt`, sent with `degrade_imu.py` on
+16 Nov 2026).
+
+| Rule | Our entry |
+|---|---|
+| Standalone Python script, `main.py` | [`src/main.py`](src/main.py), one file, needs only Python 3 and numpy |
+| ≤ 8 MB peak memory, measured at the algorithm / heap level | 3.5 MiB algorithm heap ([`python_budget.json`](results/track3/python_budget.json)) |
+| ≤ 20 ms compute per 1 s of IMU, one CPU thread, offline | 5.8 ms per second, one thread |
+| Exactly one pose per IMU row, nothing appended | One output row per input row by design, checked in [`tests/stress`](tests/stress) |
+| Dropouts are missing rows; blind 5 s rows carry invalid values | Gaps bridged from timestamps; dead-sensor rows detected and dead-reckoned |
+| Only the degraded IMU file as input; waypoints hidden | No other input is read |
+| Offline, non-causal processing allowed | Used on drones: whole-flight zero-phase smoothing and a take-off / landing loop closure |
+| Scored with evo ATE and RPE after SE(3) (Umeyama) alignment | Our own scoring uses the same alignment ([`tools/score_track3.py`](tools/score_track3.py)) |
+| Scoring: memory 20 · runtime 20 · checkpoints 30 · blind 5 s 20 · dropouts 10 | Each one measured in [Results](#results) |
+| Demo video 2-3 min, at most 3 | 2 min 54 s |
+
 ## Results
 
 All numbers are measured, with the raw files linked. Accuracy uses the **organisers' own degradation script**
 (`degrade_imu.py`, their seed, their documented accel-first columns), SE(3)-aligned like evo; what each metric
 measures is in [`results/track3/README.md`](results/track3/README.md#current-results-organisers-degradation-script).
 
+**What is scored, and where we stand** (all 17 public recordings; accuracy in metres, lower is better):
+
+| Scored item | Points | Giljabi | Reference |
+|---|---:|---:|---:|
+| Peak memory | 20 | **3.5 MiB** | budget 8 MB |
+| Runtime per 1 s of IMU | 20 | **5.8 ms** | budget 20 ms |
+| Checkpoints error | 30 | **1.35 m** | standing still 2.45 m |
+| Blind 5 s after the IMU dies | 20 | **1.37 m** | standing still 2.28 m |
+| Error through dropouts | 10 | **1.36 m** | standing still 2.42 m |
+
 **All 17 public recordings (11 EuRoC + 6 TUM-VI), metres, lower is better:**
 
 | | ATE | Checkpoints | Blind 5 s | Dropouts | Drift over 1 s |
 |---|---:|---:|---:|---:|---:|
 | Standing still | 2.62 | 2.45 | 2.28 | 2.42 | 0.77 |
-| **Path Finder** | **2.03** | **1.90** | **1.85** | **1.86** | **0.52** |
-| Improvement | **~23 %** | **~23 %** | **~19 %** | **~23 %** | **~33 %** |
+| **Giljabi** | **1.47** | **1.35** | **1.37** | **1.36** | **0.42** |
+| Improvement | **~44 %** | **~45 %** | **~40 %** | **~44 %** | **~46 %** |
 
-- **Better on every one of the 17 recordings** for ATE, checkpoints, dropouts and drift
-  ([`per_recording.md`](results/track3/per_recording.md), raw:
-  [`organiser_per_recording.json`](results/track3/organiser_per_recording.json)).
-- **Never trained on** (MH_05, V2_03, room6): ATE **2.65 m vs 3.31 m**, checkpoints 2.50 vs 3.03, blind 2.00 vs 2.41,
-  dropouts 2.49 vs 3.14, drift 0.65 vs 0.79.
-- **Fresh corruption seeds** (the organisers' script with its seed changed to 1, 7 and 2026, unseen by every setting):
-  ATE 2.00-2.04 m vs 2.62 m standing still, again better on all 17 recordings for ATE, checkpoints, dropouts and drift
-  ([`rotor_drag.md`](results/track3/rotor_drag.md)).
-- **XR headsets** (8 Monado recordings, IMU mounted unlike any training data): **0.57 m vs 0.83 m**, better on 8 / 8,
+- **Per recording** ([`per_recording.md`](results/track3/per_recording.md), raw:
+  [`organiser_per_recording.json`](results/track3/organiser_per_recording.json)): better than standing still on
+  17 / 17 for drift, 16 / 17 for checkpoints and dropouts, 15 / 17 for ATE.
+- **Never trained on** (MH_05, V2_03, room6): ATE **1.99 m vs 3.31 m**, checkpoints 1.77 vs 3.03, blind 1.54 vs 2.41,
+  dropouts 1.88 vs 3.14, drift 0.60 vs 0.79.
+- **Fresh corruption seeds** (the organisers' script with its seed changed to 1, 7 and 2026): ATE 1.45-1.54 m vs
+  2.62 m standing still, checkpoints 1.31-1.42 vs 2.45, blind 1.36-1.61 vs 2.28
+  ([`loop_closure.md`](results/track3/loop_closure.md)).
+- **XR headsets** (8 Monado recordings, IMU mounted unlike any training data): **0.59 m vs 0.83 m**, better on 8 / 8,
   thanks to the mount guard.
 
-<sub>Per recording: better on 17 / 17 for ATE, checkpoints, dropouts and drift; the blind 5 s is better on average
-and on 15 / 17.</sub>
+<sub>The blind 5 s is better on average and on 12 / 17 recordings.</sub>
 
-**Resources** (worst of 5 recordings with the organisers' damage, MacBook Air M5,
+**Resources** (worst of 6 recordings with the organisers' damage, MacBook Air M5,
 Python 3.11; [`python_budget.json`](results/track3/python_budget.json), `tools/measure_python_budget.py`):
 
 | | Measured | Budget |
 |---|---:|---:|
-| Peak heap of the algorithm (tracemalloc: data structures, buffers, estimation; the interpreter and numpy excluded) | **1.54 MiB** | 8 MB |
-| Everything after numpy, including compiling `main.py` with its embedded network | **5.81 MiB** | 8 MB |
-| CPU per second of IMU, one thread | **4.0 ms** | 20 ms |
+| Peak heap of the algorithm (tracemalloc: data structures, buffers, estimation; the interpreter and numpy excluded) | **3.5 MiB** | 8 MB |
+| Everything after numpy, including compiling `main.py` with its embedded network | **6.6 MiB** | 8 MB |
+| CPU per second of IMU, one thread | **5.8 ms** | 20 ms |
 
-**Same algorithm in C++** (`src/main.cpp`, output within 1 µm of `main.py`) for on-device use:
+**Same algorithm in C++** (`src/main.cpp`, output within 3 µm of `main.py`) for on-device use (measured on an earlier
+build):
 
 | Machine | Peak memory (process) | CPU per second of IMU | Report |
 |---|---:|---:|---|
@@ -109,14 +140,18 @@ flowchart LR
     N --> D
     C --> K[Rotor drag<br/>sideways force gives<br/>sideways velocity<br/>drones only]
     K --> D
+    D --> S[Whole file, drones<br/>zero-phase smoothing,<br/>take-off = landing]
+    S --> E
     B -. bad rows, IMU death .-> R[Dead reckoning<br/>decay from last<br/>trusted state]
     R --> E
 ```
 
 1. **Check every sample.** NaN/inf, all-zero, frozen (bit-identical repeats), physically impossible values and time
-   gaps are caught row by row. Duplicated and out-of-order rows are handled.
-2. **Start blind.** Gravity direction and gyro bias come from the data (the first still stretch); no ground truth,
-   no calibration.
+   gaps are caught row by row. Duplicated and out-of-order rows are handled; short stuck runs (a reading copied onto
+   the next rows) are replaced by readings interpolated between the real rows on each side, and short dropouts are
+   bridged the same way.
+2. **Start blind.** Gravity direction and gyro bias come from the data (the first still stretch, then a silent first
+   pass over the first 10 s); no ground truth, no calibration.
 3. **Physics with brakes.** Strapdown integration with gravity correction, zero-velocity updates when still, a soft
    speed limit and a gentle pull back to the start point so drift cannot run away.
 4. **Learned velocity.** A small 1-D CNN reads 1 s of body-frame IMU (AirIO style) and predicts velocity and its own
@@ -127,7 +162,13 @@ flowchart LR
    accelerometer measures the drone's velocity in its own frame, with no heading needed. It switches on only when
    start-up gravity matches the drone's thrust axis, and then the pull to the start can be gentler (12 s instead of
    3 s). Handheld and headset recordings are unaffected ([`rotor_drag.md`](results/track3/rotor_drag.md)).
-6. **Coast when blind.** Through dropouts and the 5 s after the IMU dies, turn rate and speed decay from the last
+6. **Use the whole file (drones).** The FAQ allows offline processing. Up to the moment the IMU dies, the pull to the
+   start is replaced by a zero-phase (forward-backward) one whose time constant shortens as the damage grows; its
+   input uses rotor-drag readings with their measured offset removed. A drone lands back on its pad, so the gap between
+   the position at take-off (found from the IMU: the drone resting before it lifts off) and at the failure is drift,
+   removed over the flight ([`zero_phase_drone.md`](results/track3/zero_phase_drone.md),
+   [`loop_closure.md`](results/track3/loop_closure.md)).
+7. **Coast when blind.** Through dropouts and the 5 s after the IMU dies, turn rate and speed decay from the last
    trusted state.
 
 Design notes: [`docs/AIRIO.md`](docs/AIRIO.md) (network), [`docs/LEARNED_VELOCITY.md`](docs/LEARNED_VELOCITY.md),
@@ -142,7 +183,9 @@ Design notes: [`docs/AIRIO.md`](docs/AIRIO.md) (network), [`docs/LEARNED_VELOCIT
 | `main.py` runs on its own | `tests/stress/test_standalone.py`: copied alone into an empty folder, identical output; embedded weights byte-identical to `src/velnet_weights*.bin` |
 | One pose per row through every fault | CI on every push (badge above): stress tests, Docker image run |
 | Rotated IMU handled | [`mount_guard_check.json`](results/track3/mount_guard_check.json); CI flips the IMU inside Docker |
-| Rotor drag and the drone pull | [`rotor_drag.md`](results/track3/rotor_drag.md): fit against motion capture, about 20 settings × 25 recordings, and an offline smoother that did not help |
+| Rotor drag and the drone pull | [`rotor_drag.md`](results/track3/rotor_drag.md): fit against motion capture, about 20 settings × 25 recordings |
+| Each later step, checked on 17 recordings × 4 corruption seeds | [`gap_bridge_rotor.md`](results/track3/gap_bridge_rotor.md) (dropout bridging), [`zero_phase_drone.md`](results/track3/zero_phase_drone.md) (drone smoothing), [`two_pass_on_smoothing.md`](results/track3/two_pass_on_smoothing.md) (two-pass start), [`stuck_runs.md`](results/track3/stuck_runs.md) (stuck runs), [`drag_offset_smoothing.md`](results/track3/drag_offset_smoothing.md) (drag offset), [`loop_closure.md`](results/track3/loop_closure.md) (take-off / landing) |
+| Ideas tried and not kept | [`not_kept.md`](results/track3/not_kept.md): every experiment pull request with its result, plus [`blind_and_handheld.md`](results/track3/blind_and_handheld.md) |
 | Every alternative was measured | [`retrain_organiser.md`](results/track3/retrain_organiser.md) (retraining on the organisers' damage, a 4× larger network, a 2 s window), [`coupling_sweep.md`](results/track3/coupling_sweep.md) (9 settings × 25 recordings), [`docs/RESEARCH_REVIEW.md`](docs/RESEARCH_REVIEW.md) |
 | C++ port on three machines | [`docs/reports/`](docs/reports/README.md), [`phone_SM-M366B.json`](results/reports/phone_SM-M366B.json) |
 
@@ -160,23 +203,28 @@ make -C src && PF_ENTRY=cpp python -m pytest -q tests/stress     # the C++ port
 | `test_review_fixes.py` | regressions from independent reviews: zero acceleration at start, start-up boundary, a 100,000-file zip, a 3 s gap |
 | `test_mount_guard.py` | switching networks for an IMU mounted another way |
 | `test_standalone.py` | `main.py` alone gives identical output; embedded weights match the weight files |
+| `test_entry_calls.py` | every way a harness might call the entry (no arguments, the `imu0` folder, output as a second argument, a flat zip, a folder one level down) gives the same trajectory; `main.py` without numpy still writes every pose |
+| `test_offline_pass.py` | the drone's offline pass changes the positions and keeps one pose per row; past its row cap it falls back to the causal output |
 
 ## Safeguards
 
 - **Handles bad input**: every input row gets a finite pose and a unit quaternion, tested on NaN, zero, frozen,
   missing, duplicate and out-of-order rows, cut and tiny files, and a zip with 100,000 members.
 - **Exactly one pose per input row**: nothing appended, nothing filled in between.
-- **Streams the input** row by row: memory does not grow with the length of the recording.
+- **Streams the input** row by row; on a drone a few numbers per row are kept for the offline pass (3.5 MiB on a 184 s
+  recording, 4.7 MiB on a 5-minute flight). Past 80,000 rows (`--zp-max-rows`) that pass is skipped, so a very long or
+  high-rate file still stays under 8 MB (4.3 MiB measured on a capped one).
+- **Runs however it is called**: no arguments, the `imu0` folder, a flat zip or a folder one level down, with the output
+  as `-o` or a second argument. Without numpy, `main.py` runs physics only and still writes every pose.
 - **Says what it assumed**: column order, units and network choice are printed on stderr; flags override them.
-- **Settings chosen to generalise**: the default beats standing still on all 17 recordings; settings that scored
-  higher on some recordings but not on all of them were rejected.
+- **Settings chosen to generalise**: chosen on 11 development recordings, then checked once on the other 6 and on
+  three fresh corruption seeds; ideas that won only on the development recordings were dropped.
 
 ## Design choices
 
-- **Bounded drift by design.** An IMU alone cannot observe absolute heading or position, so Path Finder pulls its
+- **Bounded drift by design.** An IMU alone cannot observe absolute heading or position, so Giljabi pulls its
   estimate gently back toward the start and weights the network by its own confidence. On a drone, rotor drag measures
-  velocity directly, so the pull can be gentler. That keeps its ATE below standing still on every recording, from small
-  rooms to 20 m drone flights.
+  velocity directly, so the pull can be gentler, and the whole flight can be smoothed offline.
 - **Room to grow.** Given ground-truth velocity in place of the network, the same filter reaches 2.56 m on our
   validation recordings, and 1.95 m with a gentler pull to the start (our own damage model;
   [`retrain_organiser.md`](results/track3/retrain_organiser.md)). A better velocity network is the next lever, and
@@ -184,12 +232,30 @@ make -C src && PF_ENTRY=cpp python -m pytest -q tests/stress     # the C++ port
 - **Clean evaluation.** 11 of the 17 recordings trained the network; the 3 it never saw are reported separately, and
   they were also among the recordings used to choose the filter settings.
 
+## Ideas we learned from
+
+We ran the public Track 3 entries on our own damaged files, scored them the same way as ours, and read the strongest
+line by line ([`competitor_code_notes.md`](results/track3/competitor_code_notes.md)). Neither SRMIST_vortexxx nor
+ZeroDrift has a licence; none of their code is in ours. We wrote our own versions of:
+
+- **Bridging dropouts** with interpolated readings: SRMIST_vortexxx ([`RaktimChandra/pathfinder`](https://github.com/RaktimChandra/pathfinder))
+  integrates the gyro trapezoidally across missing rows; ZeroDrift
+  ([`Gem2005/VITChennai_ZeroDrift`](https://github.com/Gem2005/VITChennai_ZeroDrift)) sub-steps them.
+- **Replacing stuck runs**, **offline zero-phase drift removal** whose cut-off shortens with the damage, and an
+  **offline two-pass start**: from ZeroDrift's inverse preprocessing and two-pass filter.
+- **Rotor drag as a velocity measurement**, with its reading offset: also used by SRMIST_vortexxx, ZeroDrift and
+  TrustNav ([`Am-berneal/TrustNav-GPS-Denied-Navigation`](https://github.com/Am-berneal/TrustNav-GPS-Denied-Navigation)),
+  after Leishman et al. (2014).
+- **The drone lands where it took off**: SRMIST_vortexxx's notes on the Machine Hall flights; we use it as a loop
+  closure found from the IMU alone.
+
 ## Beyond the scored task
 
 The same ideas on real hardware, with cameras and several IMUs:
 
 - **Live Galaxy phone demo**: the phone streams its IMU and camera tracking to a laptop dashboard; with the camera
-  covered, Path Finder keeps tracking and reports its own uncertainty ([`docs/reports/03_phone.md`](docs/reports/03_phone.md)).
+  covered for 48 s in a small room, a standard tracker drifted 227 m while Giljabi stayed within 3.5 m and reported its
+  own uncertainty (freezing in place would have been 1.8 m; [`docs/reports/03_phone.md`](docs/reports/03_phone.md)).
 - **On a phone's own CPU**: the C++ port runs at 4.0 MB and 5.0 ms per second of data on a Galaxy M36.
 - **Real VR headsets**: IMU clipping on Samsung Odyssey+ and Valve Index recordings, spotted from the data itself.
 - **Several IMUs**: sensors on one rigid frame must agree; a biased, stuck or spiking one is voted out.

@@ -10,11 +10,13 @@ main table comes from `main.py`; the C++ port gives the same scores (file below)
 
 | File | What | Headline |
 |---|---|---|
-| [`per_recording.md`](per_recording.md) | all 11 EuRoC + 6 TUM-VI recordings, every metric, Path Finder (`main.py`) vs standing still, per recording | better on 17/17 for ATE, checkpoints, dropouts and drift; blind 15/17 |
-| [`organiser_per_recording.json`](organiser_per_recording.json) | the raw numbers behind that table, plus the 8 Monado headset recordings | means: ATE 2.03 vs 2.62 m, checkpoints 1.90 vs 2.45, blind 1.85 vs 2.28, dropouts 1.86 vs 2.42, drift 0.52 vs 0.77; Monado 0.57 vs 0.83 m (8/8) |
+| [`per_recording.md`](per_recording.md) | all 11 EuRoC + 6 TUM-VI recordings, every metric, Path Finder (`main.py`) vs standing still, per recording | better on 17/17 for drift, 16/17 for checkpoints and dropouts, 15/17 for ATE, 12/17 for blind |
+| [`organiser_per_recording.json`](organiser_per_recording.json) | the raw numbers behind that table, plus the 8 Monado headset recordings | means: ATE 1.47 vs 2.62 m, checkpoints 1.35 vs 2.45, blind 1.37 vs 2.28, dropouts 1.36 vs 2.42, drift 0.42 vs 0.77; Monado 0.59 vs 0.83 m (8/8) |
 | [`organiser_per_recording_cpp.json`](organiser_per_recording_cpp.json) | the same 25 recordings scored with the C++ port (`--entry cpp`) | identical to the file above within 1e-6 m on every metric |
-| [`python_budget.json`](python_budget.json) | memory and CPU of `src/main.py`, 5 recordings (`tools/measure_python_budget.py`) | worst: algorithm 1.54 MiB; 5.81 MiB counting everything after numpy, including compiling `main.py`; 4.0 ms per second of IMU |
-| [`rotor_drag.md`](rotor_drag.md) | rotor-drag aiding and the gentler pull on the drone: fit, settings sweep, the smoother that did not help | ATE 2.31 -> 2.03 m, blind 2.24 -> 1.85 m; TUM-VI and Monado unchanged |
+| [`python_budget.json`](python_budget.json) | memory and CPU of `src/main.py`, 6 recordings (`tools/measure_python_budget.py`) | worst: algorithm 3.5 MiB; 6.6 MiB counting everything after numpy, including compiling `main.py`; 5.8 ms per second of IMU |
+| [`rotor_drag.md`](rotor_drag.md) | rotor-drag aiding and the gentler pull on the drone: fit, settings sweep | ATE 2.31 -> 2.03 m, blind 2.24 -> 1.85 m; TUM-VI and Monado unchanged |
+| [`gap_bridge_rotor.md`](gap_bridge_rotor.md), [`zero_phase_drone.md`](zero_phase_drone.md), [`two_pass_on_smoothing.md`](two_pass_on_smoothing.md), [`stuck_runs.md`](stuck_runs.md), [`drag_offset_smoothing.md`](drag_offset_smoothing.md), [`loop_closure.md`](loop_closure.md) | each step after rotor drag, in order, every one checked on all 17 recordings at four corruption seeds | ATE 2.03 -> 1.47 m, checkpoints 1.90 -> 1.35, blind 1.85 -> 1.37, dropouts 1.86 -> 1.36 |
+| [`blind_and_handheld.md`](blind_and_handheld.md), [`competitor_code_notes.md`](competitor_code_notes.md) | ideas tried and not kept; how the strongest other entries work | |
 | [`coupling_sweep.md`](coupling_sweep.md) | how the position coupling was chosen before rotor drag: 9 settings × 25 recordings | the setting that beats standing still on all 17 |
 | [`retrain_organiser.md`](retrain_organiser.md) | retraining on the organisers' damage, a 4× larger network, a 2 s window | no gain beyond seed noise; the current network stays |
 | [`mount_guard_check.json`](mount_guard_check.json) | mount guard on vs off on 16 recordings, and the same files rotated 90° (`tools/check_mount_guard.py`) | normal: 16/16 quiet and byte-identical; rotated: 14/16 switch networks |

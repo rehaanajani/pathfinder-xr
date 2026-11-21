@@ -149,6 +149,9 @@ def weights_name(source):
     return Path(s).name
 
 
+_NO_NUMPY = [False]                               # set once numpy fails to import
+
+
 class VelNet:
     """1-D CNN: (n_in, window) IMU slots -> displacement, velocity and their log standard deviations (12 outputs)."""
 
@@ -199,18 +202,37 @@ class VelNet:
 
 
 
-def open_csv(path):
-    p = Path(path)
+def find_input(path):
+    """The IMU file for an input path: a CSV, a .zip, or a folder holding imu0/data.csv, mav0/imu0/data.csv,
+    data.csv (the imu0 folder itself) or one of those one level down (an unpacked zip); None = the current folder."""
+    p = Path(path) if path else Path(".")
     if p.is_dir():
-        for cand in (p / "imu0" / "data.csv", p / "mav0" / "imu0" / "data.csv"):
+        for cand in (p / "imu0" / "data.csv", p / "mav0" / "imu0" / "data.csv", p / "data.csv"):
             if cand.exists():
-                return open(cand, "r", newline="")
+                return cand
+        for pat in ("*/imu0/data.csv", "*/mav0/imu0/data.csv"):
+            found = sorted(p.glob(pat))
+            if found:
+                return found[0]
+        zips = sorted(p.glob("*.zip"))
+        if len(zips) == 1:
+            return zips[0]
         raise SystemExit(f"no imu0/data.csv under {p}")
+    return p
+
+
+def open_csv(path):
+    p = find_input(path)
     if p.suffix == ".zip":
         import io                         # only needed for zip input: keeps start-up memory low
         import zipfile
         z = zipfile.ZipFile(p)
-        name = next(n for n in z.namelist() if n.endswith("imu0/data.csv"))
+        names = [n for n in z.namelist() if not n.endswith("/")]
+        name = (next((n for n in names if n.endswith("imu0/data.csv")), None)
+                or next((n for n in names if n.endswith("data.csv")), None)
+                or next((n for n in names if n.endswith(".csv")), None))
+        if name is None:
+            raise SystemExit(f"no imu0/data.csv in {p}")
         return io.TextIOWrapper(z.open(name), newline="")
     return open(p, "r", newline="")
 
@@ -363,6 +385,7 @@ class PathFinder:
         self.p_raw = [0.0, 0.0, 0.0]              # position without the pull to the start (offline smoothing input)
         self.v = [0.0, 0.0, 0.0]
         self.drag_on = False                      # rotor-drag velocity aiding (set in init_from for a drone mount)
+        self.quiet = False                        # the silent first pass (--two-pass) prints nothing
         self.shadow = False                       # drone + offline smoothing: a second velocity with offset-corrected
         self.v2 = [0.0, 0.0, 0.0]                 # rotor-drag readings, integrated into p2 (the smoothing input);
         self.p2 = [0.0, 0.0, 0.0]                 # the output's causal rows keep the uncorrected velocity
@@ -399,8 +422,13 @@ class PathFinder:
         # or "body" (version 3, 10 channels, AirIO style: body-frame gyro and specific force with gravity kept, the
         # gravity direction in the body frame from our own orientation, health; outputs in the body frame).
         self.body = a.model_input == "body"
-        if a.model:
-            self.net = VelNet(a.model)
+        if a.model and not _NO_NUMPY[0]:
+            try:
+                self.net = VelNet(a.model)
+            except ImportError:                   # no numpy on this machine: physics only, still one pose per row
+                _NO_NUMPY[0] = True
+                print("numpy not available: running without the velocity network", file=sys.stderr)
+        if self.net is not None:
             self.W, self.dec = self.net.window, self.net.dec
             self.body = self.net.version >= 3
             if a.model_blind_tau > 0:
@@ -453,8 +481,9 @@ class PathFinder:
                     self.a = A = copy.copy(A)
                     A.pos_tau = A.pos_tau_nonet = A.drag_pos_tau
                 if self.drag_on:
-                    print(f"rotor-drag aiding on (start-up gravity {ang:.0f} deg from the drone's thrust axis)",
-                          file=sys.stderr)
+                    if not self.quiet:
+                        print(f"rotor-drag aiding on (start-up gravity {ang:.0f} deg from the drone's thrust axis)",
+                              file=sys.stderr)
         var_g = sum(sum((b[0][i] - mg[i]) ** 2 for i in range(3)) for b in buf) / n
         if var_g < self.a.still_gyro_var and not self.bias_known:   # still at start: the mean gyro is its bias
             self.bg = mg
@@ -473,14 +502,16 @@ class PathFinder:
         self.mount_angle = math.degrees(math.acos(max(-1.0, min(1.0, cos))))
         if self.mount_angle > A.mount_guard_deg:
             if abs(n / G - 1.0) > MOUNT_G_TOL:     # sustained acceleration tilts the mean; that is not a mount
-                print(f"mount guard: start-up specific force {n:.2f} m/s^2 is not gravity alone; "
-                      "keeping the body-frame network", file=sys.stderr)
+                if not self.quiet:
+                    print(f"mount guard: start-up specific force {n:.2f} m/s^2 is not gravity alone; "
+                          "keeping the body-frame network", file=sys.stderr)
                 return
             try:
                 fb = VelNet(A.fallback_model)
             except Exception as e:                # unusable fallback: keep the body-frame network (as the C++ entry)
-                print(f"mount guard: cannot load {A.fallback_model} ({e}); keeping the body-frame network",
-                      file=sys.stderr)
+                if not self.quiet:
+                    print(f"mount guard: cannot load {A.fallback_model} ({e}); keeping the body-frame network",
+                          file=sys.stderr)
                 return
             self.net = fb
             # The heavier network coupling of the "learned" preset was chosen with the body-frame network on its
@@ -492,8 +523,9 @@ class PathFinder:
                 setattr(A, k, v)
             self.W, self.dec = self.net.window, self.net.dec
             self.body = self.net.version >= 3
-            print(f"IMU mount {self.mount_angle:.0f} deg from the training mounts: using {weights_name(A.fallback_model)}",
-                  file=sys.stderr)
+            if not self.quiet:
+                print(f"IMU mount {self.mount_angle:.0f} deg from the training mounts: using {weights_name(A.fallback_model)}",
+                      file=sys.stderr)
 
     def zero_velocity(self, g, a):
         A = self.a
@@ -874,11 +906,12 @@ def prescan_bias(inp, a, layout=(False, 1, 1.0, "")):
 def run(inp, out, a, rec=None, _stop_s=None):
     layout = detect_layout(inp, columns=a.columns, ts_unit=a.ts_unit, accel_unit=a.accel_unit)
     accel_first, t_scale, a_scale, note = layout
-    if accel_first or t_scale != 1 or a_scale != 1.0 or note:
+    if (accel_first or t_scale != 1 or a_scale != 1.0 or note) and _stop_s is None:
         unit = {1: "ns", 10 ** 3: "us", 10 ** 6: "ms", 10 ** 9: "s"}[t_scale]
         print(f"input layout: {'accel' if accel_first else 'gyro'} columns first, timestamps in {unit}, "
               f"accel in {'g' if a_scale != 1.0 else 'm/s^2'}" + (f" ({note})" if note else ""), file=sys.stderr)
     pf = PathFinder(a)
+    pf.quiet = _stop_s is not None
     if a.prescan > 0 and a.zupt_gyro_std > 0:
         bias = prescan_bias(inp, a, layout)
         if bias is not None:
@@ -898,6 +931,7 @@ def run(inp, out, a, rec=None, _stop_s=None):
     smooth = a.zp_tau_start > 0 and _stop_s is None   # offline zero-phase pull (drone mount only, decided after init)
     ts, raw = array("d"), array("d")               # time (s) and un-pulled position of every row, for that pass
     n_live = [0]                                   # rows up to and including the last row with any IMU reading
+    capped = [False]                               # more rows than --zp-max-rows: no offline pass
     quiet = (array("d"), array("d"), [0.0, 0.0, 0])  # accel-norm sum / sum of squares per 50 input rows (pad rest)
     tmp = Path(str(out) + ".part") if smooth else Path(out)
     with open_csv(inp) as f, open(tmp, "w") as o:
@@ -906,7 +940,13 @@ def run(inp, out, a, rec=None, _stop_s=None):
         def emit(t):
             x, y, z, qx, qy, qz, qw = pf.pose()
             o.write(f"{t * 1e-9:.9f} {x:.6f} {y:.6f} {z:.6f} {qx:.8f} {qy:.8f} {qz:.8f} {qw:.8f}\n")
-            if smooth and pf.drag_on:
+            if smooth and pf.drag_on and not capped[0]:
+                if len(ts) >= a.zp_max_rows:
+                    # Too long (or too high a rate) to keep within the memory budget: keep the causal output
+                    capped[0] = True
+                    del ts[:], raw[:]
+                    print(f"offline smoothing skipped: more than {a.zp_max_rows} rows", file=sys.stderr)
+                    return
                 ts.append(t * 1e-9)
                 raw.extend(pf.p2 if pf.shadow else pf.p_raw)
 
@@ -1075,8 +1115,11 @@ PRESETS = {
 
 def args(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("input")
-    ap.add_argument("-o", "--output", default="estimated_trajectory.txt")
+    ap.add_argument("input", nargs="?", default=None,
+                    help="imu0/data.csv, a folder holding it (or imu0 itself), or a .zip; default: the current folder")
+    ap.add_argument("output_pos", nargs="?", default=None, metavar="output",
+                    help="output file (same as -o)")
+    ap.add_argument("-o", "--output", default=None, help="output file (default estimated_trajectory.txt)")
     ap.add_argument("--extend-blind", type=float, default=0.0,
                     help="append this many seconds of dead-reckoned poses after the last input row")
     ap.add_argument("--init-samples", type=int, default=200)
@@ -1135,6 +1178,8 @@ def args(argv=None):
                     help="s; pull to the start while drag aiding is on (0 = same as --pos-tau)")
     ap.add_argument("--zp-tau-start", type=float, default=48.0,
                     help="s; drone mount: offline zero-phase pull to the start, time constant at the start (0 = off)")
+    ap.add_argument("--zp-max-rows", type=int, default=80000,
+                    help="drone: skip the offline pass for files with more rows than this (memory budget)")
     ap.add_argument("--loop-flight", type=float, default=1.0,
                     help="drone: remove the gap between the take-off and failure positions as drift over the flight (0 = off)")
     ap.add_argument("--loop-blind", type=float, default=0.5, help="share of that gap removed from the blind rows")
@@ -1196,6 +1241,7 @@ def args(argv=None):
 
 def main(argv=None):
     a = args(argv)
+    a.output = a.output or a.output_pos or "estimated_trajectory.txt"
     n = run(a.input, a.output, a)
     print(f"wrote {n} poses to {a.output}", file=sys.stderr)
 

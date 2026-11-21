@@ -20,6 +20,7 @@
 #include <cstring>
 #include <deque>
 #include <string>
+#include <dirent.h>
 #include <sys/stat.h>
 #include <vector>
 #include <zlib.h>
@@ -98,6 +99,7 @@ struct Opt {
     double drag_k1 = -0.19, drag_k2 = -0.17, drag_tau = 0.5, drag_lp = 0.3, drag_robust = 2.0, drag_hp = 0.0;
     double drag_pos_tau = 12.0, drag_mount_deg = 15.0, zp_tau_start = 48.0, zp_tau_end = 12.0, two_pass = 10.0;
     double loop_flight = 1.0, loop_blind = 0.5, loop_quiet = 0.35, loop_frac = 0.5;
+    int zp_max_rows = 80000;
     double zp_drag_off1 = -0.6, zp_drag_off2 = -0.3;
     int two_pass_res = 0;
     int model_every = 20; double model_min_valid = 0.25, model_ref = NaN, model_vref = 1.0;
@@ -138,7 +140,7 @@ static void parse_args(int argc, char** argv, Opt& a) {
         {"blind-vel-tau", &a.blind_vel_tau, nullptr, nullptr}, {"blind-turn-tau", &a.blind_turn_tau, nullptr, nullptr},
         {"two-pass", &a.two_pass, nullptr, nullptr}, {"two-pass-res", nullptr, &a.two_pass_res, nullptr},
         {"zp-tau-start", &a.zp_tau_start, nullptr, nullptr},
-        {"loop-flight", &a.loop_flight, nullptr, nullptr}, {"loop-blind", &a.loop_blind, nullptr, nullptr},
+        {"zp-max-rows", nullptr, &a.zp_max_rows, nullptr}, {"loop-flight", &a.loop_flight, nullptr, nullptr}, {"loop-blind", &a.loop_blind, nullptr, nullptr},
         {"loop-quiet", &a.loop_quiet, nullptr, nullptr}, {"loop-frac", &a.loop_frac, nullptr, nullptr},
         {"zp-drag-off1", &a.zp_drag_off1, nullptr, nullptr}, {"zp-drag-off2", &a.zp_drag_off2, nullptr, nullptr}, {"zp-tau-end", &a.zp_tau_end, nullptr, nullptr},
         {"bridge-max", &a.bridge_max, nullptr, nullptr}, {"unstick-max", &a.unstick_max, nullptr, nullptr},
@@ -152,6 +154,8 @@ static void parse_args(int argc, char** argv, Opt& a) {
         {"gyro-max", &a.gyro_max, nullptr, nullptr},
     };
     bool have_input = false;
+    bool out_flag = false;
+    std::string pos_out;
     for (int k = 1; k < argc; k++) {
         std::string s = argv[k], name, val;
         bool has_val = false;
@@ -166,13 +170,16 @@ static void parse_args(int argc, char** argv, Opt& a) {
             if (!d) usage_exit(("unknown option --" + name).c_str());
             if (!has_val) { if (k + 1 >= argc) usage_exit(("missing value for --" + name).c_str()); val = argv[++k]; }
             char* end = nullptr;
+            if (name == "output") out_flag = true;
             if (d->s) *d->s = val;
             else if (d->d) { *d->d = std::strtod(val.c_str(), &end); if (*end) usage_exit(("bad number " + val).c_str()); }
             else { *d->i = (int)std::strtol(val.c_str(), &end, 10); if (*end) usage_exit(("bad integer " + val).c_str()); }
         } else if (!have_input) { a.input = s; have_input = true; }
+        else if (pos_out.empty()) pos_out = s;                       // output as a second positional (as main.py)
         else usage_exit(("unexpected argument " + s).c_str());
     }
-    if (!have_input) usage_exit("the input is required");
+    if (!have_input) a.input = ".";                                  // default: the current folder (as main.py)
+    if (!out_flag && !pos_out.empty()) a.output = pos_out;
     if (a.model == "auto") {                    // default: velnet_weights.bin next to the program, if present
         std::string self = argv[0];
         size_t sl = self.find_last_of("/\\");
@@ -272,8 +279,10 @@ static void open_zip_member(Source& src, const char* path) {
     if (e < 0) { std::fprintf(stderr, "%s: not a zip file\n", path); std::exit(1); }
     uint32_t cd_size = le32(&buf[e + 12]), cd_off = le32(&buf[e + 16]);
     std::vector<unsigned char>().swap(buf);
-    const std::string want = "imu0/data.csv";
-    // Walk the central directory one entry at a time: memory stays constant however many files the zip holds.
+    // Walk the central directory one entry at a time (memory stays constant however many files the zip holds),
+    // looking for imu0/data.csv, then any data.csv, then any .csv (as main.py).
+    for (const char* wanted : {"imu0/data.csv", "data.csv", ".csv"}) {
+    const std::string want = wanted;
     long pos = cd_off, end = (long)cd_off + (long)cd_size;
     std::string name;
     while (pos + 46 <= end) {
@@ -296,6 +305,7 @@ static void open_zip_member(Source& src, const char* path) {
             return;
         }
     }
+    }
     std::fprintf(stderr, "no imu0/data.csv in %s\n", path);
     std::exit(1);
 }
@@ -305,10 +315,28 @@ static bool exists(const std::string& p) { struct stat st; return stat(p.c_str()
 
 static void open_source(Source& src, const std::string& path) {
     if (is_dir(path)) {
-        for (const char* c : {"/imu0/data.csv", "/mav0/imu0/data.csv"}) {
+        for (const char* c : {"/imu0/data.csv", "/mav0/imu0/data.csv", "/data.csv"}) {
             std::string cand = path + c;
             if (exists(cand)) { src.f = std::fopen(cand.c_str(), "rb"); if (src.f) return; }
         }
+        // one level down (an unpacked zip), or a single .zip in the folder (as main.py)
+        std::vector<std::string> subs, zips;
+        if (DIR* dir = opendir(path.c_str())) {
+            while (dirent* e = readdir(dir)) {
+                std::string n = e->d_name;
+                if (n == "." || n == "..") continue;
+                if (is_dir(path + "/" + n)) subs.push_back(n);
+                else if (n.size() > 4 && n.compare(n.size() - 4, 4, ".zip") == 0) zips.push_back(n);
+            }
+            closedir(dir);
+        }
+        std::sort(subs.begin(), subs.end());
+        for (const char* c : {"/imu0/data.csv", "/mav0/imu0/data.csv"})
+            for (auto& s : subs) {
+                std::string cand = path + "/" + s + c;
+                if (exists(cand)) { src.f = std::fopen(cand.c_str(), "rb"); if (src.f) return; }
+            }
+        if (zips.size() == 1) { open_zip_member(src, (path + "/" + zips[0]).c_str()); return; }
         std::fprintf(stderr, "no imu0/data.csv under %s\n", path.c_str());
         std::exit(1);
     }
@@ -686,6 +714,7 @@ struct PathFinder {
     bool bias_known = false;
     bool have_f_lp = false; V3 f_lp{{0, 0, 0}};
     bool drag_on = false, have_f_drag = false, have_f_drag_slow = false;
+    bool quiet = false;                         // the silent first pass (--two-pass) prints nothing
     V3 f_drag{{0, 0, 0}}, f_drag_slow{{0, 0, 0}};
     double yaw_var = 0.0;
     bool have_dt_nom = false; double dt_nom = 0;
@@ -747,7 +776,7 @@ struct PathFinder {
                 shadow = drag_on && A.zp_tau_start > 0 && (A.zp_drag_off1 != 0 || A.zp_drag_off2 != 0);
                 if (drag_on && A.drag_pos_tau > 0) { A.pos_tau = A.drag_pos_tau; A.pos_tau_nonet = A.drag_pos_tau; }
                 if (drag_on)
-                    std::fprintf(stderr, "rotor-drag aiding on (start-up gravity %.0f deg from the drone's thrust axis)\n", ang);
+                    if (!quiet) std::fprintf(stderr, "rotor-drag aiding on (start-up gravity %.0f deg from the drone's thrust axis)\n", ang);
             }
         }
         double var = 0;
@@ -811,12 +840,12 @@ struct PathFinder {
         double ang = std::acos(std::max(-1.0, std::min(1.0, best))) * 180.0 / M_PI;
         if (ang <= A.mount_guard_deg) return;
         if (std::fabs(n / G - 1.0) > MOUNT_G_TOL) {      // sustained acceleration tilts the mean; not a mount
-            std::fprintf(stderr, "mount guard: start-up specific force %.2f m/s^2 is not gravity alone; "
+            if (!quiet) std::fprintf(stderr, "mount guard: start-up specific force %.2f m/s^2 is not gravity alone; "
                                  "keeping the body-frame network\n", n);
             return;
         }
         if (!fallback.load(A.fallback_model)) {           // unusable file: keep the body-frame network (as main.py)
-            std::fprintf(stderr, "mount guard: cannot load %s; keeping the body-frame network\n", A.fallback_model.c_str());
+            if (!quiet) std::fprintf(stderr, "mount guard: cannot load %s; keeping the body-frame network\n", A.fallback_model.c_str());
             return;
         }
         net = &fallback;
@@ -826,7 +855,7 @@ struct PathFinder {
         body = net->version >= 3;
         const std::string& f = A.fallback_model;
         size_t sl = f.find_last_of("/\\");
-        std::fprintf(stderr, "IMU mount %.0f deg from the training mounts: using %s\n", ang,
+        if (!quiet) std::fprintf(stderr, "IMU mount %.0f deg from the training mounts: using %s\n", ang,
                      (sl == std::string::npos ? f : f.substr(sl + 1)).c_str());
     }
 
@@ -1167,6 +1196,7 @@ static bool prescan_bias(const Opt& a, V3& out) {
 // learns the gyro bias and the slow acceleration residual; the real pass starts from them.
 static void warm_start(const Opt& a, VelNet* np, V3& bg, V3& res) {
     PathFinder pf(a, np);
+    pf.quiet = true;
     if (a.prescan > 0 && a.zupt_gyro_std > 0) {
         V3 b;
         if (prescan_bias(a, b)) { pf.bg = b; pf.bias_known = true; }
@@ -1242,9 +1272,20 @@ int main(int argc, char** argv) {
         std::fprintf(o, "%.9f %.6f %.6f %.6f %.8f %.8f %.8f %.8f\n", (double)t * 1e-9, p[0], p[1], p[2],
                      q.x, q.y, q.z, q.w);
     };
+    bool capped = false;                            // more rows than --zp-max-rows: no offline pass (as main.py)
     auto emit = [&](long long t) {
-        if (smooth && pf.drag_on) rows.push_back({t, pf.p, pf.shadow ? pf.p2 : pf.p_raw, pf.q});
-        else write_row(t, pf.p, pf.q);
+        if (smooth && pf.drag_on && !capped) {
+            if ((long long)rows.size() >= a.zp_max_rows) {
+                capped = true;
+                for (auto& x : rows) write_row(x.t, x.p, x.q);
+                rows.clear();
+                rows.shrink_to_fit();
+                std::fprintf(stderr, "offline smoothing skipped: more than %d rows\n", a.zp_max_rows);
+                write_row(t, pf.p, pf.q);
+                return;
+            }
+            rows.push_back({t, pf.p, pf.shadow ? pf.p2 : pf.p_raw, pf.q});
+        } else write_row(t, pf.p, pf.q);
     };
     struct P { Row r; bool ok; };
     std::vector<P> pending;
