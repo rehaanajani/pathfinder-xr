@@ -15,6 +15,7 @@ from pptx.dml.color import RGBColor
 from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
 from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
 
 HERE = Path(__file__).resolve().parent
@@ -70,6 +71,10 @@ def text(slide, x, y, w, h, runs, size=12, color=INK, bold=False, align=PP_ALIGN
             f.size = Pt(o.get("size", size))
             f.bold = o.get("bold", bold)
             f.color.rgb = o.get("color", color)
+            if "font" in o:                       # Korean text is drawn from the East Asian font slot
+                rpr = r._r.get_or_add_rPr()
+                ea = rpr.makeelement(qn("a:ea"), {"typeface": o["font"]})
+                rpr.find(qn("a:latin")).addnext(ea)
     return tb
 
 
@@ -159,6 +164,18 @@ def stat(slide, x, y, w, big, label, color=INK, name=None, big_size=26):
     text(slide, x, y + 0.5, w, 0.6, label, size=9.5, color=MUTED)
 
 
+def korean_title(word):
+    """The Korean name as a white image, so it shows on machines without a Korean font (Drive, Windows, LibreOffice)."""
+    from PIL import Image, ImageDraw, ImageFont
+    f = ImageFont.truetype("/System/Library/Fonts/AppleSDGothicNeo.ttc", 240, index=6)   # Bold
+    x0, y0, x1, y1 = f.getbbox(word)
+    im = Image.new("RGBA", (x1 - x0 + 20, y1 - y0 + 20), (0, 0, 0, 0))
+    ImageDraw.Draw(im).text((10 - x0, 10 - y0), word, font=f, fill=(255, 255, 255, 255))
+    out = HERE / "img" / "giljabi_ko.png"
+    im.save(out)
+    return out
+
+
 # ------------------------------------------------------------------------------------------------ slides
 def main():
     prs = Presentation(HERE / "template.pptx")
@@ -183,15 +200,16 @@ def main():
             sh.text_frame.paragraphs[0].runs[0].text = "Members"
     text(s, 5.6, 2.86, 3.2, 1.3, ["Rehaan Ajani  (lead)", "Nikhil Solanki", "Debadrita Haldar", "Mayank Yadav"],
          size=11, color=SOFT, name="Members list", space=3)
-    text(s, 0.55, 3.75, 4.9, 1.2,
-         [[("Path Finder  ·  ", {"size": 16, "bold": True, "color": INK}),
-           ("길잡이 (Giljabi)", {"size": 16, "bold": True, "color": ACCENT, "font": "Apple SD Gothic Neo"})],
-          [("Trajectory from a degraded IMU alone", {"size": 11.5, "color": SOFT})],
+    s.shapes.add_picture(str(korean_title("길잡이")), Inches(0.62), Inches(3.68), height=Inches(0.5)).name = "길잡이"
+    text(s, 2.18, 3.79, 3.3, 0.4, [[("Giljabi", {"size": 18, "bold": True, "color": ACCENT})]], name="Romanised name")
+    text(s, 0.55, 4.3, 4.9, 1.1,
+         [
+          [("\u201cThe one who finds the way\u201d: trajectory from a degraded IMU alone", {"size": 11.5, "color": SOFT})],
           [(f"{R['mac_mb']} MB of memory  ·  {R['mac_ms']} ms per second of data  ·  one CPU thread",
             {"size": 10.5, "color": MUTED})],
           [("Track 3: Trajectory Estimation Under Sensor Degradation", {"size": 9.5, "color": MUTED})]],
          name="Tagline", space=3)
-    notes(s, "Team California Burrito, SRM Institute of Science and Technology, Kattankulathur. Track 3, Path Finder: "
+    notes(s, "Team California Burrito, SRM Institute of Science and Technology, Kattankulathur. Our entry is Giljabi, Korean for the one who finds the way. Track 3, Path Finder: "
              "trajectory estimation under sensor degradation, IMU only.")
 
     # ---------- 2. Problem
@@ -283,9 +301,9 @@ def main():
     metrics = ["ATE", "Checkpoints", "Blind 5 s", "Dropouts", "Drift 1 s"]
     cd = CategoryChartData()
     cd.categories = metrics
-    show = [("Standing still", GREY), ("Path Finder", ACCENT)]
+    show = [("Standing still", GREY), ("Giljabi", ACCENT)]
     for k, _ in show:
-        cd.add_series(k, [a17[k][m] for m in metrics])
+        cd.add_series(k, [a17["Path Finder" if k == "Giljabi" else k][m] for m in metrics])
     ch = s.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, Inches(0.4), Inches(1.05), Inches(5.0), Inches(3.1), cd).chart
     ch.font.name = FONT
     ch.font.size = Pt(9)
@@ -345,7 +363,7 @@ def main():
     # ---------- 6. Differentiation
     s = sl[5]
     headline(s, "What else could be submitted, and what we add")
-    hdr = ["", "Integrate the IMU", "Stand still", "Large learned model", "Path Finder"]
+    hdr = ["", "Integrate the IMU", "Stand still", "Large learned model", "Giljabi"]
     rws = [["Error, organisers' damage", f"{R['naive_km']} km (MH_05)", f"{a17['Standing still']['ATE']} m",
             "not run (no clean IMU)", f"{a17['Path Finder']['ATE']} m"],
            ["Bad rows, gaps, IMU death", "drifts away", "ignores them", "garbage in, garbage out", "caught per row; coasts"],
@@ -407,7 +425,7 @@ def main():
     picture(s, IMG / "localhost_live_blackout.jpg", 5.05, 1.6, w=4.45, name="Live demo, localhost")
     text(s, 5.05, 4.1, 4.45, 1.0,
          [[("Live demo on localhost  ", {"bold": True, "size": 10, "color": INK}),
-           ("Galaxy phone streaming its IMU; camera covered. The standard tracker (red) runs away; Path Finder (green) "
+           ("Galaxy phone streaming its IMU; camera covered. The standard tracker (red) runs away; Giljabi (green) "
             "stays close, draws its uncertainty, and flags itself \"too_uncertain\".", {"size": 9, "color": MUTED})]])
     notes(s, "Live demo: demo_line/tools/live_demo/server.py, replaying the recorded 17 Nov phone session "
              "(http://localhost). CI on every push builds the Docker image and runs the stress tests on Linux.")
@@ -418,7 +436,7 @@ def main():
     box(s, 0.5, 1.6, 4.4, 3.5, name="Phone test")
     kicker(s, 0.7, 1.75, "Real Galaxy phone · camera covered 48 s")
     bars = [("Standard tracker", R["phone_std"], ALERT, f"{R['phone_std']} m"),
-            ("Path Finder", R["phone_ours"], ACCENT, f"{R['phone_ours']} m"),
+            ("Giljabi", R["phone_ours"], ACCENT, f"{R['phone_ours']} m"),
             ("Freezing in place", R["phone_freeze"], SOFT, f"{R['phone_freeze']} m")]
     for i, (lab, v, col, s_) in enumerate(bars):
         y = 2.15 + i * 0.62
