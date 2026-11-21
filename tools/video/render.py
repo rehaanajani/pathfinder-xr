@@ -587,8 +587,6 @@ def sc_results(t, dur):
         if kk > 0.95:
             text(d, (1070 + sw, y + 43), f"{still:.2f} still", 22, "Regular", MUTED, 1, anchor="lm")
             text(d, (1070 + ow, y + 69), f"{ours:.2f} ours", 22, "Semibold", GREEN, 1, anchor="lm")
-    a = fade(t, dur - 7.0)
-    text(d, (1060, 920), "45 % lower at checkpoints, 44 % through dropouts, 40 % in the blind 5 s.", 26, "Semibold", AMBER, a)
     return im
 
 
