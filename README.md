@@ -1,6 +1,6 @@
-# Path Finder · 길잡이 (Giljabi)
+# 길잡이 · Giljabi
 
-<sub>길잡이 (gil-ja-bi): Korean for "the one who finds the way", a guide.</sub>
+<sub>길잡이 (gil-ja-bi): Korean for "the one who finds the way", a guide. Our entry for the Path Finder track.</sub>
 
 **6-DoF trajectory from a degraded IMU alone: about 45 % less error than standing still, in 3.5 MiB of memory and 6 ms per second of data.**
 
@@ -16,7 +16,7 @@ Rehaan Ajani (lead) · Nikhil Solanki · Mayank Yadav · Debadrita Haldar
 |---|---|
 | **Source code** | [`src/main.py`](src/main.py): Python, network weights embedded; needs only Python 3 and numpy |
 | **Presentation** | **[Google Slides](https://docs.google.com/presentation/d/1UhfNcmeuGhQjBOyQcsvGrlvwcIb-xog0/edit?usp=sharing)** · [`deck/SRMIST_CaliforniaBurrito.pptx`](deck/SRMIST_CaliforniaBurrito.pptx) (Samsung's template) |
-| **Video** (under 3 min, narrated) | **[Google Drive](https://drive.google.com/file/d/1fMtWITCb1RfrTKooN9tEU_daj5p_4nbL/view?usp=sharing)** · [`docs/media/PathFinder_Track3.mp4`](docs/media/PathFinder_Track3.mp4) |
+| **Video** (under 3 min, narrated) | **[Google Drive](https://drive.google.com/file/d/1fMtWITCb1RfrTKooN9tEU_daj5p_4nbL/view?usp=sharing)** · [`docs/media/Giljabi_Track3.mp4`](docs/media/Giljabi_Track3.mp4) |
 | **AI disclosure** | [`AI_DISCLOSURE.md`](AI_DISCLOSURE.md) |
 | **README** | this page |
 | Output | `estimated_trajectory.txt`, TUM format, exactly one pose per input IMU row |
@@ -84,7 +84,7 @@ measures is in [`results/track3/README.md`](results/track3/README.md#current-res
 | | ATE | Checkpoints | Blind 5 s | Dropouts | Drift over 1 s |
 |---|---:|---:|---:|---:|---:|
 | Standing still | 2.62 | 2.45 | 2.28 | 2.42 | 0.77 |
-| **Path Finder** | **1.47** | **1.35** | **1.37** | **1.36** | **0.42** |
+| **Giljabi** | **1.47** | **1.35** | **1.37** | **1.36** | **0.42** |
 | Improvement | **~44 %** | **~45 %** | **~40 %** | **~44 %** | **~46 %** |
 
 - **Per recording** ([`per_recording.md`](results/track3/per_recording.md), raw:
@@ -193,6 +193,8 @@ make -C src && PF_ENTRY=cpp python -m pytest -q tests/stress     # the C++ port
 | `test_review_fixes.py` | regressions from independent reviews: zero acceleration at start, start-up boundary, a 100,000-file zip, a 3 s gap |
 | `test_mount_guard.py` | switching networks for an IMU mounted another way |
 | `test_standalone.py` | `main.py` alone gives identical output; embedded weights match the weight files |
+| `test_entry_calls.py` | every way a harness might call the entry (no arguments, the `imu0` folder, output as a second argument, a flat zip, a folder one level down) gives the same trajectory; `main.py` without numpy still writes every pose |
+| `test_offline_pass.py` | the drone's offline pass changes the positions and keeps one pose per row; past its row cap it falls back to the causal output |
 
 ## Safeguards
 
@@ -200,14 +202,17 @@ make -C src && PF_ENTRY=cpp python -m pytest -q tests/stress     # the C++ port
   missing, duplicate and out-of-order rows, cut and tiny files, and a zip with 100,000 members.
 - **Exactly one pose per input row**: nothing appended, nothing filled in between.
 - **Streams the input** row by row; on a drone a few numbers per row are kept for the offline pass (3.5 MiB on a 184 s
-  recording).
+  recording, 4.7 MiB on a 5-minute flight). Past 80,000 rows (`--zp-max-rows`) that pass is skipped, so a very long or
+  high-rate file still stays under 8 MB (4.3 MiB measured on a capped one).
+- **Runs however it is called**: no arguments, the `imu0` folder, a flat zip or a folder one level down, with the output
+  as `-o` or a second argument. Without numpy, `main.py` runs physics only and still writes every pose.
 - **Says what it assumed**: column order, units and network choice are printed on stderr; flags override them.
 - **Settings chosen to generalise**: chosen on 11 development recordings, then checked once on the other 6 and on
   three fresh corruption seeds; ideas that won only on the development recordings were dropped.
 
 ## Design choices
 
-- **Bounded drift by design.** An IMU alone cannot observe absolute heading or position, so Path Finder pulls its
+- **Bounded drift by design.** An IMU alone cannot observe absolute heading or position, so Giljabi pulls its
   estimate gently back toward the start and weights the network by its own confidence. On a drone, rotor drag measures
   velocity directly, so the pull can be gentler, and the whole flight can be smoothed offline.
 - **Room to grow.** Given ground-truth velocity in place of the network, the same filter reaches 2.56 m on our
@@ -239,7 +244,7 @@ ZeroDrift has a licence; none of their code is in ours. We wrote our own version
 The same ideas on real hardware, with cameras and several IMUs:
 
 - **Live Galaxy phone demo**: the phone streams its IMU and camera tracking to a laptop dashboard; with the camera
-  covered, Path Finder keeps tracking and reports its own uncertainty ([`docs/reports/03_phone.md`](docs/reports/03_phone.md)).
+  covered, Giljabi keeps tracking and reports its own uncertainty ([`docs/reports/03_phone.md`](docs/reports/03_phone.md)).
 - **On a phone's own CPU**: the C++ port runs at 4.0 MB and 5.0 ms per second of data on a Galaxy M36.
 - **Real VR headsets**: IMU clipping on Samsung Odyssey+ and Valve Index recordings, spotted from the data itself.
 - **Several IMUs**: sensors on one rigid frame must agree; a biased, stuck or spiking one is voted out.
