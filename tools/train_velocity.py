@@ -147,7 +147,7 @@ def load_split(specs, torch):
 
 
 # ----------------------------------------------------------------------------- model
-def build(widths, hidden):
+def build(widths, hidden, dropout=0.0):
     import torch.nn as nn
 
     class Net(nn.Module):
@@ -160,11 +160,12 @@ def build(widths, hidden):
                 cin = w
             self.conv = nn.Sequential(*layers)
             self.fc1 = nn.Linear(cin, hidden)
+            self.drop = nn.Dropout(dropout)          # identity at export (VIO-Edge trains with 0.3; MIT licence)
             self.fc2 = nn.Linear(hidden, 12)
 
         def forward(self, x):                                           # (B, 7, WINDOW)
             z = self.conv(x).mean(2)
-            return self.fc2(self.fc1(z).relu())
+            return self.fc2(self.drop(self.fc1(self.drop(z)).relu()))
     return Net()
 
 
@@ -246,11 +247,11 @@ def train(a):
     tr = load_split(a.train, torch)
     va = load_split(a.val, torch)
     va = (*va[:3], va[3][::a.val_stride])
-    net = build(a.widths, a.hidden)
+    net = build(a.widths, a.hidden, a.dropout)
     n_par = sum(p.numel() for p in net.parameters() if p.requires_grad)
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
     steps_ep = a.windows_per_epoch // a.batch
-    opt = torch.optim.AdamW(net.parameters(), 1e-3, weight_decay=1e-4)
+    opt = torch.optim.AdamW(net.parameters(), 1e-3, weight_decay=a.wd)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, a.lr, total_steps=a.epochs * steps_ep)
     print(f"params={n_par} train_windows={len(tr[3])} val_windows={len(va[3])}", flush=True)
     best, hist = 1e9, []
@@ -309,6 +310,7 @@ def main():
     p = sub.add_parser("prep"); p.add_argument("--jobs", type=int, default=2)
     t = sub.add_parser("train")
     t.add_argument("--train", nargs="+", default=TRAIN); t.add_argument("--val", nargs="+", default=VAL)
+    t.add_argument("--dropout", type=float, default=0.0); t.add_argument("--wd", type=float, default=1e-4)
     t.add_argument("--widths", nargs=4, type=int, default=[24, 32, 48, 64]); t.add_argument("--hidden", type=int, default=64)
     t.add_argument("--epochs", type=int, default=40); t.add_argument("--batch", type=int, default=256)
     t.add_argument("--windows-per-epoch", type=int, default=150000); t.add_argument("--lr", type=float, default=2e-3)

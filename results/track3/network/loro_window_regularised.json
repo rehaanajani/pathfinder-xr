@@ -1,0 +1,135 @@
+{
+ "note": "leave-one-room-out window-level end-velocity error (m/s); regularised = dropout 0.3, weight decay 0.02, 15 epochs (body-frame also 3 MSE warm-up epochs and per-window synthetic noise); best epoch chosen on a pool of the left-out room, room5, MH_04, V1_03",
+ "runs": {
+  "reg_room1_s0": {
+   "tumvi:room1": {
+    "vel_rmse_mps": 0.8975259130358064,
+    "vel_zero_mps": 1.1004396922840305
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.8798245155381462,
+    "vel_zero_mps": 1.0410713691297817
+   }
+  },
+  "reg_room2_s0": {
+   "tumvi:room2": {
+    "vel_rmse_mps": 0.876706300505892,
+    "vel_zero_mps": 1.0191274023011672
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.7828281780467794,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "reg_room2_s1": {
+   "tumvi:room2": {
+    "vel_rmse_mps": 0.8442056170855281,
+    "vel_zero_mps": 1.0191274023011672
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.8091958752642066,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "reg_room3_s1": {
+   "tumvi:room3": {
+    "vel_rmse_mps": 1.024577908845454,
+    "vel_zero_mps": 1.020096523514908
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.8104569220650919,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "reg_room4_s0": {
+   "tumvi:room4": {
+    "vel_rmse_mps": 0.6292410412114535,
+    "vel_zero_mps": 0.6542507013848708
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.8247831164070669,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "reg_room4_s1": {
+   "tumvi:room4": {
+    "vel_rmse_mps": 0.6084696654889928,
+    "vel_zero_mps": 0.6542507013848708
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.7648939825703014,
+    "vel_zero_mps": 1.041071355553315
+   }
+  },
+  "wreg_room1_s0": {
+   "tumvi:room1": {
+    "vel_rmse_mps": 0.7270429640100292,
+    "vel_zero_mps": 1.099326075331325
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.7219746723933216,
+    "vel_zero_mps": 1.0410800828004627
+   }
+  },
+  "wreg_room1_s1": {
+   "tumvi:room1": {
+    "vel_rmse_mps": 0.726390818937873,
+    "vel_zero_mps": 1.099326075331325
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.7246146510908584,
+    "vel_zero_mps": 1.0410800828004627
+   }
+  },
+  "wreg_room2_s0": {
+   "tumvi:room2": {
+    "vel_rmse_mps": 0.4453974614234865,
+    "vel_zero_mps": 1.018812997327696
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.6733627955314335,
+    "vel_zero_mps": 1.0410800828004627
+   }
+  },
+  "wreg_room2_s1": {
+   "tumvi:room2": {
+    "vel_rmse_mps": 0.46865254795481015,
+    "vel_zero_mps": 1.018812997327696
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.6767769710105628,
+    "vel_zero_mps": 1.0410800828004627
+   }
+  },
+  "wreg_room3_s0": {
+   "tumvi:room3": {
+    "vel_rmse_mps": 0.4377192118908231,
+    "vel_zero_mps": 1.0195769088915718
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.6799784291004946,
+    "vel_zero_mps": 1.0410800828004627
+   }
+  },
+  "wreg_room3_s1": {
+   "tumvi:room3": {
+    "vel_rmse_mps": 0.4632716690111793,
+    "vel_zero_mps": 1.0195769088915718
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.6723930966142471,
+    "vel_zero_mps": 1.0410800828004627
+   }
+  },
+  "wreg_room4_s0": {
+   "tumvi:room4": {
+    "vel_rmse_mps": 0.5920002144414005,
+    "vel_zero_mps": 0.6531739266198917
+   },
+   "tumvi:room5": {
+    "vel_rmse_mps": 0.6820909530555381,
+    "vel_zero_mps": 1.0410800828004627
+   }
+  }
+ }
+}

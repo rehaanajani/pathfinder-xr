@@ -174,7 +174,7 @@ def load_split(specs, W, torch, dev, pattern="*"):
 
 
 # ----------------------------------------------------------------------------- model
-def build(widths, hidden, kernels=(7, 5, 5, 3)):
+def build(widths, hidden, kernels=(7, 5, 5, 3), dropout=0.0):
     import torch.nn as nn
 
     class Net(nn.Module):
@@ -187,10 +187,13 @@ def build(widths, hidden, kernels=(7, 5, 5, 3)):
             self.conv = nn.Sequential(*layers)
             self.fc1 = nn.Linear(cin, hidden)
             self.fc2 = nn.Linear(hidden, 12)
+            # Dropout on the pooled features and the hidden layer (VIO-Edge trains with 0.3; MIT licence). Identity
+            # at run time, so the exported weights file and BatchNorm folding are unchanged.
+            self.drop = nn.Dropout(dropout)
 
         def forward(self, x):
-            z = self.conv(x).mean(2)
-            return self.fc2(self.fc1(z).relu())
+            z = self.drop(self.conv(x).mean(2))
+            return self.fc2(self.drop(self.fc1(z).relu()))
     return Net()
 
 
@@ -253,6 +256,13 @@ def batch(data, sel, W, train, a, torch):
             x = torch.cat([rot(x[..., 0:3]), rot(x[..., 3:6]), rot(x[..., 6:9]), x[..., 9:]], -1)
             d = torch.einsum("bij,bj->bi", Rr, d)
             v = torch.einsum("bij,bj->bi", Rr, v)
+        if a.noise_aug > 0:  # per-window synthetic noise and bias on healthy slots (after VIO-Edge's AUG, MIT licence)
+            u = torch.rand(B, 1, 1, device=dev) ** 2 * a.noise_aug
+            ok = (x[..., 9:10] > 0).float()
+            acc = (torch.randn(B, W, 3, device=dev) * u * 2.5 + torch.randn(B, 1, 3, device=dev)
+                   * torch.rand(B, 1, 1, device=dev) * 0.3) * SCALE[3]
+            gyr = torch.randn(B, W, 3, device=dev) * u * 0.05 + torch.randn(B, 1, 3, device=dev)                 * torch.rand(B, 1, 1, device=dev) * 0.05
+            x = torch.cat([x[..., 0:3] + gyr * ok, x[..., 3:6] + acc * ok, x[..., 6:]], -1)
         cut = torch.where(torch.rand(B, device=dev) < 0.1,
                           torch.randint(0, int(W * (1 - MIN_VALID)), (B,), device=dev),
                           torch.zeros(B, dtype=torch.long, device=dev))
@@ -261,8 +271,10 @@ def batch(data, sel, W, train, a, torch):
     return x.transpose(1, 2).contiguous(), d, v
 
 
-def losses(out, d, v, torch, wd=1.0):
+def losses(out, d, v, torch, wd=1.0, mse_only=False):
     def part(mu, ls, y):
+        if mse_only:                                # warm-up: the mean first (VIO-Edge trains 3 epochs on MSE)
+            return ((mu - y) ** 2).mean()
         ls = ls.clamp(-7, 3)
         var = torch.exp(2 * ls)
         nll = (((mu - y) ** 2) / (2 * var) + ls) * var.detach() ** 0.5   # beta-NLL, beta = 0.5
@@ -294,7 +306,7 @@ def train(a):
     tr = load_split(a.train, W, torch, dev, a.train_copies)
     va = load_split(a.val, W, torch, dev, a.val_copies)
     va = (*va[:3], va[3][::a.val_stride])
-    net = build(a.widths, a.hidden, a.kernels).to(dev)
+    net = build(a.widths, a.hidden, a.kernels, a.dropout).to(dev)
     n_par = sum(p.numel() for p in net.parameters() if p.requires_grad)
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
     steps_ep = a.windows_per_epoch // a.batch
@@ -307,7 +319,7 @@ def train(a):
         for _ in range(steps_ep):
             sel = tr[3][torch.randint(0, len(tr[3]), (a.batch,), device=dev)]
             x, d, v = batch(tr, sel, W, True, a, torch)
-            loss = losses(net(x), d, v, torch, a.disp_weight)
+            loss = losses(net(x), d, v, torch, a.disp_weight, mse_only=ep < a.mse_epochs)
             opt.zero_grad(); loss.backward(); opt.step(); sched.step()
         h = {"epoch": ep, **evaluate(net, va, W, a, torch), "sec": round(time.time() - t0, 1)}
         hist.append(h)
@@ -356,6 +368,8 @@ def main():
     t.add_argument("--kernels", nargs=4, type=int, default=[7, 5, 5, 3])
     t.add_argument("--epochs", type=int, default=20); t.add_argument("--batch", type=int, default=256)
     t.add_argument("--windows-per-epoch", type=int, default=150000); t.add_argument("--lr", type=float, default=2e-3)
+    t.add_argument("--dropout", type=float, default=0.0); t.add_argument("--mse-epochs", type=int, default=0)
+    t.add_argument("--noise-aug", type=float, default=0.0, help="scale of per-window synthetic noise (1 = VIO-Edge's)")
     t.add_argument("--wd", type=float, default=1e-4); t.add_argument("--disp-weight", type=float, default=1.0)
     t.add_argument("--tilt-aug", type=float, default=2.0, help="deg, std of the random tilt error of the up channel")
     t.add_argument("--mirror", type=int, default=1)
